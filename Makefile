@@ -82,6 +82,13 @@ endef
 $(foreach D,$(FFLIBS),$(eval $(call DOSUBDIR,lib$(D))))
 
 ffplay.o: CFLAGS += $(SDL_CFLAGS)
+
+ffmpeg-rc.o: etc/ffmpeg.rc
+	windres -I$(SRC_PATH) -o $@ $<
+
+ffmpeg_g.exe: ffmpeg.o cmdutils.o $(FF_DEP_LIBS) ffmpeg-rc.o
+	$(CC) $(LDFLAGS) -o $@ $< cmdutils.o ffmpeg-rc.o $(FF_EXTRALIBS)
+
 ffplay_g$(EXESUF): FF_EXTRALIBS += $(SDL_LIBS)
 ffserver_g$(EXESUF): LDFLAGS += $(FFSERVERLDFLAGS)
 

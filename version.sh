@@ -1,5 +1,7 @@
 #!/bin/sh
 
+build=$(date +%Y%m%d)
+
 # check for git short hash
 if ! test "$revision"; then
     revision=$(cd "$1" && git describe --tags --match N 2> /dev/null)
@@ -39,7 +41,7 @@ if [ -z "$2" ]; then
     exit
 fi
 
-NEW_REVISION="#define FFMPEG_VERSION \"$version\""
+NEW_REVISION="#define FFMPEG_VERSION \"$version($build)\""
 OLD_REVISION=$(cat version.h 2> /dev/null)
 
 # Update version.h only on revision changes to avoid spurious rebuilds
