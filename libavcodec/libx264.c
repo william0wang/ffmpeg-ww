@@ -20,6 +20,7 @@
  */
 
 #include "libavutil/opt.h"
+#include "libavutil/pixdesc.h"
 #include "avcodec.h"
 #include "internal.h"
 #include <x264.h>
@@ -127,16 +128,19 @@ static int encode_nals(AVCodecContext *ctx, uint8_t *buf, int size,
 }
 
 static int X264_frame(AVCodecContext *ctx, uint8_t *buf,
-                      int bufsize, void *data)
+                      int orig_bufsize, void *data)
 {
     X264Context *x4 = ctx->priv_data;
     AVFrame *frame = data;
     x264_nal_t *nal;
     int nnal, i;
     x264_picture_t pic_out;
+    int bufsize;
 
     x264_picture_init( &x4->pic );
     x4->pic.img.i_csp   = X264_CSP_I420;
+    if (x264_bit_depth > 8)
+        x4->pic.img.i_csp |= X264_CSP_HIGH_DEPTH;
     x4->pic.img.i_plane = 3;
 
     if (frame) {
@@ -164,6 +168,7 @@ static int X264_frame(AVCodecContext *ctx, uint8_t *buf,
     }
 
     do {
+        bufsize = orig_bufsize;
     if (x264_encoder_encode(x4->enc, &nal, &nnal, frame? &x4->pic: NULL, &pic_out) < 0)
         return -1;
 
@@ -508,6 +513,30 @@ static av_cold int X264_init(AVCodecContext *avctx)
     return 0;
 }
 
+static const enum PixelFormat pix_fmts_8bit[] = {
+    PIX_FMT_YUV420P,
+    PIX_FMT_YUVJ420P,
+    PIX_FMT_NONE
+};
+static const enum PixelFormat pix_fmts_9bit[] = {
+    PIX_FMT_YUV420P9,
+    PIX_FMT_NONE
+};
+static const enum PixelFormat pix_fmts_10bit[] = {
+    PIX_FMT_YUV420P10,
+    PIX_FMT_NONE
+};
+
+static av_cold void X264_init_static(AVCodec *codec)
+{
+    if (x264_bit_depth == 8)
+        codec->pix_fmts = pix_fmts_8bit;
+    else if (x264_bit_depth == 9)
+        codec->pix_fmts = pix_fmts_9bit;
+    else if (x264_bit_depth == 10)
+        codec->pix_fmts = pix_fmts_10bit;
+}
+
 #define OFFSET(x) offsetof(X264Context, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
@@ -602,8 +631,8 @@ AVCodec ff_libx264_encoder = {
     .encode         = X264_frame,
     .close          = X264_close,
     .capabilities   = CODEC_CAP_DELAY,
-    .pix_fmts       = (const enum PixelFormat[]) { PIX_FMT_YUV420P, PIX_FMT_YUVJ420P, PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
     .priv_class     = &class,
     .defaults       = x264_defaults,
+    .init_static_data = X264_init_static,
 };

@@ -107,6 +107,9 @@ void avcodec_register(AVCodec *codec)
     while (*p != NULL) p = &(*p)->next;
     *p = codec;
     codec->next = NULL;
+
+    if (codec->init_static_data)
+        codec->init_static_data(codec);
 }
 
 unsigned avcodec_get_edge_width(void)
@@ -236,6 +239,22 @@ void avcodec_align_dimensions(AVCodecContext *s, int *width, int *height){
     linesize_align[2] <<= chroma_shift;
     align = FFMAX3(align, linesize_align[1], linesize_align[2]);
     *width=FFALIGN(*width, align);
+}
+
+void ff_init_buffer_info(AVCodecContext *s, AVFrame *pic)
+{
+    if (s->pkt) {
+        pic->pkt_pts = s->pkt->pts;
+        pic->pkt_pos = s->pkt->pos;
+    } else {
+        pic->pkt_pts = AV_NOPTS_VALUE;
+        pic->pkt_pos = -1;
+    }
+    pic->reordered_opaque= s->reordered_opaque;
+    pic->sample_aspect_ratio = s->sample_aspect_ratio;
+    pic->width               = s->width;
+    pic->height              = s->height;
+    pic->format              = s->pix_fmt;
 }
 
 int avcodec_default_get_buffer(AVCodecContext *s, AVFrame *pic){
@@ -601,10 +620,9 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
     }
 
     if (avctx->codec->max_lowres < avctx->lowres || avctx->lowres < 0) {
-        av_log(avctx, AV_LOG_ERROR, "The maximum value for lowres supported by the decoder is %d\n",
+        av_log(avctx, AV_LOG_WARNING, "The maximum value for lowres supported by the decoder is %d\n",
                avctx->codec->max_lowres);
-        ret = AVERROR(EINVAL);
-        goto free_and_end;
+        avctx->lowres = avctx->codec->max_lowres;
     }
     if (avctx->codec->encode) {
         int i;
@@ -823,6 +841,11 @@ int attribute_align_arg avcodec_decode_audio3(AVCodecContext *avctx, int16_t *sa
     int ret;
 
     avctx->pkt = avpkt;
+
+    if (!avpkt->data && avpkt->size) {
+        av_log(avctx, AV_LOG_ERROR, "invalid packet: NULL data, size != 0\n");
+        return AVERROR(EINVAL);
+    }
 
     if((avctx->codec->capabilities & CODEC_CAP_DELAY) || avpkt->size){
         //FIXME remove the check below _after_ ensuring that all audio check that the available space is enough
@@ -1353,6 +1376,9 @@ unsigned int ff_toupper4(unsigned int x)
 int ff_thread_get_buffer(AVCodecContext *avctx, AVFrame *f)
 {
     f->owner = avctx;
+
+    ff_init_buffer_info(avctx, f);
+
     return avctx->get_buffer(avctx, f);
 }
 

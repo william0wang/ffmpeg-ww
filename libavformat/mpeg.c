@@ -49,6 +49,10 @@ static int check_pes(uint8_t *p, uint8_t *end){
     return pes1||pes2;
 }
 
+static int check_pack_header(const uint8_t *buf) {
+    return (buf[1] & 0xC0) == 0x40 || (buf[1] & 0xF0) == 0x20;
+}
+
 static int mpegps_probe(AVProbeData *p)
 {
     uint32_t code= -1;
@@ -61,9 +65,10 @@ static int mpegps_probe(AVProbeData *p)
         if ((code & 0xffffff00) == 0x100) {
             int len= p->buf[i+1] << 8 | p->buf[i+2];
             int pes= check_pes(p->buf+i, p->buf+p->buf_size);
+            int pack = check_pack_header(p->buf+i);
 
             if(code == SYSTEM_HEADER_START_CODE) sys++;
-            else if(code == PACK_START_CODE)     pspack++;
+            else if(code == PACK_START_CODE && pack) pspack++;
             else if((code & 0xf0) == VIDEO_ID &&  pes) vid++;
             // skip pes payload to avoid start code emulation for private
             // and audio streams
@@ -114,7 +119,6 @@ static int mpegps_read_header(AVFormatContext *s,
     m->sofdec = -1;
     do {
         v = avio_r8(s->pb);
-        m->header_state = m->header_state << 8 | v;
         m->sofdec++;
     } while (v == sofdec[i] && i++ < 6);
 
@@ -568,14 +572,7 @@ static int mpegps_read_packet(AVFormatContext *s,
         else if (st->codec->bits_per_coded_sample == 28)
             return AVERROR(EINVAL);
     }
-    av_new_packet(pkt, len);
-    ret = avio_read(s->pb, pkt->data, pkt->size);
-    if (ret < 0) {
-        pkt->size = 0;
-    } else if (ret < pkt->size) {
-        pkt->size = ret;
-        memset(pkt->data + ret, 0, FF_INPUT_BUFFER_PADDING_SIZE);
-    }
+    ret = av_get_packet(s->pb, pkt, len);
     pkt->pts = pts;
     pkt->dts = dts;
     pkt->pos = dummy_pos;

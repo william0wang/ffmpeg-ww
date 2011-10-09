@@ -215,8 +215,8 @@ typedef struct {
 } ASFContext;
 
 static const AVCodecTag codec_asf_bmp_tags[] = {
-    { CODEC_ID_MPEG4, MKTAG('M', 'P', '4', 'S') },
     { CODEC_ID_MPEG4, MKTAG('M', '4', 'S', '2') },
+    { CODEC_ID_MPEG4, MKTAG('M', 'P', '4', 'S') },
     { CODEC_ID_MSMPEG4V3, MKTAG('M', 'P', '4', '3') },
     { CODEC_ID_NONE, 0 },
 };
@@ -911,7 +911,7 @@ AVOutputFormat ff_asf_stream_muxer = {
 #if CONFIG_LIBMP3LAME
     .audio_codec    = CODEC_ID_MP3,
 #else
-    .audio_codec    = CODEC_ID_MP2,
+    .audio_codec    = CODEC_ID_WMAV2,
 #endif
     .video_codec    = CODEC_ID_MSMPEG4V3,
     .write_header   = asf_write_stream_header,

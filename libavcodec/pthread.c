@@ -32,6 +32,7 @@
 #include <pthread.h>
 
 #include "avcodec.h"
+#include "internal.h"
 #include "thread.h"
 
 typedef int (action_func)(AVCodecContext *c, void *arg);
@@ -599,6 +600,10 @@ void ff_thread_finish_setup(AVCodecContext *avctx) {
 
     if (!(avctx->active_thread_type&FF_THREAD_FRAME)) return;
 
+    if(p->state == STATE_SETUP_FINISHED){
+        av_log(avctx, AV_LOG_WARNING, "Multiple ff_thread_finish_setup() calls\n");
+    }
+
     pthread_mutex_lock(&p->progress_mutex);
     p->state = STATE_SETUP_FINISHED;
     pthread_cond_broadcast(&p->progress_cond);
@@ -782,6 +787,8 @@ int ff_thread_get_buffer(AVCodecContext *avctx, AVFrame *f)
     int *progress, err;
 
     f->owner = avctx;
+
+    ff_init_buffer_info(avctx, f);
 
     if (!(avctx->active_thread_type&FF_THREAD_FRAME)) {
         f->thread_opaque = NULL;

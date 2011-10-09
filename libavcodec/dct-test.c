@@ -316,7 +316,7 @@ static int dct_error(const struct algo *dct, int test, int is_idct, int speed, c
 
     spec_err = is_idct && (err_inf > 1 || omse > 0.02 || fabs(ome) > 0.0015);
 
-    printf("%s %s: ppe=%d omse=%0.8f ome=%0.8f syserr=%0.8f maxout=%d blockSumErr=%d\n",
+    printf("%s %s: max_err=%d omse=%0.8f ome=%0.8f syserr=%0.8f maxout=%d blockSumErr=%d\n",
            is_idct ? "IDCT" : "DCT", dct->name, err_inf,
            omse, ome, (double) sysErrMax / NB_ITS,
            maxout, blockSumErrMax);
@@ -511,10 +511,11 @@ static void idct248_error(const char *name,
 
 static void help(void)
 {
-    printf("dct-test [-i] [<test-number>]\n"
+    printf("dct-test [-i] [<test-number>] [<bits>]\n"
            "test-number 0 -> test with random matrixes\n"
            "            1 -> test with random sparse matrixes\n"
            "            2 -> do 3. test from mpeg4 std\n"
+           "bits        Number of time domain bits to use, 8 is default\n"
            "-i          test IDCT implementations\n"
            "-4          test IDCT248 implementations\n"
            "-t          speed test\n");
