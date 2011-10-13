@@ -75,7 +75,6 @@ typedef struct {
     int complete;
     MXFPartitionType type;
     uint64_t previous_partition;
-    uint64_t footer_partition;
     int index_sid;
     int body_sid;
 } MXFPartition;
@@ -166,6 +165,7 @@ typedef struct {
     struct AVAES *aesc;
     uint8_t *local_tags;
     int local_tags_count;
+    uint64_t footer_partition;
 } MXFContext;
 
 enum MXFWrappingScheme {
@@ -256,12 +256,13 @@ static int mxf_get_d10_aes3_packet(AVIOContext *pb, AVStream *st, AVPacket *pkt,
 
     if (length > 61444) /* worst case PAL 1920 samples 8 channels */
         return -1;
-    av_new_packet(pkt, length);
-    avio_read(pb, pkt->data, length);
+    length = av_get_packet(pb, pkt, length);
+    if (length < 0)
+        return length;
     data_ptr = pkt->data;
     end_ptr = pkt->data + length;
     buf_ptr = pkt->data + 4; /* skip SMPTE 331M header */
-    for (; buf_ptr < end_ptr; ) {
+    for (; buf_ptr + st->codec->channels*4 < end_ptr; ) {
         for (i = 0; i < st->codec->channels; i++) {
             uint32_t sample = bytestream_get_le32(&buf_ptr);
             if (st->codec->bits_per_coded_sample == 24)
@@ -271,7 +272,7 @@ static int mxf_get_d10_aes3_packet(AVIOContext *pb, AVStream *st, AVPacket *pkt,
         }
         buf_ptr += 32 - st->codec->channels*4; // always 8 channels stored SMPTE 331M
     }
-    pkt->size = data_ptr - pkt->data;
+    av_shrink_packet(pkt, data_ptr - pkt->data);
     return 0;
 }
 
@@ -323,12 +324,16 @@ static int mxf_decrypt_triplet(AVFormatContext *s, AVPacket *pkt, KLVPacket *klv
     if (memcmp(tmpbuf, checkv, 16))
         av_log(s, AV_LOG_ERROR, "probably incorrect decryption key\n");
     size -= 32;
-    av_get_packet(pb, pkt, size);
+    size = av_get_packet(pb, pkt, size);
+    if (size < 0)
+        return size;
+    else if (size < plaintext_size)
+        return AVERROR_INVALIDDATA;
     size -= plaintext_size;
     if (mxf->aesc)
         av_aes_crypt(mxf->aesc, &pkt->data[plaintext_size],
                      &pkt->data[plaintext_size], size >> 4, ivec, 1);
-    pkt->size = orig_size;
+    av_shrink_packet(pkt, orig_size);
     pkt->stream_index = index;
     avio_skip(pb, end - avio_tell(pb));
     return 0;
@@ -365,8 +370,11 @@ static int mxf_read_packet(AVFormatContext *s, AVPacket *pkt)
                     av_log(s, AV_LOG_ERROR, "error reading D-10 aes3 frame\n");
                     return -1;
                 }
-            } else
-                av_get_packet(s->pb, pkt, klv.length);
+            } else {
+                int ret = av_get_packet(s->pb, pkt, klv.length);
+                if (ret < 0)
+                    return ret;
+            }
             pkt->stream_index = index;
             pkt->pos = klv.offset;
             return 0;
@@ -402,6 +410,7 @@ static int mxf_read_partition_pack(void *arg, ByteIOContext *pb, int tag, int si
     MXFContext *mxf = arg;
     MXFPartition *partition;
     UID op;
+    uint64_t footer_partition;
 
     if (mxf->partitions_count+1 >= UINT_MAX / sizeof(*mxf->partitions))
         return AVERROR(ENOMEM);
@@ -432,16 +441,26 @@ static int mxf_read_partition_pack(void *arg, ByteIOContext *pb, int tag, int si
     partition->complete = uid[14] > 2;
     avio_skip(pb, 16);
     partition->previous_partition = avio_rb64(pb);
-    partition->footer_partition = avio_rb64(pb);
+    footer_partition = avio_rb64(pb);
     avio_skip(pb, 16);
     partition->index_sid = avio_rb32(pb);
     avio_skip(pb, 8);
     partition->body_sid = avio_rb32(pb);
     avio_read(pb, op, sizeof(UID));
 
+    /* some files don'thave FooterPartition set in every partition */
+    if (footer_partition) {
+        if (mxf->footer_partition && mxf->footer_partition != footer_partition) {
+            av_log(mxf->fc, AV_LOG_ERROR, "inconsistent FooterPartition value: %li != %li\n",
+                   mxf->footer_partition, footer_partition);
+        } else {
+            mxf->footer_partition = footer_partition;
+        }
+    }
+
     av_dlog(mxf->fc, "PartitionPack: PreviousPartition = 0x%lx, "
             "FooterPartition = 0x%lx, IndexSID = %i, BodySID = %i\n",
-            partition->previous_partition, partition->footer_partition,
+            partition->previous_partition, footer_partition,
             partition->index_sid, partition->body_sid);
 
     if      (op[12] == 1 && op[13] == 1) mxf->op = OP1a;
