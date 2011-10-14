@@ -477,10 +477,6 @@ Crop the input video to @var{out_w}:@var{out_h}:@var{x}:@var{y}.
 The parameters are expressions containing the following constants:
 
 @table @option
-@item E, PI, PHI
-the corresponding mathematical approximated values for e
-(euler number), pi (greek PI), PHI (golden ratio)
-
 @item x, y
 the computed values for @var{x} and @var{y}. They are evaluated for
 each new frame.
@@ -816,10 +812,6 @@ The parameters for @var{x} and @var{y} are expressions containing the
 following constants:
 
 @table @option
-@item E, PI, PHI
-the corresponding mathematical approximated values for e
-(euler number), pi (greek PI), PHI (golden ratio)
-
 @item w, h
 the input width and heigth
 
@@ -1201,10 +1193,6 @@ alpha component
 The expressions can contain the following constants and functions:
 
 @table @option
-@item E, PI, PHI
-the corresponding mathematical approximated values for e
-(euler number), pi (greek PI), PHI (golden ratio)
-
 @item w, h
 the input width and heigth
 
@@ -1555,10 +1543,6 @@ The parameters @var{width}, @var{height}, @var{x}, and @var{y} are
 expressions containing the following constants:
 
 @table @option
-@item E, PI, PHI
-the corresponding mathematical approximated values for e
-(euler number), pi (greek PI), phi (golden ratio)
-
 @item in_w, in_h
 the input video width and height
 
@@ -1674,10 +1658,6 @@ The parameters @var{width} and @var{height} are expressions containing
 the following constants:
 
 @table @option
-@item E, PI, PHI
-the corresponding mathematical approximated values for e
-(euler number), pi (greek PI), phi (golden ratio)
-
 @item in_w, in_h
 the input width and height
 
@@ -1760,15 +1740,6 @@ is selected and passed to the output, otherwise it is discarded.
 The expression can contain the following constants:
 
 @table @option
-@item PI
-Greek PI
-
-@item PHI
-golden ratio
-
-@item E
-Euler number
-
 @item n
 the sequential number of the filtered frame, starting from 0
 
@@ -1907,15 +1878,6 @@ can contain the following constants:
 @item PTS
 the presentation timestamp in input
 
-@item PI
-Greek PI
-
-@item PHI
-golden ratio
-
-@item E
-Euler number
-
 @item N
 the count of the input frame, starting from 0.
 
@@ -1988,7 +1950,7 @@ Set the timebase to use for the output frames timestamps.
 It is mainly useful for testing timebase configuration.
 
 It accepts in input an arithmetic expression representing a rational.
-The expression can contain the constants "PI", "E", "PHI", "AVTB" (the
+The expression can contain the constants "AVTB" (the
 default timebase), and "intb" (the input timebase).
 
 The default value for the input is "intb".
@@ -2476,7 +2438,7 @@ source. The default values of @var{width} and @var{height} are
 respectively 352 and 288 (corresponding to the CIF size format).
 
 @var{timebase} specifies an arithmetic expression representing a
-timebase. The expression can contain the constants "PI", "E", "PHI",
+timebase. The expression can contain the constant
 "AVTB" (the default timebase), and defaults to the value "AVTB".
 
 @section frei0r_src

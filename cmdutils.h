@@ -76,6 +76,8 @@ int opt_default(const char *opt, const char *arg);
  */
 int opt_loglevel(const char *opt, const char *arg);
 
+int opt_codec_debug(const char *opt, const char *arg);
+
 /**
  * Limit the execution time.
  */
@@ -157,6 +159,12 @@ typedef struct {
 } OptionDef;
 
 void show_help_options(const OptionDef *options, const char *msg, int mask, int value);
+
+/**
+ * Show help for all options with given flags in class and all its
+ * children.
+ */
+void show_help_children(const AVClass *class, int flags);
 
 /**
  * Parse the command line arguments.
@@ -354,4 +362,4 @@ void exit_program(int ret);
  */
 void *grow_array(void *array, int elem_size, int *size, int new_size);
 
-#endif /* LIBAV_CMDUTILS_H */
+#endif /* CMDUTILS_H */
