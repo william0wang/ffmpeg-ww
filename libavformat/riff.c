@@ -36,6 +36,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_H264,         MKTAG('a', 'v', 'c', '1') },
     { CODEC_ID_H264,         MKTAG('D', 'A', 'V', 'C') },
     { CODEC_ID_H264,         MKTAG('V', 'S', 'S', 'H') },
+    { CODEC_ID_H264,         MKTAG('Q', '2', '6', '4') }, /* QNAP surveillance system */
     { CODEC_ID_H263,         MKTAG('H', '2', '6', '3') },
     { CODEC_ID_H263,         MKTAG('X', '2', '6', '3') },
     { CODEC_ID_H263,         MKTAG('T', '2', '6', '3') },
@@ -88,6 +89,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_MPEG4,        MKTAG('S', 'I', 'P', 'P') }, /* Samsung SHR-6040 */
     { CODEC_ID_MPEG4,        MKTAG('X', 'V', 'I', 'X') },
     { CODEC_ID_MPEG4,        MKTAG('D', 'r', 'e', 'X') },
+    { CODEC_ID_MPEG4,        MKTAG('Q', 'M', 'P', '4') }, /* QNAP Systems */
     { CODEC_ID_MSMPEG4V3,    MKTAG('M', 'P', '4', '3') },
     { CODEC_ID_MSMPEG4V3,    MKTAG('D', 'I', 'V', '3') },
     { CODEC_ID_MSMPEG4V3,    MKTAG('M', 'P', 'G', '3') },
@@ -452,8 +454,6 @@ int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
         riff_extradata_start= enc->extradata;
         riff_extradata= enc->extradata + enc->extradata_size;
         hdrsize += enc->extradata_size;
-    } else if (!waveformatextensible){
-        hdrsize -= 2;
     }
     if(waveformatextensible) {                                    /* write WAVEFORMATEXTENSIBLE extensions */
         hdrsize += 22;
@@ -464,8 +464,8 @@ int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
         avio_wl32(pb, 0x00100000);
         avio_wl32(pb, 0xAA000080);
         avio_wl32(pb, 0x719B3800);
-    } else if(riff_extradata - riff_extradata_start) {
-        avio_wl16(pb, riff_extradata - riff_extradata_start);
+    } else {
+        avio_wl16(pb, riff_extradata - riff_extradata_start); /* cbSize */
     }
     avio_write(pb, riff_extradata_start, riff_extradata - riff_extradata_start);
     if(hdrsize&1){

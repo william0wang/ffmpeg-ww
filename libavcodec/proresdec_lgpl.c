@@ -71,6 +71,7 @@ typedef struct {
     int        slice_height_factor;
     int        num_x_mbs;
     int        num_y_mbs;
+    int        alpha_info;
 } ProresContext;
 
 
@@ -104,10 +105,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
     ctx->total_slices     = 0;
     ctx->slice_data       = NULL;
 
-    avctx->pix_fmt = PIX_FMT_YUV422P10; // set default pixel format
-
     avctx->bits_per_raw_sample = PRORES_BITS_PER_SAMPLE;
-    ff_proresdsp_init(&ctx->dsp);
+    ff_proresdsp_init(&ctx->dsp, avctx);
 
     avctx->coded_frame = &ctx->picture;
     avcodec_get_frame_defaults(&ctx->picture);
@@ -188,6 +187,10 @@ static int decode_frame_header(ProresContext *ctx, const uint8_t *buf,
         ctx->picture.interlaced_frame = 1;
         ctx->picture.top_field_first  = ctx->frame_type & 1;
     }
+
+    ctx->alpha_info = buf[17] & 0xf;
+    if (ctx->alpha_info)
+        av_log_missing_feature(avctx, "alpha channel", 0);
 
     ctx->qmat_changed = 0;
     ptr   = buf + 20;
@@ -543,9 +546,11 @@ static int decode_slice(AVCodecContext *avctx, ProresThreadData *td)
     hdr_size    = buf[0] >> 3;
     y_data_size = AV_RB16(buf + 2);
     u_data_size = AV_RB16(buf + 4);
-    v_data_size = slice_data_size - y_data_size - u_data_size - hdr_size;
+    v_data_size = hdr_size > 7 ? AV_RB16(buf + 6) :
+        slice_data_size - y_data_size - u_data_size - hdr_size;
 
-    if (v_data_size < 0 || hdr_size < 6) {
+    if (hdr_size + y_data_size + u_data_size + v_data_size > slice_data_size ||
+        v_data_size < 0 || hdr_size < 6) {
         av_log(avctx, AV_LOG_ERROR, "invalid data size\n");
         return AVERROR_INVALIDDATA;
     }

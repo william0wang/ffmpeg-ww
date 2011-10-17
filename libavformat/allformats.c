@@ -203,6 +203,7 @@ void av_register_all(void)
     av_register_rdt_dynamic_payload_handlers();
 #endif
     REGISTER_DEMUXER  (SEGAFILM, segafilm);
+    REGISTER_MUXER    (SEGMENT, segment);
     REGISTER_DEMUXER  (SHORTEN, shorten);
     REGISTER_DEMUXER  (SIFF, siff);
     REGISTER_DEMUXER  (SMACKER, smacker);
@@ -249,6 +250,7 @@ void av_register_all(void)
 
     /* protocols */
     REGISTER_PROTOCOL (APPLEHTTP, applehttp);
+    REGISTER_PROTOCOL (CACHE, cache);
     REGISTER_PROTOCOL (CONCAT, concat);
     REGISTER_PROTOCOL (CRYPTO, crypto);
     REGISTER_PROTOCOL (FILE, file);

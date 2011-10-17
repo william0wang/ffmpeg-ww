@@ -313,7 +313,7 @@ OBJS-$(CONFIG_PNG_DECODER)             += png.o pngdec.o
 OBJS-$(CONFIG_PNG_ENCODER)             += png.o pngenc.o
 OBJS-$(CONFIG_PPM_DECODER)             += pnmdec.o pnm.o
 OBJS-$(CONFIG_PPM_ENCODER)             += pnmenc.o pnm.o
-OBJS-$(CONFIG_PRORES_DECODER)          += proresdec.o
+OBJS-$(CONFIG_PRORES_DECODER)          += proresdec2.o
 OBJS-$(CONFIG_PRORES_LGPL_DECODER)     += proresdec_lgpl.o proresdsp.o
 OBJS-$(CONFIG_PTX_DECODER)             += ptx.o
 OBJS-$(CONFIG_QCELP_DECODER)           += qcelpdec.o celp_math.o         \
@@ -676,7 +676,7 @@ OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
 
 # thread libraries
 OBJS-$(HAVE_PTHREADS)                  += pthread.o
-OBJS-$(HAVE_W32THREADS)                += w32thread.o
+OBJS-$(HAVE_W32THREADS)                += pthread.o
 
 OBJS-$(CONFIG_MLIB)                    += mlib/dsputil_mlib.o           \
 
