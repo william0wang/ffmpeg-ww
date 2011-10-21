@@ -1303,8 +1303,8 @@ static int matroska_aac_sri(int samplerate)
 {
     int sri;
 
-    for (sri=0; sri<FF_ARRAY_ELEMS(ff_mpeg4audio_sample_rates); sri++)
-        if (ff_mpeg4audio_sample_rates[sri] == samplerate)
+    for (sri=0; sri<FF_ARRAY_ELEMS(avpriv_mpeg4audio_sample_rates); sri++)
+        if (avpriv_mpeg4audio_sample_rates[sri] == samplerate)
             break;
     return sri;
 }
@@ -1444,7 +1444,7 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
             }
         }
 
-        st = track->stream = av_new_stream(s, 0);
+        st = track->stream = avformat_new_stream(s, NULL);
         if (st == NULL)
             return AVERROR(ENOMEM);
 
@@ -1639,7 +1639,7 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
               attachements[j].bin.data && attachements[j].bin.size > 0)) {
             av_log(matroska->ctx, AV_LOG_ERROR, "incomplete attachment\n");
         } else {
-            AVStream *st = av_new_stream(s, 0);
+            AVStream *st = avformat_new_stream(s, NULL);
             if (st == NULL)
                 break;
             av_dict_set(&st->metadata, "filename",attachements[j].filename, 0);
@@ -1668,7 +1668,7 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
         if (chapters[i].start != AV_NOPTS_VALUE && chapters[i].uid
             && (max_start==0 || chapters[i].start > max_start)) {
             chapters[i].chapter =
-            ff_new_chapter(s, chapters[i].uid, (AVRational){1, 1000000000},
+            avpriv_new_chapter(s, chapters[i].uid, (AVRational){1, 1000000000},
                            chapters[i].start, chapters[i].end,
                            chapters[i].title);
             av_dict_set(&chapters[i].chapter->metadata,

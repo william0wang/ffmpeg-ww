@@ -620,12 +620,13 @@ static int mpegts_set_stream_info(AVStream *st, PESContext *pes,
                 return AVERROR(ENOMEM);
             memcpy(sub_pes, pes, sizeof(*sub_pes));
 
-            sub_st = av_new_stream(pes->stream, pes->pid);
+            sub_st = avformat_new_stream(pes->stream, NULL);
             if (!sub_st) {
                 av_free(sub_pes);
                 return AVERROR(ENOMEM);
             }
 
+            sub_st->id = pes->pid;
             av_set_pts_info(sub_st, 33, 1, 90000);
             sub_st->priv_data = sub_pes;
             sub_st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
@@ -726,9 +727,10 @@ static int mpegts_push_data(MpegTSFilter *filter,
 
                     /* stream not present in PMT */
                     if (!pes->st) {
-                        pes->st = av_new_stream(ts->stream, pes->pid);
+                        pes->st = avformat_new_stream(ts->stream, NULL);
                         if (!pes->st)
                             return AVERROR(ENOMEM);
+                        pes->st->id = pes->pid;
                         mpegts_set_stream_info(pes->st, pes, 0, 0);
                     }
 
@@ -1106,7 +1108,7 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
 
     // stop parsing after pmt, we found header
     if (!ts->stream->nb_streams)
-        ts->stop_parse = 1;
+        ts->stop_parse = 2;
 
     for(;;) {
         st = 0;
@@ -1120,14 +1122,18 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         /* now create ffmpeg stream */
         if (ts->pids[pid] && ts->pids[pid]->type == MPEGTS_PES) {
             pes = ts->pids[pid]->u.pes_filter.opaque;
-            if (!pes->st)
-                pes->st = av_new_stream(pes->stream, pes->pid);
+            if (!pes->st) {
+                pes->st = avformat_new_stream(pes->stream, NULL);
+                st->id = pes->pid;
+            }
             st = pes->st;
         } else {
             if (ts->pids[pid]) mpegts_close_filter(ts, ts->pids[pid]); //wrongly added sdt filter probably
             pes = add_pes_stream(ts, pid, pcr_pid);
-            if (pes)
-                st = av_new_stream(pes->stream, pes->pid);
+            if (pes) {
+                st = avformat_new_stream(pes->stream, NULL);
+                st->id = pes->pid;
+            }
         }
 
         if (!st)
@@ -1462,11 +1468,15 @@ static int handle_packets(MpegTSContext *ts, int nb_packets)
     ts->stop_parse = 0;
     packet_num = 0;
     for(;;) {
-        if (ts->stop_parse>0)
-            break;
         packet_num++;
-        if (nb_packets != 0 && packet_num >= nb_packets)
+        if (nb_packets != 0 && packet_num >= nb_packets ||
+            ts->stop_parse > 1) {
+            ret = AVERROR(EAGAIN);
             break;
+        }
+        if (ts->stop_parse > 0)
+            break;
+
         ret = read_packet(s, packet, ts->raw_packet_size);
         if (ret != 0)
             break;
@@ -1590,7 +1600,7 @@ static int mpegts_read_header(AVFormatContext *s,
 
         /* only read packets */
 
-        st = av_new_stream(s, 0);
+        st = avformat_new_stream(s, NULL);
         if (!st)
             goto fail;
         av_set_pts_info(st, 60, 1, 27000000);
@@ -1890,10 +1900,8 @@ int ff_mpegts_parse_packet(MpegTSContext *ts, AVPacket *pkt,
 
     len1 = len;
     ts->pkt = pkt;
-    ts->stop_parse = 0;
     for(;;) {
-        if (ts->stop_parse>0)
-            break;
+        ts->stop_parse = 0;
         if (len < TS_PACKET_SIZE)
             return -1;
         if (buf[0] != 0x47) {
@@ -1903,6 +1911,8 @@ int ff_mpegts_parse_packet(MpegTSContext *ts, AVPacket *pkt,
             handle_packet(ts, buf);
             buf += TS_PACKET_SIZE;
             len -= TS_PACKET_SIZE;
+            if (ts->stop_parse == 1)
+                break;
         }
     }
     return len1 - len;

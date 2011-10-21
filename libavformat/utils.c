@@ -756,6 +756,7 @@ int av_read_packet(AVFormatContext *s, AVPacket *pkt)
             av_log(s, AV_LOG_WARNING,
                    "Dropped corrupted packet (stream = %d)\n",
                    pkt->stream_index);
+            av_free_packet(pkt);
             continue;
         }
 
@@ -1902,7 +1903,7 @@ static int has_duration(AVFormatContext *ic)
 static void update_stream_timings(AVFormatContext *ic)
 {
     int64_t start_time, start_time1, start_time_text, end_time, end_time1;
-    int64_t duration, duration1;
+    int64_t duration, duration1, filesize;
     int i;
     AVStream *st;
 
@@ -1945,9 +1946,9 @@ static void update_stream_timings(AVFormatContext *ic)
     if (duration != INT64_MIN && ic->duration == AV_NOPTS_VALUE) {
         ic->duration = duration;
     }
-        if (ic->file_size > 0 && ic->duration != AV_NOPTS_VALUE) {
+        if (ic->pb && (filesize = avio_size(ic->pb)) > 0 && ic->duration != AV_NOPTS_VALUE) {
             /* compute the bitrate */
-            ic->bit_rate = (double)ic->file_size * 8.0 * AV_TIME_BASE /
+            ic->bit_rate = (double)filesize * 8.0 * AV_TIME_BASE /
                 (double)ic->duration;
         }
 }
@@ -1988,9 +1989,8 @@ static void estimate_timings_from_bit_rate(AVFormatContext *ic)
 
     /* if duration is already set, we believe it */
     if (ic->duration == AV_NOPTS_VALUE &&
-        ic->bit_rate != 0 &&
-        ic->file_size != 0)  {
-        filesize = ic->file_size;
+        ic->bit_rate != 0) {
+        filesize = ic->pb ? avio_size(ic->pb) : 0;
         if (filesize > 0) {
             for(i = 0; i < ic->nb_streams; i++) {
                 st = ic->streams[i];
@@ -2034,7 +2034,7 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
 
     /* estimate the end time (duration) */
     /* XXX: may need to support wrapping */
-    filesize = ic->file_size;
+    filesize = ic->pb ? avio_size(ic->pb) : 0;
     end_time = AV_NOPTS_VALUE;
     do{
         offset = filesize - (DURATION_MAX_READ_SIZE<<retry);
@@ -2098,7 +2098,6 @@ static void estimate_timings(AVFormatContext *ic, int64_t old_offset)
         if (file_size < 0)
             file_size = 0;
     }
-    ic->file_size = file_size;
 
     if ((!strcmp(ic->iformat->name, "mpeg") ||
          !strcmp(ic->iformat->name, "mpegts")) &&
@@ -2144,7 +2143,6 @@ static int has_codec_parameters(AVCodecContext *avctx)
              avctx->codec_id == CODEC_ID_MP1 ||
              avctx->codec_id == CODEC_ID_MP2 ||
              avctx->codec_id == CODEC_ID_MP3 ||
-             avctx->codec_id == CODEC_ID_SPEEX ||
              avctx->codec_id == CODEC_ID_CELT))
             return 0;
         break;
@@ -2225,7 +2223,7 @@ enum CodecID ff_codec_get_id(const AVCodecTag *tags, unsigned int tag)
             return tags[i].id;
     }
     for(i=0; tags[i].id != CODEC_ID_NONE; i++) {
-        if (ff_toupper4(tag) == ff_toupper4(tags[i].tag))
+        if (avpriv_toupper4(tag) == avpriv_toupper4(tags[i].tag))
             return tags[i].id;
     }
     return CODEC_ID_NONE;
@@ -2763,7 +2761,17 @@ void av_close_input_file(AVFormatContext *s)
         avio_close(pb);
 }
 
+#if FF_API_NEW_STREAM
 AVStream *av_new_stream(AVFormatContext *s, int id)
+{
+    AVStream *st = avformat_new_stream(s, NULL);
+    if (st)
+        st->id = id;
+    return st;
+}
+#endif
+
+AVStream *avformat_new_stream(AVFormatContext *s, AVCodec *c)
 {
     AVStream *st;
     int i;
@@ -2784,13 +2792,12 @@ AVStream *av_new_stream(AVFormatContext *s, int id)
         return NULL;
     }
 
-    st->codec = avcodec_alloc_context3(NULL);
+    st->codec = avcodec_alloc_context3(c);
     if (s->iformat) {
         /* no default bitrate if decoding */
         st->codec->bit_rate = 0;
     }
     st->index = s->nb_streams;
-    st->id = id;
     st->start_time = AV_NOPTS_VALUE;
     st->duration = AV_NOPTS_VALUE;
         /* we set the current DTS to 0 so that formats without any timestamps
@@ -2837,7 +2844,7 @@ AVProgram *av_new_program(AVFormatContext *ac, int id)
     return program;
 }
 
-AVChapter *ff_new_chapter(AVFormatContext *s, int id, AVRational time_base, int64_t start, int64_t end, const char *title)
+AVChapter *avpriv_new_chapter(AVFormatContext *s, int id, AVRational time_base, int64_t start, int64_t end, const char *title)
 {
     AVChapter *chapter = NULL;
     int i;
@@ -2961,7 +2968,7 @@ static int validate_codec_tag(AVFormatContext *s, AVStream *st)
     for (n = 0; s->oformat->codec_tag[n]; n++) {
         avctag = s->oformat->codec_tag[n];
         while (avctag->id != CODEC_ID_NONE) {
-            if (ff_toupper4(avctag->tag) == ff_toupper4(st->codec->codec_tag)) {
+            if (avpriv_toupper4(avctag->tag) == avpriv_toupper4(st->codec->codec_tag)) {
                 id = avctag->id;
                 if (id == st->codec->codec_id)
                     return 1;

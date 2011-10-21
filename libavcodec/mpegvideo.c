@@ -122,7 +122,7 @@ const enum PixelFormat ff_hwaccel_pixfmt_list_420[] = {
     PIX_FMT_NONE
 };
 
-const uint8_t *ff_find_start_code(const uint8_t * restrict p, const uint8_t *end, uint32_t * restrict state){
+const uint8_t *avpriv_mpv_find_start_code(const uint8_t * restrict p, const uint8_t *end, uint32_t * restrict state){
     int i;
 
     assert(p<=end);
@@ -645,9 +645,8 @@ av_cold int MPV_common_init(MpegEncContext *s)
     yc_size = y_size + 2 * c_size;
 
     /* convert fourcc to upper case */
-    s->codec_tag = ff_toupper4(s->avctx->codec_tag);
-
-    s->stream_codec_tag = ff_toupper4(s->avctx->stream_codec_tag);
+    s->codec_tag        = avpriv_toupper4(s->avctx->codec_tag);
+    s->stream_codec_tag = avpriv_toupper4(s->avctx->stream_codec_tag);
 
     s->avctx->coded_frame= (AVFrame*)&s->current_picture;
 
@@ -1132,6 +1131,12 @@ int MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
             s->last_picture_ptr->f.key_frame = 0;
             if(ff_alloc_picture(s, s->last_picture_ptr, 0) < 0)
                 return -1;
+
+            if(s->codec_id == CODEC_ID_FLV1){
+                for(i=0; i<s->height; i++)
+                    memset(s->last_picture_ptr->f.data[0] + s->last_picture_ptr->f.linesize[0]*i, 16, s->width);
+            }
+
             ff_thread_report_progress((AVFrame*)s->last_picture_ptr, INT_MAX, 0);
             ff_thread_report_progress((AVFrame*)s->last_picture_ptr, INT_MAX, 1);
         }

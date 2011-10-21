@@ -224,7 +224,7 @@ static int asf_read_stream_properties(AVFormatContext *s, int64_t size)
 
     pos1 = avio_tell(pb);
 
-    st = av_new_stream(s, 0);
+    st = avformat_new_stream(s, NULL);
     if (!st)
         return AVERROR(ENOMEM);
     av_set_pts_info(st, 32, 1, 1000); /* 32 bit pts in ms */
@@ -569,7 +569,7 @@ static int asf_read_marker(AVFormatContext *s, int64_t size)
         name_len = avio_rl32(pb);  // name length
         if ((ret = avio_get_str16le(pb, name_len * 2, name, sizeof(name))) < name_len)
             avio_skip(pb, name_len - ret);
-        ff_new_chapter(s, i, (AVRational){1, 10000000}, pres_time, AV_NOPTS_VALUE, name );
+        avpriv_new_chapter(s, i, (AVRational){1, 10000000}, pres_time, AV_NOPTS_VALUE, name );
     }
 
     return 0;

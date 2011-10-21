@@ -472,7 +472,7 @@ static int decode_audio_specific_config(AACContext *ac,
 
     init_get_bits(&gb, data, data_size * 8);
 
-    if ((i = ff_mpeg4audio_get_config(m4ac, data, asclen/8)) < 0)
+    if ((i = avpriv_mpeg4audio_get_config(m4ac, data, asclen/8)) < 0)
         return -1;
     if (m4ac->sampling_index > 12) {
         av_log(avctx, AV_LOG_ERROR, "invalid sampling rate index %d\n", m4ac->sampling_index);
@@ -2077,7 +2077,7 @@ static int parse_adts_frame_header(AACContext *ac, GetBitContext *gb)
     int size;
     AACADTSHeaderInfo hdr_info;
 
-    size = ff_aac_parse_header(gb, &hdr_info);
+    size = avpriv_aac_parse_header(gb, &hdr_info);
     if (size > 0) {
         if (hdr_info.chan_config) {
             enum ChannelPosition new_che_pos[4][MAX_ELEM_ID];
@@ -2137,6 +2137,15 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
         elem_id = get_bits(gb, 4);
 
         if (elem_type < TYPE_DSE) {
+            if (!ac->tags_mapped && elem_type == TYPE_CPE && ac->m4ac.chan_config==1) {
+                enum ChannelPosition new_che_pos[4][MAX_ELEM_ID]= {0};
+                ac->m4ac.chan_config=2;
+
+                if (set_default_channel_config(ac->avctx, new_che_pos, 2)<0)
+                    return -1;
+                if (output_configure(ac, ac->che_pos, new_che_pos, 2, OC_TRIAL_FRAME)<0)
+                    return -1;
+            }
             if (!(che=get_che(ac, elem_type, elem_id))) {
                 av_log(ac->avctx, AV_LOG_ERROR, "channel element %d.%d is not allocated\n",
                        elem_type, elem_id);
@@ -2312,8 +2321,8 @@ static int latm_decode_audio_specific_config(struct LATMContext *latmctx,
                                              GetBitContext *gb, int asclen)
 {
     AVCodecContext *avctx = latmctx->aac_ctx.avctx;
-    MPEG4AudioConfig m4ac;
     AACContext *ac= &latmctx->aac_ctx;
+    MPEG4AudioConfig m4ac=ac->m4ac;
     int  config_start_bit = get_bits_count(gb);
     int     bits_consumed, esize;
 
@@ -2329,7 +2338,8 @@ static int latm_decode_audio_specific_config(struct LATMContext *latmctx,
 
         if (bits_consumed < 0)
             return AVERROR_INVALIDDATA;
-        ac->m4ac= m4ac;
+        if(ac->m4ac.sample_rate != m4ac.sample_rate || m4ac.chan_config != ac->m4ac.chan_config)
+            ac->m4ac= m4ac;
 
         esize = (bits_consumed+7) / 8;
 

@@ -210,8 +210,12 @@ enum CodecID {
     CODEC_ID_DFA,
     CODEC_ID_WMV3IMAGE,
     CODEC_ID_VC1IMAGE,
+#if LIBAVCODEC_VERSION_MAJOR == 53
     CODEC_ID_8SVX_RAW,
     CODEC_ID_G2M,
+#endif
+    CODEC_ID_UTVIDEO_DEPRECATED,
+    CODEC_ID_UTVIDEO = 0x800,
 
     /* various PCM "codecs" */
     CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -674,8 +678,10 @@ typedef struct RcOverride{
 /* Codec can export data for HW decoding (XvMC). */
 #define CODEC_CAP_HWACCEL         0x0010
 /**
- * Codec has a nonzero delay and needs to be fed with NULL at the end to get the delayed data.
- * If this is not set, the codec is guaranteed to never be fed with NULL data.
+ * Codec has a nonzero delay and needs to be fed with avpkt->data=NULL,
+ * avpkt->size=0 at the end to get the delayed data until the decoder no longer
+ * returns frames. If this is not set, the codec is guaranteed to never be fed
+ * with NULL data.
  */
 #define CODEC_CAP_DELAY           0x0020
 /**
@@ -2963,15 +2969,11 @@ typedef struct AVCodecContext {
      * - encoding: unused
      * - decoding: Set by user.
      */
-#if FF_API_ER
-    int error_recognition2;
-#else
-    int error_recognition;
-#endif /* FF_API_ER */
-#define AV_ER_CRCCHECK   (1<<0)
-#define AV_ER_BITSTREAM  (1<<1)
-#define AV_ER_AGGRESSIVE (1<<2)
-#define AV_ER_EXPLODE    (1<<3)
+    int err_recognition;
+#define AV_EF_CRCCHECK  (1<<0)
+#define AV_EF_BITSTREAM (1<<1)
+#define AV_EF_BUFFER    (1<<2)
+#define AV_EF_EXPLODE   (1<<3)
 
     /**
      * Current statistics for PTS correction.
@@ -2982,7 +2984,6 @@ typedef struct AVCodecContext {
     int64_t pts_correction_num_faulty_dts; /// Number of incorrect DTS values so far
     int64_t pts_correction_last_pts;       /// PTS of the last frame
     int64_t pts_correction_last_dts;       /// DTS of the last frame
-
 
 } AVCodecContext;
 
@@ -3611,6 +3612,7 @@ enum PixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum PixelForma
 enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum PixelFormat dst_pix_fmt2,
                                             enum PixelFormat src_pix_fmt, int has_alpha, int *loss_ptr);
 
+#if FF_API_GET_ALPHA_INFO
 #define FF_ALPHA_TRANSP       0x0001 /* image has some totally transparent pixels */
 #define FF_ALPHA_SEMI_TRANSP  0x0002 /* image has some transparent pixels */
 
@@ -3618,8 +3620,10 @@ enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum 
  * Tell if an image really has transparent alpha values.
  * @return ored mask of FF_ALPHA_xxx constants
  */
+attribute_deprecated
 int img_get_alpha_info(const AVPicture *src,
                        enum PixelFormat pix_fmt, int width, int height);
+#endif
 
 /* deinterlace a picture */
 /* deinterlace - if not supported return -1 */
@@ -3711,19 +3715,31 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode);
  */
 const char *av_get_profile_name(const AVCodec *codec, int profile);
 
+#if FF_API_ALLOC_CONTEXT
 /**
  * Set the fields of the given AVCodecContext to default values.
  *
  * @param s The AVCodecContext of which the fields should be set to default values.
+ * @deprecated use avcodec_get_context_defaults3
  */
+attribute_deprecated
 void avcodec_get_context_defaults(AVCodecContext *s);
 
 /** THIS FUNCTION IS NOT YET PART OF THE PUBLIC API!
  *  we WILL change its arguments and name a few times! */
+attribute_deprecated
 void avcodec_get_context_defaults2(AVCodecContext *s, enum AVMediaType);
+#endif
 
-/** THIS FUNCTION IS NOT YET PART OF THE PUBLIC API!
- *  we WILL change its arguments and name a few times! */
+/**
+ * Set the fields of the given AVCodecContext to default values corresponding
+ * to the given codec (defaults may be codec-dependent).
+ *
+ * Do not call this function if a non-NULL codec has been passed
+ * to avcodec_alloc_context3() that allocated this AVCodecContext.
+ * If codec is non-NULL, it is illegal to call avcodec_open2() with a
+ * different codec on this AVCodecContext.
+ */
 int avcodec_get_context_defaults3(AVCodecContext *s, AVCodec *codec);
 
 #if FF_API_ALLOC_CONTEXT
@@ -3931,6 +3947,10 @@ int avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVDictionary **options)
  * samples should be 16 byte aligned unless the CPU doesn't need it
  * (AltiVec and SSE do).
  *
+ * @note Codecs which have the CODEC_CAP_DELAY capability set have a delay
+ * between input and output, these need to be fed with avpkt->data=NULL,
+ * avpkt->size=0 at the end to return the remaining frames.
+ *
  * @param avctx the codec context
  * @param[out] samples the output buffer, sample type in avctx->sample_fmt
  * @param[in,out] frame_size_ptr the output buffer size in bytes
@@ -3964,8 +3984,9 @@ int avcodec_decode_audio3(AVCodecContext *avctx, int16_t *samples,
  *
  * In practice, avpkt->data should have 4 byte alignment at minimum.
  *
- * @note Some codecs have a delay between input and output, these need to be
- * fed with avpkt->data=NULL, avpkt->size=0 at the end to return the remaining frames.
+ * @note Codecs which have the CODEC_CAP_DELAY capability set have a delay
+ * between input and output, these need to be fed with avpkt->data=NULL,
+ * avpkt->size=0 at the end to return the remaining frames.
  *
  * @param avctx the codec context
  * @param[out] picture The AVFrame in which the decoded video frame will be stored.
