@@ -519,8 +519,8 @@ OBJS-$(CONFIG_ADPCM_EA_R1_DECODER)        += adpcm.o
 OBJS-$(CONFIG_ADPCM_EA_R2_DECODER)        += adpcm.o
 OBJS-$(CONFIG_ADPCM_EA_R3_DECODER)        += adpcm.o
 OBJS-$(CONFIG_ADPCM_EA_XAS_DECODER)       += adpcm.o
-OBJS-$(CONFIG_ADPCM_G722_DECODER)         += g722.o
-OBJS-$(CONFIG_ADPCM_G722_ENCODER)         += g722.o
+OBJS-$(CONFIG_ADPCM_G722_DECODER)         += g722.o g722dec.o
+OBJS-$(CONFIG_ADPCM_G722_ENCODER)         += g722.o g722enc.o
 OBJS-$(CONFIG_ADPCM_G726_DECODER)         += g726.o
 OBJS-$(CONFIG_ADPCM_G726_ENCODER)         += g726.o
 OBJS-$(CONFIG_ADPCM_IMA_AMV_DECODER)      += adpcm.o adpcm_data.o
@@ -756,5 +756,6 @@ endif
 CODEC_NAMES_SH := $(SRC_PATH)/$(SUBDIR)codec_names.sh
 AVCODEC_H      := $(SRC_PATH)/$(SUBDIR)avcodec.h
 $(SUBDIR)codec_names.h: $(CODEC_NAMES_SH) config.h $(AVCODEC_H)
-	$(M)$(CODEC_NAMES_SH) config.h $(AVCODEC_H) $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -E $(AVCODEC_H) | \
+	$(CODEC_NAMES_SH) config.h $@
 $(SUBDIR)utils.o: $(SUBDIR)codec_names.h

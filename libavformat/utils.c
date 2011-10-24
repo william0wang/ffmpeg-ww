@@ -1602,6 +1602,7 @@ int av_seek_frame_binary(AVFormatContext *s, int stream_index, int64_t target_ts
     if ((ret = avio_seek(s->pb, pos, SEEK_SET)) < 0)
         return ret;
 
+    ff_read_frame_flush(s);
     av_update_cur_dts(s, st, ts);
 
     return 0;
@@ -1619,6 +1620,11 @@ int64_t av_gen_search(AVFormatContext *s, int stream_index, int64_t target_ts, i
         ts_min = read_timestamp(s, stream_index, &pos_min, INT64_MAX);
         if (ts_min == AV_NOPTS_VALUE)
             return -1;
+    }
+
+    if(ts_min >= target_ts){
+        *ts_ret= ts_min;
+        return pos_min;
     }
 
     if(ts_max == AV_NOPTS_VALUE){
@@ -1644,6 +1650,11 @@ int64_t av_gen_search(AVFormatContext *s, int stream_index, int64_t target_ts, i
                 break;
         }
         pos_limit= pos_max;
+    }
+
+    if(ts_max <= target_ts){
+        *ts_ret= ts_max;
+        return pos_max;
     }
 
     if(ts_min > ts_max){
@@ -1703,12 +1714,14 @@ int64_t av_gen_search(AVFormatContext *s, int stream_index, int64_t target_ts, i
 
     pos = (flags & AVSEEK_FLAG_BACKWARD) ? pos_min : pos_max;
     ts  = (flags & AVSEEK_FLAG_BACKWARD) ?  ts_min :  ts_max;
+#if 0
     pos_min = pos;
     ts_min = read_timestamp(s, stream_index, &pos_min, INT64_MAX);
     pos_min++;
     ts_max = read_timestamp(s, stream_index, &pos_min, INT64_MAX);
     av_dlog(s, "pos=0x%"PRIx64" %"PRId64"<=%"PRId64"<=%"PRId64"\n",
             pos, ts_min, target_ts, ts_max);
+#endif
     *ts_ret= ts;
     return pos;
 }
