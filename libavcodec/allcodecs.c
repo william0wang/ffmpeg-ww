@@ -91,6 +91,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (CSCD, cscd);
     REGISTER_DECODER (CYUV, cyuv);
     REGISTER_DECODER (DFA, dfa);
+    REGISTER_DECODER (DIRAC, dirac);
     REGISTER_ENCDEC  (DNXHD, dnxhd);
     REGISTER_ENCDEC  (DPX, dpx);
     REGISTER_DECODER (DSICINVIDEO, dsicinvideo);
@@ -172,7 +173,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (PICTOR, pictor);
     REGISTER_ENCDEC  (PNG, png);
     REGISTER_ENCDEC  (PPM, ppm);
-    REGISTER_DECODER (PRORES, prores);
+    REGISTER_ENCDEC  (PRORES, prores);
     REGISTER_DECODER (PRORES_LGPL, prores_lgpl);
     REGISTER_DECODER (PTX, ptx);
     REGISTER_DECODER (QDRAW, qdraw);
@@ -296,6 +297,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (VMDAUDIO, vmdaudio);
     REGISTER_ENCDEC  (VORBIS, vorbis);
     REGISTER_DECODER (WAVPACK, wavpack);
+    REGISTER_DECODER (WMALOSSLESS, wmalossless);
     REGISTER_DECODER (WMAPRO, wmapro);
     REGISTER_ENCDEC  (WMAV1, wmav1);
     REGISTER_ENCDEC  (WMAV2, wmav2);
@@ -328,7 +330,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (PCM_U24LE, pcm_u24le);
     REGISTER_ENCDEC  (PCM_U32BE, pcm_u32be);
     REGISTER_ENCDEC  (PCM_U32LE, pcm_u32le);
-    REGISTER_ENCDEC  (PCM_ZORK , pcm_zork);
+    REGISTER_DECODER (PCM_ZORK , pcm_zork);
 
     /* DPCM codecs */
     REGISTER_DECODER (INTERPLAY_DPCM, interplay_dpcm);

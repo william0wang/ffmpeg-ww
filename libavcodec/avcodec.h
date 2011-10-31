@@ -47,7 +47,8 @@
  *
  * If you add a codec ID to this list, add it so that
  * 1. no value of a existing codec ID changes (that would break ABI),
- * 2. it is as close as possible to similar codecs.
+ * 2. Give it a value which when taken as ASCII is recognized uniquely by a human as this specific codec.
+ *    This ensures that 2 forks can independantly add CodecIDs without producing conflicts.
  */
 enum CodecID {
     CODEC_ID_NONE,
@@ -211,11 +212,13 @@ enum CodecID {
     CODEC_ID_WMV3IMAGE,
     CODEC_ID_VC1IMAGE,
 #if LIBAVCODEC_VERSION_MAJOR == 53
-    CODEC_ID_8SVX_RAW,
-    CODEC_ID_G2M,
+    CODEC_ID_G723_1_DEPRECATED,
+    CODEC_ID_G729_DEPRECATED,
 #endif
     CODEC_ID_UTVIDEO_DEPRECATED,
     CODEC_ID_UTVIDEO = 0x800,
+
+    CODEC_ID_G2M        = MKBETAG( 0 ,'G','2','M'),
 
     /* various PCM "codecs" */
     CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -349,11 +352,12 @@ enum CodecID {
     CODEC_ID_QDMC,
     CODEC_ID_CELT,
 #if LIBAVCODEC_VERSION_MAJOR > 53
-    CODEC_ID_G723_1,
-    CODEC_ID_G729,
+    CODEC_ID_G723_1_DEPRECATED,
+    CODEC_ID_G729_DEPRECATED,
 #endif
     CODEC_ID_G729 = 0x15800,
     CODEC_ID_G723_1= 0x15801,
+    CODEC_ID_8SVX_RAW   = MKBETAG('8','S','V','X'),
 
     /* subtitle codecs */
     CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
@@ -366,18 +370,20 @@ enum CodecID {
     CODEC_ID_HDMV_PGS_SUBTITLE,
     CODEC_ID_DVB_TELETEXT,
     CODEC_ID_SRT,
-    CODEC_ID_MICRODVD,
+    CODEC_ID_MICRODVD   = MKBETAG('m','D','V','D'),
 
     /* other specific kind of codecs (generally used for attachments) */
     CODEC_ID_FIRST_UNKNOWN = 0x18000,           ///< A dummy ID pointing at the start of various fake codecs.
     CODEC_ID_TTF= 0x18000,
-    CODEC_ID_BINTEXT,
-    CODEC_ID_XBIN,
-    CODEC_ID_IDF,
+    CODEC_ID_BINTEXT    = MKBETAG('B','T','X','T'),
+    CODEC_ID_XBIN       = MKBETAG('X','B','I','N'),
+    CODEC_ID_IDF        = MKBETAG( 0 ,'I','D','F'),
 
     CODEC_ID_PROBE= 0x19000, ///< codec_id is not known (like CODEC_ID_NONE) but lavf should attempt to identify it
 
     CODEC_ID_MPEG2TS= 0x20000, /**< _FAKE_ codec to indicate a raw MPEG-2 TS
+                                * stream (only used by libavformat) */
+    CODEC_ID_MPEG4SYSTEMS = 0x20001, /**< _FAKE_ codec to indicate a MPEG-4 Systems
                                 * stream (only used by libavformat) */
     CODEC_ID_FFMETADATA=0x21000,   ///< Dummy codec for streams containing only metadata information.
 };
@@ -504,6 +510,7 @@ enum AVColorTransferCharacteristic{
     AVCOL_TRC_UNSPECIFIED=2,
     AVCOL_TRC_GAMMA22    =4, ///< also ITU-R BT470M / ITU-R BT1700 625 PAL & SECAM
     AVCOL_TRC_GAMMA28    =5, ///< also ITU-R BT470BG
+    AVCOL_TRC_SMPTE240M  =7,
     AVCOL_TRC_NB           , ///< Not part of ABI
 };
 
@@ -515,6 +522,7 @@ enum AVColorSpace{
     AVCOL_SPC_BT470BG    =5, ///< also ITU-R BT601-6 625 / ITU-R BT1358 625 / ITU-R BT1700 625 PAL & SECAM / IEC 61966-2-4 xvYCC601
     AVCOL_SPC_SMPTE170M  =6, ///< also ITU-R BT601-6 525 / ITU-R BT1358 525 / ITU-R BT1700 NTSC / functionally identical to above
     AVCOL_SPC_SMPTE240M  =7,
+    AVCOL_SPC_YCGCO      =8,
     AVCOL_SPC_NB           , ///< Not part of ABI
 };
 
@@ -676,8 +684,10 @@ typedef struct RcOverride{
  * assume the buffer was allocated by avcodec_default_get_buffer.
  */
 #define CODEC_CAP_DR1             0x0002
+#if FF_API_PARSE_FRAME
 /* If 'parse_only' field is true, then avcodec_parse_frame() can be used. */
 #define CODEC_CAP_PARSE_ONLY      0x0004
+#endif
 #define CODEC_CAP_TRUNCATED       0x0008
 /* Codec can export data for HW decoding (XvMC). */
 #define CODEC_CAP_HWACCEL         0x0010
@@ -1584,9 +1594,15 @@ typedef struct AVCodecContext {
      */
     int block_align;
 
-    int parse_only; /* - decoding only: If true, only parsing is done
-                       (function avcodec_parse_frame()). The frame
-                       data is returned. Only MPEG codecs support this now. */
+#if FF_API_PARSE_FRAME
+    /**
+     * If true, only parsing is done. The frame data is returned.
+     * Only MPEG audio decoders support this now.
+     * - encoding: unused
+     * - decoding: Set by user
+     */
+    attribute_deprecated int parse_only;
+#endif
 
     /**
      * 0-> h263 quant 1-> mpeg quant
@@ -4040,10 +4056,6 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
  * @param sub AVSubtitle to free.
  */
 void avsubtitle_free(AVSubtitle *sub);
-
-int avcodec_parse_frame(AVCodecContext *avctx, uint8_t **pdata,
-                        int *data_size_ptr,
-                        uint8_t *buf, int buf_size);
 
 /**
  * Encode an audio frame from samples into buf.

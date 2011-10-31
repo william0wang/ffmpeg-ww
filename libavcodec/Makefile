@@ -111,6 +111,8 @@ OBJS-$(CONFIG_CSCD_DECODER)            += cscd.o
 OBJS-$(CONFIG_CYUV_DECODER)            += cyuv.o
 OBJS-$(CONFIG_DCA_DECODER)             += dca.o synth_filter.o dcadsp.o
 OBJS-$(CONFIG_DCA_ENCODER)             += dcaenc.o
+OBJS-$(CONFIG_DIRAC_DECODER)           += diracdec.o dirac.o diracdsp.o \
+                                          dirac_arith.o mpeg12data.o dwt.o
 OBJS-$(CONFIG_DFA_DECODER)             += dfa.o
 OBJS-$(CONFIG_DNXHD_DECODER)           += dnxhddec.o dnxhddata.o
 OBJS-$(CONFIG_DNXHD_ENCODER)           += dnxhdenc.o dnxhddata.o       \
@@ -315,6 +317,7 @@ OBJS-$(CONFIG_PPM_DECODER)             += pnmdec.o pnm.o
 OBJS-$(CONFIG_PPM_ENCODER)             += pnmenc.o pnm.o
 OBJS-$(CONFIG_PRORES_DECODER)          += proresdec2.o
 OBJS-$(CONFIG_PRORES_LGPL_DECODER)     += proresdec_lgpl.o proresdsp.o
+OBJS-$(CONFIG_PRORES_ENCODER)          += proresenc.o
 OBJS-$(CONFIG_PTX_DECODER)             += ptx.o
 OBJS-$(CONFIG_QCELP_DECODER)           += qcelpdec.o celp_math.o         \
                                           celp_filters.o acelp_vectors.o \
@@ -428,6 +431,7 @@ OBJS-$(CONFIG_VP6_DECODER)             += vp6.o vp56.o vp56data.o vp56dsp.o \
 OBJS-$(CONFIG_VP8_DECODER)             += vp8.o vp8dsp.o vp56rac.o
 OBJS-$(CONFIG_VQA_DECODER)             += vqavideo.o
 OBJS-$(CONFIG_WAVPACK_DECODER)         += wavpack.o
+OBJS-$(CONFIG_WMALOSSLESS_DECODER)     += wmalosslessdec.o wma.o
 OBJS-$(CONFIG_WMAPRO_DECODER)          += wmaprodec.o wma.o
 OBJS-$(CONFIG_WMAV1_DECODER)           += wmadec.o wma.o aactab.o
 OBJS-$(CONFIG_WMAV1_ENCODER)           += wmaenc.o wma.o aactab.o
@@ -507,7 +511,6 @@ OBJS-$(CONFIG_PCM_U32BE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_U32LE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_U32LE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_ZORK_DECODER)           += pcm.o
-OBJS-$(CONFIG_PCM_ZORK_ENCODER)           += pcm.o
 
 OBJS-$(CONFIG_ADPCM_4XM_DECODER)          += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_ADX_DECODER)          += adxdec.o

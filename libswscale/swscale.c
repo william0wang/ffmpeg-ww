@@ -2530,11 +2530,23 @@ static int swScale(SwsContext *c, const uint8_t* src[],
     DEBUG_BUFFERS("vLumFilterSize: %d vLumBufSize: %d vChrFilterSize: %d vChrBufSize: %d\n",
                    vLumFilterSize,    vLumBufSize,    vChrFilterSize,    vChrBufSize);
 
-    if (dstStride[0]%8 !=0 || dstStride[1]%8 !=0 || dstStride[2]%8 !=0 || dstStride[3]%8 != 0) {
+    if (dstStride[0]%16 !=0 || dstStride[1]%16 !=0 || dstStride[2]%16 !=0 || dstStride[3]%16 != 0) {
         static int warnedAlready=0; //FIXME move this into the context perhaps
         if (flags & SWS_PRINT_INFO && !warnedAlready) {
             av_log(c, AV_LOG_WARNING, "Warning: dstStride is not aligned!\n"
                    "         ->cannot do aligned memory accesses anymore\n");
+            warnedAlready=1;
+        }
+    }
+
+    if ((int)dst[0]%16 || (int)dst[1]%16 || (int)dst[2]%16 || (int)src[0]%16 || (int)src[1]%16 || (int)src[2]%16
+        || dstStride[0]%16 || dstStride[1]%16 || dstStride[2]%16 || dstStride[3]%16
+        || srcStride[0]%16 || srcStride[1]%16 || srcStride[2]%16 || srcStride[3]%16
+    ) {
+        static int warnedAlready=0;
+        int cpu_flags = av_get_cpu_flags();
+        if (HAVE_MMX2 && (cpu_flags & AV_CPU_FLAG_SSE2) && !warnedAlready){
+            av_log(c, AV_LOG_WARNING, "Warning: data is not aligned! This can lead to a speedloss\n");
             warnedAlready=1;
         }
     }

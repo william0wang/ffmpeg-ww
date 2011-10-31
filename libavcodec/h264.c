@@ -1815,7 +1815,7 @@ static av_always_inline void hl_decode_mb_predict_luma(H264Context *h, int mb_ty
                     static const uint8_t dc_mapping[16] = { 0*16, 1*16, 4*16, 5*16, 2*16, 3*16, 6*16, 7*16,
                                                             8*16, 9*16,12*16,13*16,10*16,11*16,14*16,15*16};
                     for(i = 0; i < 16; i++)
-                        dctcoef_set(h->mb+p*256, pixel_shift, dc_mapping[i], dctcoef_get(h->mb_luma_dc[p], pixel_shift, i));
+                        dctcoef_set(h->mb+(p*256 << pixel_shift), pixel_shift, dc_mapping[i], dctcoef_get(h->mb_luma_dc[p], pixel_shift, i));
                 }
             }
         }else
@@ -2033,7 +2033,7 @@ static av_always_inline void hl_decode_mb_internal(H264Context *h, int simple, i
                         }
                         if (chroma422) {
                             for(i=j*16+4; i<j*16+8; i++){
-                                if(h->non_zero_count_cache[ scan8[i] ] || dctcoef_get(h->mb, pixel_shift, i*16))
+                                if(h->non_zero_count_cache[ scan8[i+4] ] || dctcoef_get(h->mb, pixel_shift, i*16))
                                     idct_add   (dest[j-1] + block_offset[i+4], h->mb + (i*16 << pixel_shift), uvlinesize);
                             }
                         }
@@ -2632,7 +2632,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
         s->me.qpel_avg= s->dsp.avg_h264_qpel_pixels_tab;
     }
 
-    first_mb_in_slice= get_ue_golomb(&s->gb);
+    first_mb_in_slice= get_ue_golomb_long(&s->gb);
 
     if(first_mb_in_slice == 0){ //FIXME better field boundary detection
         if(h0->current_slice && FIELD_PICTURE){
@@ -2741,7 +2741,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
                 s->dsp.dct_bits = h->sps.bit_depth_luma > 8 ? 32 : 16;
                 dsputil_init(&s->dsp, s->avctx);
             } else {
-                av_log(s->avctx, AV_LOG_DEBUG, "Unsupported bit depth: %d chroma_idc: %d\n",
+                av_log(s->avctx, AV_LOG_ERROR, "Unsupported bit depth: %d chroma_idc: %d\n",
                        h->sps.bit_depth_luma, h->sps.chroma_format_idc);
                 return -1;
             }
@@ -2787,6 +2787,8 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
                     if (s->avctx->colorspace == AVCOL_SPC_RGB) {
                        s->avctx->pix_fmt = PIX_FMT_GBR24P;
                        av_log(h->s.avctx, AV_LOG_DEBUG, "Detected GBR colorspace.\n");
+                    } else if (s->avctx->colorspace == AVCOL_SPC_YCGCO) {
+                        av_log(h->s.avctx, AV_LOG_WARNING, "Detected unsupported YCgCo colorspace.\n");
                     }
                 } else if (CHROMA422) {
                     s->avctx->pix_fmt = s->avctx->color_range == AVCOL_RANGE_JPEG ? PIX_FMT_YUVJ422P : PIX_FMT_YUV422P;
@@ -3863,7 +3865,8 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
             if((err = decode_slice_header(hx, h)))
                break;
 
-            if (h->sei_recovery_frame_cnt >= 0 && h->recovery_frame < 0) {
+            if (   h->sei_recovery_frame_cnt >= 0
+                && ((h->recovery_frame - h->frame_num) & ((1 << h->sps.log2_max_frame_num)-1)) > h->sei_recovery_frame_cnt) {
                 h->recovery_frame = (h->frame_num + h->sei_recovery_frame_cnt) %
                                     (1 << h->sps.log2_max_frame_num);
             }
@@ -3941,9 +3944,10 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
             break;
         case NAL_SPS:
             init_get_bits(&s->gb, ptr, bit_length);
-            if(ff_h264_decode_seq_parameter_set(h) < 0 && h->is_avc && (nalsize != consumed) && nalsize){
+            if(ff_h264_decode_seq_parameter_set(h) < 0 && (h->is_avc ? (nalsize != consumed) && nalsize : 1)){
                 av_log(h->s.avctx, AV_LOG_DEBUG, "SPS decoding failure, trying alternative mode\n");
-                init_get_bits(&s->gb, &buf[buf_index + 1 - consumed], 8*nalsize);
+                if(h->is_avc) av_assert0(next_avc - buf_index + consumed == nalsize);
+                init_get_bits(&s->gb, &buf[buf_index + 1 - consumed], 8*(next_avc - buf_index + consumed));
                 ff_h264_decode_seq_parameter_set(h);
             }
 

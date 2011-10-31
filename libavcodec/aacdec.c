@@ -184,9 +184,11 @@ static av_cold int che_configure(AACContext *ac,
                                  int type, int id, int *channels)
 {
     if (che_pos[type][id]) {
-        if (!ac->che[type][id] && !(ac->che[type][id] = av_mallocz(sizeof(ChannelElement))))
-            return AVERROR(ENOMEM);
-        ff_aac_sbr_ctx_init(ac, &ac->che[type][id]->sbr);
+        if (!ac->che[type][id]) {
+            if (!(ac->che[type][id] = av_mallocz(sizeof(ChannelElement))))
+                return AVERROR(ENOMEM);
+            ff_aac_sbr_ctx_init(ac, &ac->che[type][id]->sbr);
+        }
         if (type != TYPE_CCE) {
             ac->output_data[(*channels)++] = ac->che[type][id]->ch[0].ret;
             if (type == TYPE_CPE ||
@@ -2499,9 +2501,6 @@ static int latm_decode_frame(AVCodecContext *avctx, void *out, int *out_size,
     int                 muxlength, err;
     GetBitContext       gb;
 
-    if (avpkt->size == 0)
-        return 0;
-
     init_get_bits(&gb, avpkt->data, avpkt->size * 8);
 
     // check for LOAS sync word
@@ -2521,8 +2520,9 @@ static int latm_decode_frame(AVCodecContext *avctx, void *out, int *out_size,
             *out_size = 0;
             return avpkt->size;
         } else {
-            aac_decode_close(avctx);
-            if ((err = aac_decode_init(avctx)) < 0)
+            if ((err = decode_audio_specific_config(
+                    &latmctx->aac_ctx, avctx, &latmctx->aac_ctx.m4ac,
+                    avctx->extradata, avctx->extradata_size, 8*avctx->extradata_size)) < 0)
                 return err;
             latmctx->initialized = 1;
         }
@@ -2544,15 +2544,10 @@ static int latm_decode_frame(AVCodecContext *avctx, void *out, int *out_size,
 av_cold static int latm_decode_init(AVCodecContext *avctx)
 {
     struct LATMContext *latmctx = avctx->priv_data;
-    int ret;
+    int ret = aac_decode_init(avctx);
 
-    ret = aac_decode_init(avctx);
-
-    if (avctx->extradata_size > 0) {
+    if (avctx->extradata_size > 0)
         latmctx->initialized = !ret;
-    } else {
-        latmctx->initialized = 0;
-    }
 
     return ret;
 }
