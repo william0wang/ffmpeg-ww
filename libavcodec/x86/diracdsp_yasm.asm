@@ -51,26 +51,26 @@ cglobal dirac_hpel_filter_v_%1, 4,6,8, dst, src, stride, width, src0, stridex3
     pxor    m7, m7
 .loop:
     ; 7*(src[0] + src[1])
-    UNPACK_ADD m0, m1, [srcq], [srcq + strideq], u,u
+    UNPACK_ADD m0, m1, [srcq], [srcq + strideq], a,a
     pmullw  m0, [pw_7]
     pmullw  m1, [pw_7]
 
     ; 3*( ... + src[-2] + src[3])
-    UNPACK_ADD m2, m3, [src0q + strideq], [srcq + stridex3q], u,u
+    UNPACK_ADD m2, m3, [src0q + strideq], [srcq + stridex3q], a,a
     paddw   m0, m2
     paddw   m1, m3
     pmullw  m0, [pw_3]
     pmullw  m1, [pw_3]
 
     ; ... - 7*(src[-1] + src[2])
-    UNPACK_ADD m2, m3, [src0q + strideq*2], [srcq + strideq*2], u,u
+    UNPACK_ADD m2, m3, [src0q + strideq*2], [srcq + strideq*2], a,a
     pmullw  m2, [pw_7]
     pmullw  m3, [pw_7]
     psubw   m0, m2
     psubw   m1, m3
 
     ; ... - (src[-3] + src[4])
-    UNPACK_ADD m2, m3, [src0q], [srcq + strideq*4], u,u
+    UNPACK_ADD m2, m3, [src0q], [srcq + strideq*4], a,a
     psubw   m0, m2
     psubw   m1, m3
 
@@ -79,7 +79,7 @@ cglobal dirac_hpel_filter_v_%1, 4,6,8, dst, src, stride, width, src0, stridex3
     psraw   m0, 5
     psraw   m1, 5
     packuswb m0, m1
-    movu    [dstq], m0
+    mova    [dstq], m0
     add     dstq, mmsize
     add     srcq, mmsize
     add     src0q, mmsize
@@ -122,7 +122,7 @@ cglobal dirac_hpel_filter_h_%1, 3,3,8, dst, src, width
     psraw   m0, 5
     psraw   m1, 5
     packuswb m0, m1
-    movu    [dstq + widthq], m0
+    mova    [dstq + widthq], m0
     sub     widthd, mmsize
     jge     .loop
     RET
@@ -157,8 +157,8 @@ cglobal put_signed_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, 
     packsswb m2, [src2q+2*wq+mmsize]
     paddb    m1, m0
     paddb    m2, m0
-    movu    [dstq +wq], m1
-    movu    [dst2q+wq], m2
+    mova    [dstq +wq], m1
+    mova    [dst2q+wq], m2
     jg      .loopx
 
     lea   srcq, [srcq+src_strideq*4]
@@ -195,7 +195,7 @@ cglobal add_rect_clamped_%1, 7,7,3, dst, src, stride, idwt, idwt_stride, w, h
     paddw   m1, [idwtq+2*wq]
     paddw   m2, [idwtq+2*wq+mmsize]
     packuswb m1, m2
-    movu    [dstq +wq], m1
+    mova    [dstq +wq], m1
     jg      .loop
 
     lea   srcq, [srcq + 2*strideq]
@@ -224,12 +224,12 @@ cglobal add_dirac_obmc%1_%2, 6,6,5, dst, src, stride, obmc, yblen
     punpckhbw   m3, m4
     pmullw      m0, m2
     pmullw      m1, m3
-    movu        m2, [dstq+2*i]
-    movu        m3, [dstq+2*i+mmsize]
+    mova        m2, [dstq+2*i]
+    mova        m3, [dstq+2*i+mmsize]
     paddw       m0, m2
     paddw       m1, m3
-    movu        [dstq+2*i], m0
-    movu        [dstq+2*i+mmsize], m1
+    mova        [dstq+2*i], m0
+    mova        [dstq+2*i+mmsize], m1
 %assign i i+mmsize
 %endrep
     lea         srcq, [srcq+strideq]

@@ -1,6 +1,7 @@
 /*
- * RSO format common data
- * Copyright (c) 2010 Rafael Carre
+ * VDA HW acceleration
+ *
+ * copyright (c) 2011 Sebastien Zwickert
  *
  * This file is part of FFmpeg.
  *
@@ -19,14 +20,31 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_RSO_H
-#define AVFORMAT_RSO_H
+#ifndef AVCODEC_VDA_INTERNAL_H
+#define AVCODEC_VDA_INTERNAL_H
 
-#include "internal.h"
+#include "h264.h"
+#include "h264data.h"
 
-#define RSO_HEADER_SIZE 8
+#include "vda.h"
 
-/* The libavcodec codecs we support, and the IDs they have in the file */
-extern const AVCodecTag ff_codec_rso_tags[];
+#include <CoreFoundation/CFDictionary.h>
+#include <CoreFoundation/CFNumber.h>
+#include <CoreFoundation/CFData.h>
+#include <CoreFoundation/CFString.h>
 
-#endif /* AVFORMAT_RSO_H */
+/**
+ * \addtogroup VDA_Decoding
+ *
+ * @{
+ */
+
+/** Send a frame data to the hardware decoder. */
+int ff_vda_decoder_decode(struct vda_context *vda_ctx,
+                          uint8_t *bitstream,
+                          int bitstream_size,
+                          int64_t frame_pts);
+
+/* @} */
+
+#endif /* AVCODEC_VDA_INTERNAL_H */

@@ -358,7 +358,7 @@ static int asf_read_stream_properties(AVFormatContext *s, int64_t size)
 
         /* Extract palette from extradata if bpp <= 8 */
         /* This code assumes that extradata contains only palette */
-        /* This is true for all paletted codecs implemented in ffmpeg */
+        /* This is true for all paletted codecs implemented in libavcodec */
         if (st->codec->extradata_size && (st->codec->bits_per_coded_sample <= 8)) {
             int av_unused i;
 #if HAVE_BIGENDIAN
@@ -822,6 +822,10 @@ static int asf_read_frame_header(AVFormatContext *s, AVIOContext *pb){
     DO_2BITS(asf->packet_property >> 2, asf->packet_frag_offset, 0);
     DO_2BITS(asf->packet_property, asf->packet_replic_size, 0);
 //printf("key:%d stream:%d seq:%d offset:%d replic_size:%d\n", asf->packet_key_frame, asf->stream_index, asf->packet_seq, //asf->packet_frag_offset, asf->packet_replic_size);
+    if (rsize+asf->packet_replic_size > asf->packet_size_left) {
+        av_log(s, AV_LOG_ERROR, "packet_replic_size %d is invalid\n", asf->packet_replic_size);
+        return -1;
+    }
     if (asf->packet_replic_size >= 8) {
         asf->packet_obj_size = avio_rl32(pb);
         if(asf->packet_obj_size >= (1<<24) || asf->packet_obj_size <= 0){
@@ -854,10 +858,6 @@ static int asf_read_frame_header(AVFormatContext *s, AVIOContext *pb){
         rsize++;
     }else if(asf->packet_replic_size!=0){
         av_log(s, AV_LOG_ERROR, "unexpected packet_replic_size of %d\n", asf->packet_replic_size);
-        return -1;
-    }
-    if (rsize > asf->packet_size_left) {
-        av_log(s, AV_LOG_ERROR, "packet_replic_size is invalid\n");
         return -1;
     }
     if (asf->packet_flags & 0x01) {
