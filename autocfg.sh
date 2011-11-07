@@ -22,6 +22,7 @@ _config="configure \
   --disable-ffplay \
   --disable-ffprobe \
   --disable-ffserver \
+  --disable-w32threads \
   --extra-cflags=-U__STRICT_ANSI__ \
   --extra-libs="-Wl,--enable-auto-import" "
 
