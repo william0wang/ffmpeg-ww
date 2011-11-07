@@ -25,7 +25,7 @@
 #include "libavutil/samplefmt.h"
 
 #define LIBSWRESAMPLE_VERSION_MAJOR 0
-#define LIBSWRESAMPLE_VERSION_MINOR 0
+#define LIBSWRESAMPLE_VERSION_MINOR 2
 #define LIBSWRESAMPLE_VERSION_MICRO 0
 
 #define SWR_CH_MAX 16
@@ -57,7 +57,7 @@ int swr_init(struct SwrContext *s);
  */
 struct SwrContext *swr_alloc2(struct SwrContext *s, int64_t out_ch_layout, enum AVSampleFormat out_sample_fmt, int out_sample_rate,
                               int64_t  in_ch_layout, enum AVSampleFormat  in_sample_fmt, int  in_sample_rate,
-                              int log_offset, void *log_ctx);
+                              const int *channel_map, int log_offset, void *log_ctx);
 
 /**
  * Free the given SwrContext.
@@ -67,6 +67,8 @@ void swr_free(struct SwrContext **s);
 
 /**
  * Convert audio.
+ *
+ * in & in_count can be set to 0 to flush the last few samples out at the end.
  * @param  in_count Number of input samples available in one channel.
  * @param out_count Amount of space available for output in samples per channel.
  * @return number of samples output per channel

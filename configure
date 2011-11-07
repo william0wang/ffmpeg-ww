@@ -166,6 +166,7 @@ External library support:
   --enable-libcelt         enable CELT decoding via libcelt [no]
   --enable-frei0r          enable frei0r video filtering
   --enable-libaacplus      enable AAC+ encoding via libaacplus [no]
+  --enable-gnutls          enable gnutls [no]
   --enable-libopencore-amrnb enable AMR-NB de/encoding via libopencore-amrnb [no]
   --enable-libopencore-amrwb enable AMR-WB decoding via libopencore-amrwb [no]
   --enable-libopencv       enable video filtering via libopencv [no]
@@ -187,6 +188,7 @@ External library support:
   --enable-libstagefright-h264  enable H.264 decoding via libstagefright [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libutvideo      enable Ut Video decoding via libutvideo [no]
+  --enable-libv4l2         enable libv4l2/v4l-utils [no]
   --enable-libvo-aacenc    enable AAC encoding via libvo-aacenc [no]
   --enable-libvo-amrwbenc  enable AMR-WB encoding via libvo-amrwbenc [no]
   --enable-libvorbis       enable Vorbis encoding via libvorbis,
@@ -198,6 +200,7 @@ External library support:
                            native MPEG-4/Xvid encoder exists [no]
   --enable-openal          enable OpenAL 1.1 capture support [no]
   --enable-mlib            enable Sun medialib [no]
+  --enable-openssl         enable openssl [no]
   --enable-zlib            enable zlib [autodetect]
 
 Advanced options (experts only):
@@ -993,6 +996,7 @@ CONFIG_LIST="
     ffserver
     fft
     frei0r
+    gnutls
     golomb
     gpl
     gray
@@ -1022,6 +1026,7 @@ CONFIG_LIST="
     libstagefright_h264
     libtheora
     libutvideo
+    libv4l2
     libvo_aacenc
     libvo_amrwbenc
     libvorbis
@@ -1038,6 +1043,7 @@ CONFIG_LIST="
     network
     nonfree
     openal
+    openssl
     pic
     postproc
     rdft
@@ -1378,7 +1384,7 @@ h264_decoder_select="golomb h264dsp h264pred"
 h264_crystalhd_decoder_select="crystalhd h264_mp4toannexb_bsf h264_parser"
 h264_dxva2_hwaccel_deps="dxva2api_h"
 h264_dxva2_hwaccel_select="dxva2 h264_decoder"
-h264_vaapi_hwaccel_select="vaapi"
+h264_vaapi_hwaccel_select="vaapi h264_decoder"
 h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h"
 h264_vda_hwaccel_select="vda"
 h264_vdpau_decoder_select="vdpau h264_decoder"
@@ -1568,6 +1574,7 @@ jack_indev_deps="jack_jack_h sem_timedwait"
 lavfi_indev_deps="avfilter"
 libcdio_indev_deps="libcdio"
 libdc1394_indev_deps="libdc1394"
+libv4l2_indev_deps="libv4l2"
 openal_indev_deps="openal"
 oss_indev_deps_any="soundcard_h sys_soundcard_h"
 oss_outdev_deps_any="soundcard_h sys_soundcard_h"
@@ -1586,11 +1593,14 @@ x11_grab_device_indev_extralibs="-lX11 -lXext -lXfixes"
 gopher_protocol_deps="network"
 http_protocol_deps="network"
 http_protocol_select="tcp_protocol"
+https_protocol_select="tls_protocol"
 mmsh_protocol_select="http_protocol"
 mmst_protocol_deps="network"
 rtmp_protocol_select="tcp_protocol"
 rtp_protocol_select="udp_protocol"
 tcp_protocol_deps="network"
+tls_protocol_deps_any="openssl gnutls"
+tls_protocol_select="tcp_protocol"
 udp_protocol_deps="network"
 
 # filters
@@ -2704,6 +2714,7 @@ die_license_disabled gpl x11grab
 
 die_license_disabled nonfree libaacplus
 die_license_disabled nonfree libfaac
+die_license_disabled nonfree openssl
 
 die_license_disabled version3 libopencore_amrnb
 die_license_disabled version3 libopencore_amrwb
@@ -2958,7 +2969,6 @@ check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h VirtualAlloc
 
 check_header dlfcn.h
-check_header VideoDecodeAcceleration/VDADecoder.h
 check_header dxva2api.h -D_WIN32_WINNT=0x0600
 check_header libcrystalhd/libcrystalhd_if.h
 check_header malloc.h
@@ -2974,9 +2984,12 @@ check_header X11/extensions/XvMClib.h
 disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
 disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
 
-# adds ldflags for VDA module
-if enabled vda; then
-    add_ldflags -framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore
+# check for VDA header
+if ! disabled vda; then
+    if check_header VideoDecodeAcceleration/VDADecoder.h; then
+        enable vda
+        add_ldflags -framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore
+    fi
 fi
 
 # check for some common methods of building with pthread support
@@ -3030,6 +3043,7 @@ enabled libcelt    && require libcelt celt/celt.h celt_decode -lcelt0
 enabled frei0r     && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled libaacplus && require  "libaacplus >= 2.0.0" aacplus.h aacplusEncOpen -laacplus
 enabled libdc1394  && require_pkg_config libdc1394-2 dc1394/dc1394.h dc1394_new
+enabled gnutls     && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
 enabled libdirac   && require_pkg_config dirac                          \
     "libdirac_decoder/dirac_parser.h libdirac_encoder/dirac_encoder.h"  \
     "dirac_decoder_init dirac_encoder_init"
@@ -3052,6 +3066,7 @@ enabled libstagefright_h264  && require_cpp libstagefright_h264 "binder/ProcessS
     media/stagefright/OMXClient.h media/stagefright/OMXCodec.h" android::OMXClient -lstagefright -lmedia -lutils -lbinder
 enabled libtheora  && require  libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libutvideo    && require_cpp utvideo "stdint.h stdlib.h utvideo/utvideo.h utvideo/Codec.h" 'CCodec*' -lutvideo -lstdc++
+enabled libv4l2    && require_pkg_config libv4l2 libv4l2.h v4l2_ioctl
 enabled libvo_aacenc && require libvo_aacenc vo-aacenc/voAAC.h voGetAACEncAPI -lvo-aacenc
 enabled libvo_amrwbenc && require libvo_amrwbenc vo-amrwbenc/enc_if.h E_IF_init -lvo-amrwbenc
 enabled libvorbis  && require  libvorbis vorbis/vorbisenc.h vorbis_info_init -lvorbisenc -lvorbis -logg
@@ -3071,6 +3086,10 @@ enabled openal     && { { for al_libs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32
                       { check_cpp_condition "AL/al.h" "defined(AL_VERSION_1_1)" ||
                         die "ERROR: openal version must be 1.1 or compatible"; }
 enabled mlib       && require  mediaLib mlib_types.h mlib_VectorSub_S16_U8_Mod -lmlib
+enabled openssl    && { check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto ||
+                        check_lib openssl/ssl.h SSL_library_init -lssl32 -leay32 ||
+                        check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto -lws2_32 -lgdi32 ||
+                        die "ERROR: openssl not found"; }
 
 SDL_CONFIG="${cross_prefix}sdl-config"
 if check_pkg_config sdl SDL_version.h SDL_Linked_Version; then
@@ -3360,6 +3379,7 @@ echo "libvdpau enabled          ${vdpau-no}"
 echo "AVISynth enabled          ${avisynth-no}"
 echo "libcelt enabled           ${libcelt-no}"
 echo "frei0r enabled            ${frei0r-no}"
+echo "gnutls enabled            ${gnutls-no}"
 echo "libcdio support           ${libcdio-no}"
 echo "libdc1394 support         ${libdc1394-no}"
 echo "libdirac enabled          ${libdirac-no}"
@@ -3380,6 +3400,7 @@ echo "libspeex enabled          ${libspeex-no}"
 echo "libstagefright-h264 enabled    ${libstagefright_h264-no}"
 echo "libtheora enabled         ${libtheora-no}"
 echo "libutvideo enabled        ${libutvideo-no}"
+echo "libv4l2 enabled           ${libv4l2-no}"
 echo "libvo-aacenc support      ${libvo_aacenc-no}"
 echo "libvo-amrwbenc support    ${libvo_amrwbenc-no}"
 echo "libvorbis enabled         ${libvorbis-no}"
@@ -3388,6 +3409,7 @@ echo "libx264 enabled           ${libx264-no}"
 echo "libxavs enabled           ${libxavs-no}"
 echo "libxvid enabled           ${libxvid-no}"
 echo "openal enabled            ${openal-no}"
+echo "openssl enabled           ${openssl-no}"
 echo "zlib enabled              ${zlib-no}"
 echo "bzlib enabled             ${bzlib-no}"
 echo

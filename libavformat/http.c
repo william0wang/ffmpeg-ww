@@ -22,7 +22,6 @@
 #include "libavutil/avstring.h"
 #include "avformat.h"
 #include <unistd.h>
-#include <strings.h>
 #include "internal.h"
 #include "network.h"
 #include "http.h"
@@ -78,11 +77,6 @@ void ff_http_set_headers(URLContext *h, const char *headers)
     av_strlcpy(s->headers, headers, sizeof(s->headers));
 }
 
-void ff_http_set_chunked_transfer_encoding(URLContext *h, int is_chunked)
-{
-    ((HTTPContext*)h->priv_data)->chunksize = is_chunked ? 0 : -1;
-}
-
 void ff_http_init_auth_state(URLContext *dest, const URLContext *src)
 {
     memcpy(&((HTTPContext*)dest->priv_data)->auth_state,
@@ -92,8 +86,8 @@ void ff_http_init_auth_state(URLContext *dest, const URLContext *src)
 /* return non zero if error */
 static int http_open_cnx(URLContext *h)
 {
-    const char *path, *proxy_path;
-    char hostname[1024], hoststr[1024];
+    const char *path, *proxy_path, *lower_proto = "tcp";
+    char hostname[1024], hoststr[1024], proto[10];
     char auth[1024];
     char path1[1024];
     char buf[1024];
@@ -109,7 +103,8 @@ static int http_open_cnx(URLContext *h)
     /* fill the dest addr */
  redo:
     /* needed in any case to build the host string */
-    av_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
+    av_url_split(proto, sizeof(proto), auth, sizeof(auth),
+                 hostname, sizeof(hostname), &port,
                  path1, sizeof(path1), s->location);
     ff_url_join(hoststr, sizeof(hoststr), NULL, NULL, hostname, port, NULL);
 
@@ -123,10 +118,15 @@ static int http_open_cnx(URLContext *h)
         else
             path = path1;
     }
+    if (!strcmp(proto, "https")) {
+        lower_proto = "tls";
+        if (port < 0)
+            port = 443;
+    }
     if (port < 0)
         port = 80;
 
-    ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
+    ff_url_join(buf, sizeof(buf), lower_proto, NULL, hostname, port, NULL);
     err = ffurl_open(&hd, buf, AVIO_FLAG_READ_WRITE);
     if (err < 0)
         goto fail;
@@ -250,12 +250,12 @@ static int process_line(URLContext *h, char *line, int line_count,
         p++;
         while (isspace(*p))
             p++;
-        if (!strcasecmp(tag, "Location")) {
+        if (!av_strcasecmp(tag, "Location")) {
             strcpy(s->location, p);
             *new_location = 1;
-        } else if (!strcasecmp (tag, "Content-Length") && s->filesize == -1) {
+        } else if (!av_strcasecmp (tag, "Content-Length") && s->filesize == -1) {
             s->filesize = atoll(p);
-        } else if (!strcasecmp (tag, "Content-Range")) {
+        } else if (!av_strcasecmp (tag, "Content-Range")) {
             /* "bytes $from-$to/$document_size" */
             const char *slash;
             if (!strncmp (p, "bytes ", 6)) {
@@ -265,16 +265,16 @@ static int process_line(URLContext *h, char *line, int line_count,
                     s->filesize = atoll(slash+1);
             }
             h->is_streamed = 0; /* we _can_ in fact seek */
-        } else if (!strcasecmp(tag, "Accept-Ranges") && !strncmp(p, "bytes", 5)) {
+        } else if (!av_strcasecmp(tag, "Accept-Ranges") && !strncmp(p, "bytes", 5)) {
             h->is_streamed = 0;
-        } else if (!strcasecmp (tag, "Transfer-Encoding") && !strncasecmp(p, "chunked", 7)) {
+        } else if (!av_strcasecmp (tag, "Transfer-Encoding") && !av_strncasecmp(p, "chunked", 7)) {
             s->filesize = -1;
             s->chunksize = 0;
-        } else if (!strcasecmp (tag, "WWW-Authenticate")) {
+        } else if (!av_strcasecmp (tag, "WWW-Authenticate")) {
             ff_http_auth_handle_header(&s->auth_state, tag, p);
-        } else if (!strcasecmp (tag, "Authentication-Info")) {
+        } else if (!av_strcasecmp (tag, "Authentication-Info")) {
             ff_http_auth_handle_header(&s->auth_state, tag, p);
-        } else if (!strcasecmp (tag, "Connection")) {
+        } else if (!av_strcasecmp (tag, "Connection")) {
             if (!strcmp(p, "close"))
                 s->willclose = 1;
         }
@@ -509,6 +509,7 @@ http_get_file_handle(URLContext *h)
     return ffurl_get_file_handle(s->hd);
 }
 
+#if CONFIG_HTTP_PROTOCOL
 URLProtocol ff_http_protocol = {
     .name                = "http",
     .url_open            = http_open,
@@ -520,3 +521,17 @@ URLProtocol ff_http_protocol = {
     .priv_data_size      = sizeof(HTTPContext),
     .priv_data_class     = &httpcontext_class,
 };
+#endif
+#if CONFIG_HTTPS_PROTOCOL
+URLProtocol ff_https_protocol = {
+    .name                = "https",
+    .url_open            = http_open,
+    .url_read            = http_read,
+    .url_write           = http_write,
+    .url_seek            = http_seek,
+    .url_close           = http_close,
+    .url_get_file_handle = http_get_file_handle,
+    .priv_data_size      = sizeof(HTTPContext),
+    .priv_data_class     = &httpcontext_class,
+};
+#endif

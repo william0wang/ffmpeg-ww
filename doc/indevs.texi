@@ -104,6 +104,14 @@ If set to @option{true}, print a list of devices and exit.
 If set to @option{true}, print a list of selected device's options
 and exit.
 
+@item video_device_number
+Set video device number for devices with same name (starts at 0,
+defaults to 0).
+
+@item audio_device_number
+Set audio device number for devices with same name (starts at 0,
+defaults to 0).
+
 @end table
 
 @subsection Examples
@@ -120,6 +128,12 @@ $ ffmpeg -list_devices true -f dshow -i dummy
 Open video device @var{Camera}:
 @example
 $ ffmpeg -f dshow -i video="Camera"
+@end example
+
+@item
+Open second video device with name @var{Camera}:
+@example
+$ ffmpeg -f dshow -video_device_number 1 -i video="Camera"
 @end example
 
 @item
@@ -513,6 +527,9 @@ input device will use the frame rate value already set in the driver.
 Video4Linux support is deprecated since Linux 2.6.30, and will be
 dropped in later versions.
 
+Note that if FFmpeg is build with v4l-utils support ("--enable-libv4l2"
+option), it will always be used.
+
 Follow some usage examples of the video4linux devices with the ff*
 tools.
 @example
@@ -528,6 +545,9 @@ ffplay -f video4linux2 /dev/video0
 # driver.
 ffmpeg -f video4linux2 -i /dev/video0 out.mpeg
 @end example
+
+"v4l" and "v4l2" can be used as aliases for the respective "video4linux" and
+"video4linux2".
 
 @section vfwcap
 

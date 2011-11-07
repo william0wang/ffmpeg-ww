@@ -35,7 +35,7 @@
 #include "internal.h"
 #include "drawutils.h"
 
-static const char *var_names[] = {
+static const char * const var_names[] = {
     "main_w",    "W", ///< width  of the main    video
     "main_h",    "H", ///< height of the main    video
     "overlay_w", "w", ///< width  of the overlay video
@@ -183,7 +183,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static enum PixelFormat alpha_pix_fmts[] = {
+static const enum PixelFormat alpha_pix_fmts[] = {
     PIX_FMT_YUVA420P, PIX_FMT_ARGB, PIX_FMT_ABGR, PIX_FMT_RGBA,
     PIX_FMT_BGRA, PIX_FMT_NONE
 };
@@ -503,7 +503,7 @@ AVFilter avfilter_vf_overlay = {
 
     .query_formats = query_formats,
 
-    .inputs    = (AVFilterPad[]) {{ .name            = "main",
+    .inputs    = (const AVFilterPad[]) {{ .name      = "main",
                                     .type            = AVMEDIA_TYPE_VIDEO,
                                     .start_frame     = start_frame,
                                     .get_video_buffer= get_video_buffer,
@@ -521,7 +521,7 @@ AVFilter avfilter_vf_overlay = {
                                     .min_perms       = AV_PERM_READ,
                                     .rej_perms       = AV_PERM_REUSE2, },
                                   { .name = NULL}},
-    .outputs   = (AVFilterPad[]) {{ .name            = "default",
+    .outputs   = (const AVFilterPad[]) {{ .name      = "default",
                                     .type            = AVMEDIA_TYPE_VIDEO,
                                     .config_props    = config_output, },
                                   { .name = NULL}},

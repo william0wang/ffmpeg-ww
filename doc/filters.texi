@@ -110,7 +110,7 @@ The filter accepts a string of the form:
 the corresponding numeric value defined in @file{libavutil/samplefmt.h}.
 
 @var{channel_layout} specifies the channel layout, and can be a string
-or the corresponding number value defined in @file{libavutil/chlayout.h}.
+or the corresponding number value defined in @file{libavutil/audioconvert.h}.
 
 @var{packing_format} specifies the type of packing in output, can be one
 of "planar" or "packed", or the corresponding numeric values "0" or "1".
@@ -198,7 +198,7 @@ seconds
 
 @item pos
 position of the frame in the input stream, -1 if this information in
-unavailable and/or meanigless (for example in case of synthetic audio)
+unavailable and/or meaningless (for example in case of synthetic audio)
 
 @item fmt
 sample format name
@@ -223,6 +223,67 @@ Adler-32 checksum (printed in hexadecimal) for each input frame plane,
 expressed in the form "[@var{c0} @var{c1} @var{c2} @var{c3} @var{c4} @var{c5}
 @var{c6} @var{c7}]"
 @end table
+
+@section earwax
+
+Make audio easier to listen to on headphones.
+
+This filter adds `cues' to 44.1kHz stereo (i.e. audio CD format) audio
+so that when listened to on headphones the stereo image is moved from
+inside your head (standard for headphones) to outside and in front of
+the listener (standard for speakers).
+
+Ported from SoX.
+
+@section volume
+
+Adjust the input audio volume.
+
+The filter accepts exactly one parameter @var{vol}, which expresses
+how the audio volume will be increased or decreased.
+
+Output values are clipped to the maximum value.
+
+If @var{vol} is expressed as a decimal number, and the output audio
+volume is given by the relation:
+@example
+@var{output_volume} = @var{vol} * @var{input_volume}
+@end example
+
+If @var{vol} is expressed as a decimal number followed by the string
+"dB", the value represents the requested change in decibels of the
+input audio power, and the output audio volume is given by the
+relation:
+@example
+@var{output_volume} = 10^(@var{vol}/20) * @var{input_volume}
+@end example
+
+Otherwise @var{vol} is considered an expression and its evaluated
+value is used for computing the output audio volume according to the
+first relation.
+
+Default value for @var{vol} is 1.0.
+
+@subsection Examples
+
+@itemize
+@item
+Half the input audio volume:
+@example
+volume=0.5
+@end example
+
+The above example is equivalent to:
+@example
+volume=1/2
+@end example
+
+@item
+Decrease input audio power by 12 decibels:
+@example
+volume=-12dB
+@end example
+@end itemize
 
 @c man end AUDIO FILTERS
 
@@ -759,7 +820,7 @@ A description of the accepted parameters follows.
 @table @option
 
 @item x, y, w, h
-Specify a rectangular area where to limit the sarch for motion
+Specify a rectangular area where to limit the search for motion
 vectors.
 If desired the search for motion vectors can be limited to a
 rectangular area of the frame defined by its top left corner, width
@@ -1690,7 +1751,7 @@ movie=logo2.png [logo2];
 color=red@.3:WxH [over]; [in][over] overlay [out]
 @end example
 
-You can chain togheter more overlays but the efficiency of such
+You can chain together more overlays but the efficiency of such
 approach is yet to be tested.
 
 @section pad
@@ -2403,7 +2464,7 @@ through the interface defined in @file{libavfilter/vsrc_buffer.h}.
 It accepts the following parameters:
 @var{width}:@var{height}:@var{pix_fmt_string}:@var{timebase_num}:@var{timebase_den}:@var{sample_aspect_ratio_num}:@var{sample_aspect_ratio.den}:@var{scale_params}
 
-All the parameters but @var{scale_params} need to be explicitely
+All the parameters but @var{scale_params} need to be explicitly
 defined.
 
 Follows the list of the accepted parameters.

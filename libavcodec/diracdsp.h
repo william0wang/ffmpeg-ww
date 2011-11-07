@@ -21,6 +21,8 @@
 #ifndef AVCODEC_DIRACDSP_H
 #define AVCODEC_DIRACDSP_H
 
+#include <stdint.h>
+
 typedef void (*dirac_weight_func)(uint8_t *block, int stride, int log2_denom, int weight, int h);
 typedef void (*dirac_biweight_func)(uint8_t *dst, uint8_t *src, int stride, int log2_denom, int weightd, int weights, int h);
 
@@ -62,4 +64,4 @@ DECL_DIRAC_PIXOP(avg, l4_c);
 
 void ff_diracdsp_init(DiracDSPContext *c);
 
-#endif
+#endif /* AVCODEC_DIRACDSP_H */

@@ -26,6 +26,7 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/random_seed.h"
 #include "libavutil/dict.h"
+#include "libavutil/opt.h"
 #include "avformat.h"
 #include "avio_internal.h"
 
@@ -33,7 +34,6 @@
 #if HAVE_POLL_H
 #include <poll.h>
 #endif
-#include <strings.h>
 #include "internal.h"
 #include "network.h"
 #include "os_support.h"
@@ -660,7 +660,7 @@ static void rtsp_parse_transport(RTSPMessageHeader *reply, const char *p)
 
         get_word_sep(transport_protocol, sizeof(transport_protocol),
                      "/", &p);
-        if (!strcasecmp (transport_protocol, "rtp")) {
+        if (!av_strcasecmp (transport_protocol, "rtp")) {
             get_word_sep(profile, sizeof(profile), "/;,", &p);
             lower_transport[0] = '\0';
             /* rtp/avp/<protocol> */
@@ -669,14 +669,14 @@ static void rtsp_parse_transport(RTSPMessageHeader *reply, const char *p)
                              ";,", &p);
             }
             th->transport = RTSP_TRANSPORT_RTP;
-        } else if (!strcasecmp (transport_protocol, "x-pn-tng") ||
-                   !strcasecmp (transport_protocol, "x-real-rdt")) {
+        } else if (!av_strcasecmp (transport_protocol, "x-pn-tng") ||
+                   !av_strcasecmp (transport_protocol, "x-real-rdt")) {
             /* x-pn-tng/<protocol> */
             get_word_sep(lower_transport, sizeof(lower_transport), "/;,", &p);
             profile[0] = '\0';
             th->transport = RTSP_TRANSPORT_RDT;
         }
-        if (!strcasecmp(lower_transport, "TCP"))
+        if (!av_strcasecmp(lower_transport, "TCP"))
             th->lower_transport = RTSP_LOWER_TRANSPORT_TCP;
         else
             th->lower_transport = RTSP_LOWER_TRANSPORT_UDP;
@@ -1483,7 +1483,7 @@ redirect:
                  "Expires: Sun, 9 Jan 1972 00:00:00 GMT\r\n",
                  sessioncookie);
         ff_http_set_headers(rt->rtsp_hd_out, headers);
-        ff_http_set_chunked_transfer_encoding(rt->rtsp_hd_out, 0);
+        av_opt_set(rt->rtsp_hd_out->priv_data, "chunksize", "-1", 0);
 
         /* Initialize the authentication state for the POST session. The HTTP
          * protocol implementation doesn't properly handle multi-pass
@@ -1555,7 +1555,7 @@ redirect:
         if (rt->server_type != RTSP_SERVER_REAL && reply->real_challenge[0]) {
             rt->server_type = RTSP_SERVER_REAL;
             continue;
-        } else if (!strncasecmp(reply->server, "WMServer/", 9)) {
+        } else if (!av_strncasecmp(reply->server, "WMServer/", 9)) {
             rt->server_type = RTSP_SERVER_WMS;
         } else if (rt->server_type == RTSP_SERVER_REAL)
             strcpy(real_challenge, reply->real_challenge);

@@ -38,7 +38,6 @@
 #include "url.h"
 #include <sys/time.h>
 #include <time.h>
-#include <strings.h>
 #include <stdarg.h>
 #if CONFIG_NETWORK
 #include "network.h"
@@ -170,7 +169,7 @@ int av_match_ext(const char *filename, const char *extensions)
             while (*p != '\0' && *p != ',' && q-ext1<sizeof(ext1)-1)
                 *q++ = *p++;
             *q = '\0';
-            if (!strcasecmp(ext1, ext))
+            if (!av_strcasecmp(ext1, ext))
                 return 1;
             if (*p == '\0')
                 break;
@@ -191,11 +190,11 @@ static int match_format(const char *name, const char *names)
     namelen = strlen(name);
     while ((p = strchr(names, ','))) {
         len = FFMAX(p - names, namelen);
-        if (!strncasecmp(name, names, len))
+        if (!av_strncasecmp(name, names, len))
             return 1;
         names = p+1;
     }
-    return !strcasecmp(name, names);
+    return !av_strcasecmp(name, names);
 }
 
 AVOutputFormat *av_guess_format(const char *short_name, const char *filename,
@@ -607,6 +606,9 @@ static int init_input(AVFormatContext *s, const char *filename)
 {
     int ret;
     AVProbeData pd = {filename, NULL, 0};
+
+    if(s->iformat && !strlen(filename))
+        return 0;
 
     if (s->pb) {
         s->flags |= AVFMT_FLAG_CUSTOM_IO;
@@ -1415,7 +1417,8 @@ void ff_read_frame_flush(AVFormatContext *s)
             av_free_packet(&st->cur_pkt);
         }
         st->last_IP_pts = AV_NOPTS_VALUE;
-        st->cur_dts = AV_NOPTS_VALUE; /* we set the current DTS to an unspecified origin */
+        if(st->first_dts == AV_NOPTS_VALUE) st->cur_dts = 0;
+        else                                st->cur_dts = AV_NOPTS_VALUE; /* we set the current DTS to an unspecified origin */
         st->reference_dts = AV_NOPTS_VALUE;
         /* fail safe */
         st->cur_ptr = NULL;
@@ -1431,7 +1434,7 @@ void ff_read_frame_flush(AVFormatContext *s)
 #if FF_API_SEEK_PUBLIC
 void av_update_cur_dts(AVFormatContext *s, AVStream *ref_st, int64_t timestamp)
 {
-    return ff_update_cur_dts(s, ref_st, timestamp);
+    ff_update_cur_dts(s, ref_st, timestamp);
 }
 #endif
 
@@ -3180,9 +3183,6 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt){
     av_dlog(s, "compute_pkt_fields2: pts:%"PRId64" dts:%"PRId64" cur_dts:%"PRId64" b:%d size:%d st:%d\n",
             pkt->pts, pkt->dts, st->cur_dts, delay, pkt->size, pkt->stream_index);
 
-/*    if(pkt->pts == AV_NOPTS_VALUE && pkt->dts == AV_NOPTS_VALUE)
-        return AVERROR(EINVAL);*/
-
     /* duration field */
     if (pkt->duration == 0) {
         compute_frame_duration(&num, &den, st, NULL, pkt);
@@ -4182,4 +4182,24 @@ int avformat_query_codec(AVOutputFormat *ofmt, enum CodecID codec_id, int std_co
             return 1;
     }
     return AVERROR_PATCHWELCOME;
+}
+
+int avformat_network_init(void)
+{
+#if CONFIG_NETWORK
+    int ret;
+    if ((ret = ff_network_init()) < 0)
+        return ret;
+    ff_tls_init();
+#endif
+    return 0;
+}
+
+int avformat_network_deinit(void)
+{
+#if CONFIG_NETWORK
+    ff_network_close();
+    ff_tls_deinit();
+#endif
+    return 0;
 }

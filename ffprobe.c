@@ -709,6 +709,17 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     } else {
         print_str("codec_type", "unknown");
     }
+    if (dec_ctx->codec && dec_ctx->codec->priv_class) {
+        const AVOption *opt = NULL;
+        while (opt = av_opt_next(dec_ctx->priv_data,opt)) {
+            uint8_t *str;
+            if (opt->flags) continue;
+            if (av_opt_get(dec_ctx->priv_data, opt->name, 0, &str) >= 0) {
+                print_str(opt->name, str);
+                av_free(str);
+            }
+        }
+    }
 
     if (fmt_ctx->iformat->flags & AVFMT_SHOW_IDS)
         print_fmt("id", "0x%x", stream->id);
@@ -737,6 +748,7 @@ static void show_streams(WriterContext *w, AVFormatContext *fmt_ctx)
 static void show_format(WriterContext *w, AVFormatContext *fmt_ctx)
 {
     char val_str[128];
+    int64_t size = avio_size(fmt_ctx->pb);
     struct print_buf pbuf = {.s = NULL};
 
     print_section_header("format");
@@ -746,7 +758,8 @@ static void show_format(WriterContext *w, AVFormatContext *fmt_ctx)
     print_str("format_long_name", fmt_ctx->iformat->long_name);
     print_str("start_time",       time_value_string(val_str, sizeof(val_str), fmt_ctx->start_time, &AV_TIME_BASE_Q));
     print_str("duration",         time_value_string(val_str, sizeof(val_str), fmt_ctx->duration,   &AV_TIME_BASE_Q));
-    print_str("size",             value_string(val_str, sizeof(val_str), fmt_ctx->file_size, unit_byte_str));
+    if (size >= 0)
+        print_str("size",         value_string(val_str, sizeof(val_str), size,               unit_byte_str));
     print_str("bit_rate",         value_string(val_str, sizeof(val_str), fmt_ctx->bit_rate,  unit_bit_per_second_str));
     show_tags(fmt_ctx->metadata);
     print_section_footer("format");
@@ -923,6 +936,7 @@ int main(int argc, char **argv)
 
     parse_loglevel(argc, argv, options);
     av_register_all();
+    avformat_network_init();
     init_opts();
 #if CONFIG_AVDEVICE
     avdevice_register_all();
@@ -939,6 +953,8 @@ int main(int argc, char **argv)
     }
 
     ret = probe_file(input_filename);
+
+    avformat_network_deinit();
 
     return ret;
 }

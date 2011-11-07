@@ -322,8 +322,8 @@ AVFilter avfilter_vsrc_movie = {
     .uninit        = movie_common_uninit,
     .query_formats = movie_query_formats,
 
-    .inputs    = (AVFilterPad[]) {{ .name = NULL }},
-    .outputs   = (AVFilterPad[]) {{ .name            = "default",
+    .inputs    = (const AVFilterPad[]) {{ .name = NULL }},
+    .outputs   = (const AVFilterPad[]) {{ .name      = "default",
                                     .type            = AVMEDIA_TYPE_VIDEO,
                                     .request_frame   = movie_request_frame,
                                     .config_props    = movie_config_output_props, },
@@ -353,7 +353,8 @@ static int amovie_query_formats(AVFilterContext *ctx)
 
     enum AVSampleFormat sample_fmts[] = { c->sample_fmt, -1 };
     int packing_fmts[] = { AVFILTER_PACKED, -1 };
-    int64_t chlayouts[] = { c->channel_layout, -1 };
+    int64_t chlayouts[] = { c->channel_layout ? c->channel_layout :
+                            av_get_default_channel_layout(c->channels), -1 };
 
     avfilter_set_common_sample_formats (ctx, avfilter_make_format_list(sample_fmts));
     avfilter_set_common_packing_formats(ctx, avfilter_make_format_list(packing_fmts));
@@ -463,8 +464,8 @@ AVFilter avfilter_asrc_amovie = {
     .uninit        = movie_common_uninit,
     .query_formats = amovie_query_formats,
 
-    .inputs    = (AVFilterPad[]) {{ .name = NULL }},
-    .outputs   = (AVFilterPad[]) {{ .name            = "default",
+    .inputs    = (const AVFilterPad[]) {{ .name = NULL }},
+    .outputs   = (const AVFilterPad[]) {{ .name      = "default",
                                     .type            = AVMEDIA_TYPE_AUDIO,
                                     .request_frame   = amovie_request_frame,
                                     .config_props    = amovie_config_output_props, },

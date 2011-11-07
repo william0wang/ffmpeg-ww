@@ -914,6 +914,7 @@ static void do_exit(VideoState *is)
 #if CONFIG_AVFILTER
     avfilter_uninit();
 #endif
+    avformat_network_deinit();
     if (show_status)
         printf("\n");
     SDL_Quit();
@@ -2077,7 +2078,7 @@ static int audio_decode_frame(VideoState *is, double *pts_ptr)
                     swr_free(&is->swr_ctx);
                 is->swr_ctx = swr_alloc2(NULL, is->audio_tgt_channel_layout, is->audio_tgt_fmt, is->audio_tgt_freq,
                                                dec_channel_layout,          dec->sample_fmt,   dec->sample_rate,
-                                               0, NULL);
+                                               NULL, 0, NULL);
                 if (!is->swr_ctx || swr_init(is->swr_ctx) < 0) {
                     fprintf(stderr, "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
                         dec->sample_rate,
@@ -2546,7 +2547,7 @@ static int read_thread(void *arg)
 #if CONFIG_RTSP_DEMUXER || CONFIG_MMSH_PROTOCOL
         if (is->paused &&
                 (!strcmp(ic->iformat->name, "rtsp") ||
-                 (ic->pb && !strcmp(url_fileno(ic->pb)->prot->name, "mmsh")))) {
+                 (ic->pb && !strncmp(input_filename, "mmsh:", 5)))) {
             /* wait 10 ms to avoid trying to get another packet */
             /* XXX: horrible */
             SDL_Delay(10);
@@ -3143,6 +3144,7 @@ int main(int argc, char **argv)
     avfilter_register_all();
 #endif
     av_register_all();
+    avformat_network_init();
 
     init_opts();
 

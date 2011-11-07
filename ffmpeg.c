@@ -99,6 +99,11 @@ typedef struct StreamMap {
     int sync_stream_index;
 } StreamMap;
 
+typedef struct {
+    int  file_idx,  stream_idx,  channel_idx; // input
+    int ofile_idx, ostream_idx;               // output
+} AudioChannelMap;
+
 /**
  * select an input file for an output file
  */
@@ -139,7 +144,6 @@ static int copy_tb= 0;
 static int opt_shortest = 0;
 static char *vstats_filename;
 static FILE *vstats_file;
-static int copy_initial_nonkeyframes = 0;
 
 static int audio_volume = 256;
 
@@ -231,6 +235,8 @@ typedef struct OutputStream {
 
     /* audio only */
     int audio_resample;
+    int audio_channels_map[SWR_CH_MAX];  ///< list of the channels id to pick from the source stream
+    int audio_channels_mapped;           ///< number of channels in audio_channels_map
     int resample_sample_fmt;
     int resample_channels;
     int resample_sample_rate;
@@ -248,10 +254,12 @@ typedef struct OutputStream {
     AVFilterGraph *graph;
 #endif
 
-   int64_t sws_flags;
-   AVDictionary *opts;
-   int is_past_recording_time;
-   int stream_copy;
+    int64_t sws_flags;
+    AVDictionary *opts;
+    int is_past_recording_time;
+    int stream_copy;
+    const char *attachment_filename;
+    int copy_initial_nonkeyframes;
 } OutputStream;
 
 
@@ -306,16 +314,22 @@ typedef struct OptionsContext {
 
     SpecifierOpt *ts_scale;
     int        nb_ts_scale;
+    SpecifierOpt *dump_attachment;
+    int        nb_dump_attachment;
 
     /* output options */
     StreamMap *stream_maps;
     int     nb_stream_maps;
+    AudioChannelMap *audio_channel_maps; ///< one info entry per -map_channel
+    int           nb_audio_channel_maps; ///< number of (valid) -map_channel settings
     /* first item specifies output metadata, second is input */
     MetadataMap (*meta_data_maps)[2];
     int nb_meta_data_maps;
     int metadata_global_manual;
     int metadata_streams_manual;
     int metadata_chapters_manual;
+    const char **attachments;
+    int       nb_attachments;
 
     int chapters_input_file;
 
@@ -361,6 +375,8 @@ typedef struct OptionsContext {
     int        nb_top_field_first;
     SpecifierOpt *presets;
     int        nb_presets;
+    SpecifierOpt *copy_initial_nonkeyframes;
+    int        nb_copy_initial_nonkeyframes;
 #if CONFIG_AVFILTER
     SpecifierOpt *filters;
     int        nb_filters;
@@ -404,6 +420,7 @@ static void reset_options(OptionsContext *o, int is_input)
     }
 
     av_freep(&o->stream_maps);
+    av_freep(&o->audio_channel_maps);
     av_freep(&o->meta_data_maps);
     av_freep(&o->streamid_map);
 
@@ -554,6 +571,7 @@ static void term_init(void)
     signal(SIGQUIT, sigterm_handler); /* Quit (POSIX).  */
     }
 #endif
+    avformat_network_deinit();
 
     signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).  */
     signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
@@ -657,6 +675,7 @@ void exit_program(int ret)
 #if CONFIG_AVFILTER
     avfilter_uninit();
 #endif
+    avformat_network_deinit();
 
     av_freep(&input_tmp);
 
@@ -705,7 +724,7 @@ static void choose_sample_fmt(AVStream *st, AVCodec *codec)
         }
         if (*p == -1) {
             if((codec->capabilities & CODEC_CAP_LOSSLESS) && av_get_sample_fmt_name(st->codec->sample_fmt) > av_get_sample_fmt_name(codec->sample_fmts[0]))
-                av_log(NULL, AV_LOG_ERROR, "Convertion will not be lossless'\n");
+                av_log(NULL, AV_LOG_ERROR, "Conversion will not be lossless.\n");
             if(av_get_sample_fmt_name(st->codec->sample_fmt))
             av_log(NULL, AV_LOG_WARNING,
                    "Incompatible sample format '%s' for codec '%s', auto-selecting format '%s'\n",
@@ -852,9 +871,9 @@ need_realloc:
                        ost->resample_channels    != dec->channels   ||
                        ost->resample_sample_rate != dec->sample_rate;
 
-    if ((ost->audio_resample && !ost->swr) || resample_changed) {
+    if ((ost->audio_resample && !ost->swr) || resample_changed || ost->audio_channels_mapped) {
         if (resample_changed) {
-            av_log(NULL, AV_LOG_INFO, "Input stream #%d.%d frame changed from rate:%d fmt:%s ch:%d to rate:%d fmt:%s ch:%d\n",
+            av_log(NULL, AV_LOG_INFO, "Input stream #%d:%d frame changed from rate:%d fmt:%s ch:%d to rate:%d fmt:%s ch:%d\n",
                    ist->file_index, ist->st->index,
                    ost->resample_sample_rate, av_get_sample_fmt_name(ost->resample_sample_fmt), ost->resample_channels,
                    dec->sample_rate, av_get_sample_fmt_name(dec->sample_fmt), dec->channels);
@@ -864,7 +883,7 @@ need_realloc:
             swr_free(&ost->swr);
         }
         /* if audio_sync_method is >1 the resampler is needed for audio drift compensation */
-        if (audio_sync_method <= 1 &&
+        if (audio_sync_method <= 1 && !ost->audio_channels_mapped &&
             ost->resample_sample_fmt  == enc->sample_fmt &&
             ost->resample_channels    == enc->channels   &&
             ost->resample_sample_rate == enc->sample_rate) {
@@ -874,8 +893,13 @@ need_realloc:
             ost->swr = swr_alloc2(ost->swr,
                                   enc->channel_layout, enc->sample_fmt, enc->sample_rate,
                                   dec->channel_layout, dec->sample_fmt, dec->sample_rate,
+                                  ost->audio_channels_mapped ? ost->audio_channels_map : NULL,
                                   0, NULL);
             av_set_double(ost->swr, "rmvol", ost->rematrix_volume);
+            if (ost->audio_channels_mapped) {
+                av_set_int(ost->swr, "icl", av_get_default_channel_layout(ost->audio_channels_mapped));
+                av_set_int(ost->swr, "uch", ost->audio_channels_mapped);
+            }
             av_set_int(ost->swr, "ich", dec->channels);
             av_set_int(ost->swr, "och", enc->channels);
             if(audio_sync_method>1) av_set_int(ost->swr, "flags", SWR_FLAG_RESAMPLE);
@@ -1145,7 +1169,7 @@ static void do_video_resample(OutputStream *ost,
     *out_picture = in_picture;
     if (resample_changed) {
         av_log(NULL, AV_LOG_INFO,
-               "Input stream #%d.%d frame changed from size:%dx%d fmt:%s to size:%dx%d fmt:%s\n",
+               "Input stream #%d:%d frame changed from size:%dx%d fmt:%s to size:%dx%d fmt:%s\n",
                ist->file_index, ist->st->index,
                ost->resample_width, ost->resample_height, av_get_pix_fmt_name(ost->resample_pix_fmt),
                dec->width         , dec->height         , av_get_pix_fmt_name(dec->pix_fmt));
@@ -1898,7 +1922,8 @@ static int output_packet(InputStream *ist, int ist_index,
                     int64_t ost_tb_start_time= av_rescale_q(of->start_time, AV_TIME_BASE_Q, ost->st->time_base);
                     av_init_packet(&opkt);
 
-                    if ((!ost->frame_number && !(pkt->flags & AV_PKT_FLAG_KEY)) && !copy_initial_nonkeyframes)
+                    if ((!ost->frame_number && !(pkt->flags & AV_PKT_FLAG_KEY)) &&
+                        !ost->copy_initial_nonkeyframes)
 #if !CONFIG_AVFILTER
                         continue;
 #else
@@ -2004,12 +2029,12 @@ static int init_input_stream(int ist_index, OutputStream *output_streams, int nb
     if (ist->decoding_needed) {
         AVCodec *codec = ist->dec;
         if (!codec) {
-            snprintf(error, error_len, "Decoder (codec %s) not found for input stream #%d.%d",
+            snprintf(error, error_len, "Decoder (codec %s) not found for input stream #%d:%d",
                     avcodec_get_name(ist->st->codec->codec_id), ist->file_index, ist->st->index);
             return AVERROR(EINVAL);
         }
         if (avcodec_open2(ist->st->codec, codec, &ist->opts) < 0) {
-            snprintf(error, error_len, "Error while opening decoder for input stream #%d.%d",
+            snprintf(error, error_len, "Error while opening decoder for input stream #%d:%d",
                     ist->file_index, ist->st->index);
             return AVERROR(EINVAL);
         }
@@ -2058,6 +2083,9 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
         ost = &output_streams[i];
         os = output_files[ost->file_index].ctx;
         ist = &input_streams[ost->source_index];
+
+        if (ost->attachment_filename)
+            continue;
 
         codec = ost->st->codec;
         icodec = ist->st->codec;
@@ -2139,6 +2167,7 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
                         ist->st->codec->sample_aspect_ratio.num ?
                         ist->st->codec->sample_aspect_ratio : (AVRational){0, 1};
                 }
+                ost->st->avg_frame_rate = ist->st->avg_frame_rate;
                 break;
             case AVMEDIA_TYPE_SUBTITLE:
                 codec->width = icodec->width;
@@ -2168,7 +2197,23 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
                 if (codec->sample_fmt == AV_SAMPLE_FMT_NONE)
                     codec->sample_fmt = icodec->sample_fmt;
                 choose_sample_fmt(ost->st, ost->enc);
-                if (!codec->channels) {
+                if (ost->audio_channels_mapped) {
+                    /* the requested output channel is set to the number of
+                     * -map_channel only if no -ac are specified */
+                    if (!codec->channels) {
+                        codec->channels       = ost->audio_channels_mapped;
+                        codec->channel_layout = av_get_default_channel_layout(codec->channels);
+                        if (!codec->channel_layout) {
+                            av_log(NULL, AV_LOG_FATAL, "Unable to find an appropriate channel layout for requested number of channel\n");
+                            exit_program(1);
+                        }
+                    }
+                    /* fill unused channel mapping with -1 (which means a muted
+                     * channel in case the number of output channels is bigger
+                     * than the number of mapped channel) */
+                    for (j = ost->audio_channels_mapped; j < FF_ARRAY_ELEMS(ost->audio_channels_map); j++)
+                        ost->audio_channels_map[j] = -1;
+                } else if (!codec->channels) {
                     codec->channels = icodec->channels;
                     codec->channel_layout = icodec->channel_layout;
                 }
@@ -2290,7 +2335,7 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
             AVCodec *codec = ost->enc;
             AVCodecContext *dec = input_streams[ost->source_index].st->codec;
             if (!codec) {
-                snprintf(error, sizeof(error), "Encoder (codec %s) not found for output stream #%d.%d",
+                snprintf(error, sizeof(error), "Encoder (codec %s) not found for output stream #%d:%d",
                          avcodec_get_name(ost->st->codec->codec_id), ost->file_index, ost->index);
                 ret = AVERROR(EINVAL);
                 goto dump_format;
@@ -2305,7 +2350,7 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
                 ost->st->codec->subtitle_header_size = dec->subtitle_header_size;
             }
             if (avcodec_open2(ost->st->codec, codec, &ost->opts) < 0) {
-                snprintf(error, sizeof(error), "Error while opening encoder for output stream #%d.%d - maybe incorrect parameters such as bit_rate, rate, width or height",
+                snprintf(error, sizeof(error), "Error while opening encoder for output stream #%d:%d - maybe incorrect parameters such as bit_rate, rate, width or height",
                         ost->file_index, ost->index);
                 ret = AVERROR(EINVAL);
                 goto dump_format;
@@ -2368,13 +2413,29 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
     av_log(NULL, AV_LOG_INFO, "Stream mapping:\n");
     for (i = 0; i < nb_output_streams; i++) {
         ost = &output_streams[i];
-        av_log(NULL, AV_LOG_INFO, "  Stream #%d.%d -> #%d.%d",
+
+        if (ost->attachment_filename) {
+            /* an attached file */
+            av_log(NULL, AV_LOG_INFO, "  File %s -> Stream #%d:%d\n",
+                   ost->attachment_filename, ost->file_index, ost->index);
+            continue;
+        }
+        av_log(NULL, AV_LOG_INFO, "  Stream #%d:%d -> #%d:%d",
                input_streams[ost->source_index].file_index,
                input_streams[ost->source_index].st->index,
                ost->file_index,
                ost->index);
+        if (ost->audio_channels_mapped) {
+            av_log(NULL, AV_LOG_INFO, " [ch:");
+            for (j = 0; j < ost->audio_channels_mapped; j++)
+                if (ost->audio_channels_map[j] == -1)
+                    av_log(NULL, AV_LOG_INFO, " M");
+                else
+                    av_log(NULL, AV_LOG_INFO, " %d", ost->audio_channels_map[j]);
+            av_log(NULL, AV_LOG_INFO, "]");
+        }
         if (ost->sync_ist != &input_streams[ost->source_index])
-            av_log(NULL, AV_LOG_INFO, " [sync #%d.%d]",
+            av_log(NULL, AV_LOG_INFO, " [sync #%d:%d]",
                    ost->sync_ist->file_index,
                    ost->sync_ist->st->index);
         if (ost->stream_copy)
@@ -2635,7 +2696,7 @@ static int transcode(OutputFile *output_files, int nb_output_files,
         //fprintf(stderr,"read #%d.%d size=%d\n", ist->file_index, ist->st->index, pkt.size);
         if (output_packet(ist, ist_index, output_streams, nb_output_streams, &pkt) < 0) {
 
-            av_log(NULL, AV_LOG_ERROR, "Error while decoding stream #%d.%d\n",
+            av_log(NULL, AV_LOG_ERROR, "Error while decoding stream #%d:%d\n",
                    ist->file_index, ist->st->index);
             if (exit_on_error)
                 exit_program(1);
@@ -2840,7 +2901,8 @@ static int opt_map(OptionsContext *o, const char *opt, const char *arg)
         /* disable some already defined maps */
         for (i = 0; i < o->nb_stream_maps; i++) {
             m = &o->stream_maps[i];
-            if (check_stream_specifier(input_files[m->file_index].ctx,
+            if (file_idx == m->file_index &&
+                check_stream_specifier(input_files[m->file_index].ctx,
                                        input_files[m->file_index].ctx->streams[m->stream_index],
                                        *p == ':' ? p + 1 : p) > 0)
                 m->disabled = 1;
@@ -2872,6 +2934,74 @@ static int opt_map(OptionsContext *o, const char *opt, const char *arg)
     }
 
     av_freep(&map);
+    return 0;
+}
+
+static int opt_attach(OptionsContext *o, const char *opt, const char *arg)
+{
+    o->attachments = grow_array(o->attachments, sizeof(*o->attachments),
+                                &o->nb_attachments, o->nb_attachments + 1);
+    o->attachments[o->nb_attachments - 1] = arg;
+    return 0;
+}
+
+static int opt_map_channel(OptionsContext *o, const char *opt, const char *arg)
+{
+    int n;
+    AVStream *st;
+    AudioChannelMap *m;
+
+    o->audio_channel_maps =
+        grow_array(o->audio_channel_maps, sizeof(*o->audio_channel_maps),
+                   &o->nb_audio_channel_maps, o->nb_audio_channel_maps + 1);
+    m = &o->audio_channel_maps[o->nb_audio_channel_maps - 1];
+
+    /* muted channel syntax */
+    n = sscanf(arg, "%d:%d.%d", &m->channel_idx, &m->ofile_idx, &m->ostream_idx);
+    if ((n == 1 || n == 3) && m->channel_idx == -1) {
+        m->file_idx = m->stream_idx = -1;
+        if (n == 1)
+            m->ofile_idx = m->ostream_idx = -1;
+        return 0;
+    }
+
+    /* normal syntax */
+    n = sscanf(arg, "%d.%d.%d:%d.%d",
+               &m->file_idx,  &m->stream_idx, &m->channel_idx,
+               &m->ofile_idx, &m->ostream_idx);
+
+    if (n != 3 && n != 5) {
+        av_log(NULL, AV_LOG_FATAL, "Syntax error, mapchan usage: "
+               "[file.stream.channel|-1][:syncfile:syncstream]\n");
+        exit_program(1);
+    }
+
+    if (n != 5) // only file.stream.channel specified
+        m->ofile_idx = m->ostream_idx = -1;
+
+    /* check input */
+    if (m->file_idx < 0 || m->file_idx >= nb_input_files) {
+        av_log(NULL, AV_LOG_FATAL, "mapchan: invalid input file index: %d\n",
+               m->file_idx);
+        exit_program(1);
+    }
+    if (m->stream_idx < 0 ||
+        m->stream_idx >= input_files[m->file_idx].nb_streams) {
+        av_log(NULL, AV_LOG_FATAL, "mapchan: invalid input file stream index #%d.%d\n",
+               m->file_idx, m->stream_idx);
+        exit_program(1);
+    }
+    st = input_files[m->file_idx].ctx->streams[m->stream_idx];
+    if (st->codec->codec_type != AVMEDIA_TYPE_AUDIO) {
+        av_log(NULL, AV_LOG_FATAL, "mapchan: stream #%d.%d is not an audio stream.\n",
+               m->file_idx, m->stream_idx);
+        exit_program(1);
+    }
+    if (m->channel_idx < 0 || m->channel_idx >= st->codec->channels) {
+        av_log(NULL, AV_LOG_FATAL, "mapchan: invalid audio channel #%d.%d.%d\n",
+               m->file_idx, m->stream_idx, m->channel_idx);
+        exit_program(1);
+    }
     return 0;
 }
 
@@ -2989,7 +3119,6 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         AVStream *st = ic->streams[i];
         AVCodecContext *dec = st->codec;
         InputStream *ist;
-        double scale = 1.0;
 
         input_streams = grow_array(input_streams, sizeof(*input_streams), &nb_input_streams, nb_input_streams + 1);
         ist = &input_streams[nb_input_streams - 1];
@@ -2998,8 +3127,8 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         ist->discard = 1;
         ist->opts = filter_codec_opts(codec_opts, ist->st->codec->codec_id, ic, st);
 
-        MATCH_PER_STREAM_OPT(ts_scale, dbl, scale, ic, st);
-        ist->ts_scale = scale;
+        ist->ts_scale = 1.0;
+        MATCH_PER_STREAM_OPT(ts_scale, dbl, ist->ts_scale, ic, st);
 
         MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, ic, st);
         if (codec_tag) {
@@ -3054,6 +3183,62 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
             abort();
         }
     }
+}
+
+static void assert_file_overwrite(const char *filename)
+{
+    if (!file_overwrite &&
+        (strchr(filename, ':') == NULL || filename[1] == ':' ||
+         av_strstart(filename, "file:", NULL))) {
+        if (avio_check(filename, 0) == 0) {
+            if (!using_stdin) {
+                fprintf(stderr,"File '%s' already exists. Overwrite ? [y/N] ", filename);
+                fflush(stderr);
+                term_exit();
+                if (!read_yesno()) {
+                    av_log(0, AV_LOG_FATAL, "Not overwriting - exiting\n");
+                    exit_program(1);
+                }
+                term_init();
+            }
+            else {
+                av_log(0, AV_LOG_FATAL, "File '%s' already exists. Exiting.\n", filename);
+                exit_program(1);
+            }
+        }
+    }
+}
+
+static void dump_attachment(AVStream *st, const char *filename)
+{
+    int ret;
+    AVIOContext *out = NULL;
+    AVDictionaryEntry *e;
+
+    if (!st->codec->extradata_size) {
+        av_log(NULL, AV_LOG_WARNING, "No extradata to dump in stream #%d:%d.\n",
+               nb_input_files - 1, st->index);
+        return;
+    }
+    if (!*filename && (e = av_dict_get(st->metadata, "filename", NULL, 0)))
+        filename = e->value;
+    if (!*filename) {
+        av_log(NULL, AV_LOG_FATAL, "No filename specified and no 'filename' tag"
+               "in stream #%d:%d.\n", nb_input_files - 1, st->index);
+        exit_program(1);
+    }
+
+    assert_file_overwrite(filename);
+
+    if ((ret = avio_open (&out, filename, AVIO_FLAG_WRITE)) < 0) {
+        av_log(NULL, AV_LOG_FATAL, "Could not open file %s for writing.\n",
+               filename);
+        exit_program(1);
+    }
+
+    avio_write(out, st->codec->extradata, st->codec->extradata_size);
+    avio_flush(out);
+    avio_close(out);
 }
 
 static int opt_input_file(OptionsContext *o, const char *opt, const char *filename)
@@ -3167,6 +3352,17 @@ static int opt_input_file(OptionsContext *o, const char *opt, const char *filena
     input_files[nb_input_files - 1].nb_streams = ic->nb_streams;
     input_files[nb_input_files - 1].rate_emu   = o->rate_emu;
 
+    for (i = 0; i < o->nb_dump_attachment; i++) {
+        int j;
+
+        for (j = 0; j < ic->nb_streams; j++) {
+            AVStream *st = ic->streams[j];
+
+            if (check_stream_specifier(ic, st, o->dump_attachment[i].specifier) == 1)
+                dump_attachment(st, o->dump_attachment[i].u.str);
+        }
+    }
+
     for (i = 0; i < orig_nb_streams; i++)
         av_dict_free(&opts[i]);
     av_freep(&opts);
@@ -3262,7 +3458,6 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     OutputStream *ost;
     AVStream *st = avformat_new_stream(oc, NULL);
     int idx      = oc->nb_streams - 1, ret = 0;
-    int64_t max_frames = INT64_MAX;
     char *bsf = NULL, *next, *codec_tag = NULL;
     AVBitStreamFilterContext *bsfc, *bsfc_prev = NULL;
     double qscale = -1;
@@ -3317,8 +3512,8 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
         exit_program(1);
     }
 
-    MATCH_PER_STREAM_OPT(max_frames, i64, max_frames, oc, st);
-    ost->max_frames = max_frames;
+    ost->max_frames = INT64_MAX;
+    MATCH_PER_STREAM_OPT(max_frames, i64, ost->max_frames, oc, st);
 
     MATCH_PER_STREAM_OPT(bitstream_filters, str, bsf, oc, st);
     while (bsf) {
@@ -3390,7 +3585,7 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc)
         char *forced_key_frames = NULL, *frame_rate = NULL, *frame_size = NULL;
         char *frame_aspect_ratio = NULL, *frame_pix_fmt = NULL;
         char *intra_matrix = NULL, *inter_matrix = NULL, *filters = NULL;
-        int i, force_fps = 0, top_field_first = -1;
+        int i;
 
         MATCH_PER_STREAM_OPT(frame_rates, str, frame_rate, oc, st);
         if (frame_rate && av_parse_video_rate(&ost->frame_rate, frame_rate) < 0) {
@@ -3479,11 +3674,12 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc)
         if (forced_key_frames)
             parse_forced_key_frames(forced_key_frames, ost);
 
-        MATCH_PER_STREAM_OPT(force_fps, i, force_fps, oc, st);
-        ost->force_fps = force_fps;
+        MATCH_PER_STREAM_OPT(force_fps, i, ost->force_fps, oc, st);
 
-        MATCH_PER_STREAM_OPT(top_field_first, i, top_field_first, oc, st);
-        ost->top_field_first = top_field_first;
+        ost->top_field_first = -1;
+        MATCH_PER_STREAM_OPT(top_field_first, i, ost->top_field_first, oc, st);
+
+        MATCH_PER_STREAM_OPT(copy_initial_nonkeyframes, i, ost->copy_initial_nonkeyframes, oc ,st);
 
 #if CONFIG_AVFILTER
         MATCH_PER_STREAM_OPT(filters, str, filters, oc, st);
@@ -3497,6 +3693,7 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc)
 
 static OutputStream *new_audio_stream(OptionsContext *o, AVFormatContext *oc)
 {
+    int n;
     AVStream *st;
     OutputStream *ost;
     AVCodecContext *audio_enc;
@@ -3523,6 +3720,21 @@ static OutputStream *new_audio_stream(OptionsContext *o, AVFormatContext *oc)
 
         ost->rematrix_volume=1.0;
         MATCH_PER_STREAM_OPT(rematrix_volume, f, ost->rematrix_volume, oc, st);
+    }
+
+    /* check for channel mapping for this audio stream */
+    for (n = 0; n < o->nb_audio_channel_maps; n++) {
+        AudioChannelMap *map = &o->audio_channel_maps[n];
+        InputStream *ist = &input_streams[ost->source_index];
+        if ((map->channel_idx == -1 || (ist->file_index == map->file_idx && ist->st->index == map->stream_idx)) &&
+            (map->ofile_idx   == -1 || ost->file_index == map->ofile_idx) &&
+            (map->ostream_idx == -1 || ost->st->index  == map->ostream_idx)) {
+            if (ost->audio_channels_mapped < FF_ARRAY_ELEMS(ost->audio_channels_map))
+                ost->audio_channels_map[ost->audio_channels_mapped++] = map->channel_idx;
+            else
+                av_log(NULL, AV_LOG_FATAL, "Max channel mapping for output %d.%d reached\n",
+                       ost->file_index, ost->st->index);
+        }
     }
 
     return ost;
@@ -3772,7 +3984,7 @@ static void opt_output_file(void *optctx, const char *filename)
             case AVMEDIA_TYPE_DATA:     ost = new_data_stream(o, oc);     break;
             case AVMEDIA_TYPE_ATTACHMENT: ost = new_attachment_stream(o, oc); break;
             default:
-                av_log(NULL, AV_LOG_FATAL, "Cannot map stream #%d.%d - unsupported type.\n",
+                av_log(NULL, AV_LOG_FATAL, "Cannot map stream #%d:%d - unsupported type.\n",
                        map->file_index, map->stream_index);
                 exit_program(1);
             }
@@ -3782,6 +3994,42 @@ static void opt_output_file(void *optctx, const char *filename)
                                            map->sync_stream_index];
             ist->discard = 0;
         }
+    }
+
+    /* handle attached files */
+    for (i = 0; i < o->nb_attachments; i++) {
+        AVIOContext *pb;
+        uint8_t *attachment;
+        const char *p;
+        int64_t len;
+
+        if ((err = avio_open(&pb, o->attachments[i], AVIO_FLAG_READ)) < 0) {
+            av_log(NULL, AV_LOG_FATAL, "Could not open attachment file %s.\n",
+                   o->attachments[i]);
+            exit_program(1);
+        }
+        if ((len = avio_size(pb)) <= 0) {
+            av_log(NULL, AV_LOG_FATAL, "Could not get size of the attachment %s.\n",
+                   o->attachments[i]);
+            exit_program(1);
+        }
+        if (!(attachment = av_malloc(len))) {
+            av_log(NULL, AV_LOG_FATAL, "Attachment %s too large to fit into memory.\n",
+                   o->attachments[i]);
+            exit_program(1);
+        }
+        avio_read(pb, attachment, len);
+
+        ost = new_attachment_stream(o, oc);
+        ost->stream_copy               = 0;
+        ost->source_index              = -1;
+        ost->attachment_filename       = o->attachments[i];
+        ost->st->codec->extradata      = attachment;
+        ost->st->codec->extradata_size = len;
+
+        p = strrchr(o->attachments[i], '/');
+        av_dict_set(&ost->st->metadata, "filename", (p && *p) ? p + 1 : o->attachments[i], AV_DICT_DONT_OVERWRITE);
+        avio_close(pb);
     }
 
     output_files = grow_array(output_files, sizeof(*output_files), &nb_output_files, nb_output_files + 1);
@@ -3802,27 +4050,7 @@ static void opt_output_file(void *optctx, const char *filename)
 
     if (!(oc->oformat->flags & AVFMT_NOFILE)) {
         /* test if it already exists to avoid loosing precious files */
-        if (!file_overwrite &&
-            (strchr(filename, ':') == NULL ||
-             filename[1] == ':' ||
-             av_strstart(filename, "file:", NULL))) {
-            if (avio_check(filename, 0) == 0) {
-                if (!using_stdin) {
-                    fprintf(stderr,"File '%s' already exists. Overwrite ? [y/N] ", filename);
-                    fflush(stderr);
-                    term_exit();
-                    if (!read_yesno()) {
-                        av_log(0, AV_LOG_FATAL, "Not overwriting - exiting\n");
-                        exit_program(1);
-                    }
-                    term_init();
-                }
-                else {
-                    av_log(0, AV_LOG_FATAL,"File '%s' already exists. Exiting.\n", filename);
-                    exit_program(1);
-                }
-            }
-        }
+        assert_file_overwrite(filename);
 
         /* open the file */
         if ((err = avio_open(&oc->pb, filename, AVIO_FLAG_WRITE)) < 0) {
@@ -3920,7 +4148,10 @@ static void opt_output_file(void *optctx, const char *filename)
     }
     if (!o->metadata_streams_manual)
         for (i = output_files[nb_output_files - 1].ost_index; i < nb_output_streams; i++) {
-            InputStream *ist = &input_streams[output_streams[i].source_index];
+            InputStream *ist;
+            if (output_streams[i].source_index < 0)         /* this is true e.g. for attached files */
+                continue;
+            ist = &input_streams[output_streams[i].source_index];
             av_dict_copy(&output_streams[i].st->metadata, ist->st->metadata, AV_DICT_DONT_OVERWRITE);
         }
 
@@ -4320,6 +4551,7 @@ static const OptionDef options[] = {
     { "codec", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(codec_names)}, "codec name", "codec" },
     { "pre", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(presets)}, "preset name", "preset" },
     { "map", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map}, "set input stream mapping", "file.stream[:syncfile.syncstream]" },
+    { "map_channel", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map_channel}, "map an audio channel from one stream to another", "file.stream.channel[:syncfile.syncstream]" },
     { "map_meta_data", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map_meta_data}, "DEPRECATED set meta data information of outfile from infile",
       "outfile[,metadata]:infile[,metadata]" },
     { "map_metadata", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map_metadata}, "set metadata information of outfile from infile",
@@ -4352,7 +4584,7 @@ static const OptionDef options[] = {
     { "shortest", OPT_BOOL | OPT_EXPERT, {(void*)&opt_shortest}, "finish encoding within shortest input" }, //
     { "dts_delta_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT, {(void*)&dts_delta_threshold}, "timestamp discontinuity delta threshold", "threshold" },
     { "xerror", OPT_BOOL, {(void*)&exit_on_error}, "exit on error", "error" },
-    { "copyinkf", OPT_BOOL | OPT_EXPERT, {(void*)&copy_initial_nonkeyframes}, "copy initial non-keyframes" },
+    { "copyinkf", OPT_BOOL | OPT_EXPERT | OPT_SPEC, {.off = OFFSET(copy_initial_nonkeyframes)}, "copy initial non-keyframes" },
     { "frames", OPT_INT64 | HAS_ARG | OPT_SPEC, {.off = OFFSET(max_frames)}, "set the number of frames to record", "number" },
     { "tag",   OPT_STRING | HAS_ARG | OPT_SPEC, {.off = OFFSET(codec_tags)}, "force codec tag/fourcc", "fourcc/tag" },
     { "q", HAS_ARG | OPT_EXPERT | OPT_DOUBLE | OPT_SPEC, {.off = OFFSET(qscale)}, "use fixed quality scale (VBR)", "q" },
@@ -4361,6 +4593,8 @@ static const OptionDef options[] = {
     { "filter", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(filters)}, "set stream filterchain", "filter_list" },
 #endif
     { "stats", OPT_BOOL, {&print_stats}, "print progress report during encoding", },
+    { "attach", HAS_ARG | OPT_FUNC2, {(void*)opt_attach}, "add an attachment to the output file", "filename" },
+    { "dump_attachment", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(dump_attachment)}, "extract an attachment into a file", "filename" },
 
     /* video options */
     { "vframes", HAS_ARG | OPT_VIDEO | OPT_FUNC2, {(void*)opt_video_frames}, "set the number of video frames to record", "number" },
@@ -4472,6 +4706,7 @@ int main(int argc, char **argv)
     avfilter_register_all();
 #endif
     av_register_all();
+    avformat_network_init();
 
 #if HAVE_ISATTY
     if(isatty(STDIN_FILENO))

@@ -66,10 +66,10 @@ static const struct {
     { "stereo",      2,  AV_CH_LAYOUT_STEREO },
     { "4.0",         4,  AV_CH_LAYOUT_4POINT0 },
     { "quad",        4,  AV_CH_LAYOUT_QUAD },
-    { "5.0(side)",   5,  AV_CH_LAYOUT_5POINT0 },
     { "5.0",         5,  AV_CH_LAYOUT_5POINT0_BACK },
-    { "5.1(side)",   6,  AV_CH_LAYOUT_5POINT1 },
+    { "5.0(side)",   5,  AV_CH_LAYOUT_5POINT0 },
     { "5.1",         6,  AV_CH_LAYOUT_5POINT1_BACK },
+    { "5.1(side)",   6,  AV_CH_LAYOUT_5POINT1 },
     { "7.1",         8,  AV_CH_LAYOUT_7POINT1 },
     { "7.1(wide)",   8,  AV_CH_LAYOUT_7POINT1_WIDE },
     { "5.1+downmix", 8,  AV_CH_LAYOUT_5POINT1|AV_CH_LAYOUT_STEREO_DOWNMIX, },
@@ -113,7 +113,7 @@ void av_get_channel_layout_string(char *buf, int buf_size,
                 const char *name = get_channel_name(i);
                 if (name) {
                     if (ch > 0)
-                        av_strlcat(buf, "|", buf_size);
+                        av_strlcat(buf, "+", buf_size);
                     av_strlcat(buf, name, buf_size);
                 }
                 ch++;
