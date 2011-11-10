@@ -63,12 +63,27 @@ void exit_program(int ret)
     exit(ret);
 }
 
-static char *value_string(char *buf, int buf_size, double val, const char *unit)
+struct unit_value {
+    union { double d; int i; } val;
+    const char *unit;
+};
+
+static char *value_string(char *buf, int buf_size, struct unit_value uv)
 {
-    if (unit == unit_second_str && use_value_sexagesimal_format) {
+    double vald;
+    int show_float = 0;
+
+    if (uv.unit == unit_second_str) {
+        vald = uv.val.d;
+        show_float = 1;
+    } else {
+        vald = uv.val.i;
+    }
+
+    if (uv.unit == unit_second_str && use_value_sexagesimal_format) {
         double secs;
         int hours, mins;
-        secs  = val;
+        secs  = vald;
         mins  = (int)secs / 60;
         secs  = secs - mins * 60;
         hours = mins / 60;
@@ -76,25 +91,31 @@ static char *value_string(char *buf, int buf_size, double val, const char *unit)
         snprintf(buf, buf_size, "%d:%02d:%09.6f", hours, mins, secs);
     } else if (use_value_prefix) {
         const char *prefix_string;
-        int index;
+        int index, l;
 
-        if (unit == unit_byte_str && use_byte_value_binary_prefix) {
-            index = (int) (log(val)/log(2)) / 10;
+        if (uv.unit == unit_byte_str && use_byte_value_binary_prefix) {
+            index = (int) (log(vald)/log(2)) / 10;
             index = av_clip(index, 0, FF_ARRAY_ELEMS(binary_unit_prefixes) -1);
-            val /= pow(2, index*10);
+            vald /= pow(2, index*10);
             prefix_string = binary_unit_prefixes[index];
         } else {
-            index = (int) (log10(val)) / 3;
+            index = (int) (log10(vald)) / 3;
             index = av_clip(index, 0, FF_ARRAY_ELEMS(decimal_unit_prefixes) -1);
-            val /= pow(10, index*3);
+            vald /= pow(10, index*3);
             prefix_string = decimal_unit_prefixes[index];
         }
 
-        snprintf(buf, buf_size, "%.3f%s%s%s", val, prefix_string || show_value_unit ? " " : "",
-                 prefix_string, show_value_unit ? unit : "");
+        if (show_float || vald != (int)vald) l = snprintf(buf, buf_size, "%.3f", vald);
+        else                                 l = snprintf(buf, buf_size, "%d",   (int)vald);
+        snprintf(buf+l, buf_size-l, "%s%s%s", prefix_string || show_value_unit ? " " : "",
+                 prefix_string, show_value_unit ? uv.unit : "");
     } else {
-        snprintf(buf, buf_size, "%f%s%s", val, show_value_unit ? " " : "",
-                 show_value_unit ? unit : "");
+        int l;
+
+        if (show_float) l = snprintf(buf, buf_size, "%.3f", vald);
+        else            l = snprintf(buf, buf_size, "%d",   (int)vald);
+        snprintf(buf+l, buf_size-l, "%s%s", show_value_unit ? " " : "",
+                 show_value_unit ? uv.unit : "");
     }
 
     return buf;
@@ -105,7 +126,8 @@ static char *time_value_string(char *buf, int buf_size, int64_t val, const AVRat
     if (val == AV_NOPTS_VALUE) {
         snprintf(buf, buf_size, "N/A");
     } else {
-        value_string(buf, buf_size, val * av_q2d(*time_base), unit_second_str);
+        double d = val * av_q2d(*time_base);
+        value_string(buf, buf_size, (struct unit_value){.val.d=d, .unit=unit_second_str});
     }
 
     return buf;
@@ -609,6 +631,10 @@ static void writer_register_all(void)
 
 #define print_int(k, v)         writer_print_integer(w, k, v)
 #define print_str(k, v)         writer_print_string(w, k, v)
+#define print_ts(k, v)          writer_print_string(w, k, ts_value_string  (val_str, sizeof(val_str), v))
+#define print_time(k, v, tb)    writer_print_string(w, k, time_value_string(val_str, sizeof(val_str), v, tb))
+#define print_val(k, v, u)      writer_print_string(w, k, value_string     (val_str, sizeof(val_str), \
+                                                    (struct unit_value){.val.i = v, .unit=u}))
 #define print_section_header(s) writer_print_section_header(w, s)
 #define print_section_footer(s) writer_print_section_footer(w, s)
 #define show_tags(metadata)     writer_show_tags(w, metadata)
@@ -622,13 +648,13 @@ static void show_packet(WriterContext *w, AVFormatContext *fmt_ctx, AVPacket *pk
     print_section_header("packet");
     print_str("codec_type",       av_x_if_null(av_get_media_type_string(st->codec->codec_type), "unknown"));
     print_int("stream_index",     pkt->stream_index);
-    print_str("pts",              ts_value_string  (val_str, sizeof(val_str), pkt->pts));
-    print_str("pts_time",         time_value_string(val_str, sizeof(val_str), pkt->pts, &st->time_base));
-    print_str("dts",              ts_value_string  (val_str, sizeof(val_str), pkt->dts));
-    print_str("dts_time",         time_value_string(val_str, sizeof(val_str), pkt->dts, &st->time_base));
-    print_str("duration",         ts_value_string  (val_str, sizeof(val_str), pkt->duration));
-    print_str("duration_time",    time_value_string(val_str, sizeof(val_str), pkt->duration, &st->time_base));
-    print_str("size",             value_string     (val_str, sizeof(val_str), pkt->size, unit_byte_str));
+    print_ts  ("pts",             pkt->pts);
+    print_time("pts_time",        pkt->pts, &st->time_base);
+    print_ts  ("dts",             pkt->dts);
+    print_time("dts_time",        pkt->dts, &st->time_base);
+    print_ts  ("duration",        pkt->duration);
+    print_time("duration_time",   pkt->duration, &st->time_base);
+    print_val("size",             pkt->size, unit_byte_str);
     print_fmt("pos",   "%"PRId64, pkt->pos);
     print_fmt("flags", "%c",      pkt->flags & AV_PKT_FLAG_KEY ? 'K' : '_');
     print_section_footer("packet");
@@ -701,7 +727,7 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
         case AVMEDIA_TYPE_AUDIO:
             print_str("sample_fmt",
                       av_x_if_null(av_get_sample_fmt_name(dec_ctx->sample_fmt), "unknown"));
-            print_str("sample_rate",     value_string(val_str, sizeof(val_str), dec_ctx->sample_rate, unit_hertz_str));
+            print_val("sample_rate",     dec_ctx->sample_rate, unit_hertz_str);
             print_int("channels",        dec_ctx->channels);
             print_int("bits_per_sample", av_get_bits_per_sample(dec_ctx->codec_id));
             break;
@@ -726,8 +752,8 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     print_fmt("r_frame_rate",   "%d/%d", stream->r_frame_rate.num,   stream->r_frame_rate.den);
     print_fmt("avg_frame_rate", "%d/%d", stream->avg_frame_rate.num, stream->avg_frame_rate.den);
     print_fmt("time_base",      "%d/%d", stream->time_base.num,      stream->time_base.den);
-    print_str("start_time", time_value_string(val_str, sizeof(val_str), stream->start_time, &stream->time_base));
-    print_str("duration",   time_value_string(val_str, sizeof(val_str), stream->duration,   &stream->time_base));
+    print_time("start_time",    stream->start_time, &stream->time_base);
+    print_time("duration",      stream->duration,   &stream->time_base);
     if (stream->nb_frames)
         print_fmt("nb_frames", "%"PRId64, stream->nb_frames);
 
@@ -756,11 +782,11 @@ static void show_format(WriterContext *w, AVFormatContext *fmt_ctx)
     print_int("nb_streams",       fmt_ctx->nb_streams);
     print_str("format_name",      fmt_ctx->iformat->name);
     print_str("format_long_name", fmt_ctx->iformat->long_name);
-    print_str("start_time",       time_value_string(val_str, sizeof(val_str), fmt_ctx->start_time, &AV_TIME_BASE_Q));
-    print_str("duration",         time_value_string(val_str, sizeof(val_str), fmt_ctx->duration,   &AV_TIME_BASE_Q));
+    print_time("start_time",      fmt_ctx->start_time, &AV_TIME_BASE_Q);
+    print_time("duration",        fmt_ctx->duration,   &AV_TIME_BASE_Q);
     if (size >= 0)
-        print_str("size",         value_string(val_str, sizeof(val_str), size,               unit_byte_str));
-    print_str("bit_rate",         value_string(val_str, sizeof(val_str), fmt_ctx->bit_rate,  unit_bit_per_second_str));
+        print_val("size",         size, unit_byte_str);
+    print_val("bit_rate",         fmt_ctx->bit_rate, unit_bit_per_second_str);
     show_tags(fmt_ctx->metadata);
     print_section_footer("format");
     av_free(pbuf.s);

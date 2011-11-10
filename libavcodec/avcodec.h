@@ -220,6 +220,7 @@ enum CodecID {
     CODEC_ID_G729_DEPRECATED,
 #endif
     CODEC_ID_UTVIDEO_DEPRECATED,
+    CODEC_ID_BMV_VIDEO,
     CODEC_ID_UTVIDEO = 0x800,
 
     CODEC_ID_G2M        = MKBETAG( 0 ,'G','2','M'),
@@ -253,6 +254,7 @@ enum CodecID {
     CODEC_ID_PCM_BLURAY,
     CODEC_ID_PCM_LXF,
     CODEC_ID_S302M,
+    CODEC_ID_PCM_S8_PLANAR,
 
     /* various ADPCM codecs */
     CODEC_ID_ADPCM_IMA_QT = 0x11000,
@@ -363,6 +365,7 @@ enum CodecID {
     CODEC_ID_8SVX_EXP,
     CODEC_ID_8SVX_FIB,
 #endif
+    CODEC_ID_BMV_AUDIO,
     CODEC_ID_G729 = 0x15800,
     CODEC_ID_G723_1= 0x15801,
     CODEC_ID_8SVX_RAW   = MKBETAG('8','S','V','X'),
@@ -1364,10 +1367,12 @@ typedef struct AVCodecContext {
     int frame_number;   ///< audio or video frame number
 
     /**
-     * Number of frames the decoded output will be delayed relative to
-     * the encoded input.
+     * Encoding: Number of frames delay there will be from the encoder input to
+     *           the decoder output. (we assume the decoder matches the spec)
+     * Decoding: Number of frames delay in addition to what a standard decoder
+     *           as specified in the spec would produce.
      * - encoding: Set by libavcodec.
-     * - decoding: unused
+     * - decoding: Set by libavcodec.
      */
     int delay;
 

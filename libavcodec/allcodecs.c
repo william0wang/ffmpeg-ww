@@ -84,6 +84,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (BFI, bfi);
     REGISTER_DECODER (BINK, bink);
     REGISTER_ENCDEC  (BMP, bmp);
+    REGISTER_DECODER (BMV_VIDEO, bmv_video);
     REGISTER_DECODER (C93, c93);
     REGISTER_DECODER (CAVS, cavs);
     REGISTER_DECODER (CDGRAPHICS, cdgraphics);
@@ -106,7 +107,6 @@ void avcodec_register_all(void)
     REGISTER_DECODER (EIGHTBPS, eightbps);
     REGISTER_DECODER (EIGHTSVX_EXP, eightsvx_exp);
     REGISTER_DECODER (EIGHTSVX_FIB, eightsvx_fib);
-    REGISTER_DECODER (EIGHTSVX_RAW, eightsvx_raw);
     REGISTER_DECODER (ESCAPE124, escape124);
     REGISTER_ENCDEC  (FFV1, ffv1);
     REGISTER_ENCDEC  (FFVHUFF, ffvhuff);
@@ -256,6 +256,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (ATRAC3, atrac3);
     REGISTER_DECODER (BINKAUDIO_DCT, binkaudio_dct);
     REGISTER_DECODER (BINKAUDIO_RDFT, binkaudio_rdft);
+    REGISTER_DECODER (BMV_AUDIO, bmv_audio);
     REGISTER_DECODER (COOK, cook);
     REGISTER_ENCDEC  (DCA, dca);
     REGISTER_DECODER (DSICINAUDIO, dsicinaudio);
@@ -316,6 +317,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (PCM_LXF, pcm_lxf);
     REGISTER_ENCDEC  (PCM_MULAW, pcm_mulaw);
     REGISTER_ENCDEC  (PCM_S8, pcm_s8);
+    REGISTER_DECODER (PCM_S8_PLANAR, pcm_s8_planar);
     REGISTER_ENCDEC  (PCM_S16BE, pcm_s16be);
     REGISTER_ENCDEC  (PCM_S16LE, pcm_s16le);
     REGISTER_DECODER (PCM_S16LE_PLANAR, pcm_s16le_planar);

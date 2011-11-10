@@ -397,7 +397,6 @@ int avcodec_default_get_buffer(AVCodecContext *s, AVFrame *pic){
     pic->width               = s->width;
     pic->height              = s->height;
     pic->format              = s->pix_fmt;
-    pic->opaque              = s->opaque;
 
     if(s->debug&FF_DEBUG_BUFFERS)
         av_log(s, AV_LOG_DEBUG, "default_get_buffer called on pic %p, %d buffers used\n", pic, s->internal_buffer_count);
@@ -635,9 +634,10 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
     }
 
     if (avctx->codec->max_lowres < avctx->lowres || avctx->lowres < 0) {
-        av_log(avctx, AV_LOG_WARNING, "The maximum value for lowres supported by the decoder is %d\n",
+        av_log(avctx, AV_LOG_ERROR, "The maximum value for lowres supported by the decoder is %d\n",
                avctx->codec->max_lowres);
-        avctx->lowres = avctx->codec->max_lowres;
+        ret = AVERROR(EINVAL);
+        goto free_and_end;
     }
     if (avctx->codec->encode) {
         int i;

@@ -2226,7 +2226,12 @@ static int stream_component_open(VideoState *is, int stream_index)
 
     avctx->workaround_bugs = workaround_bugs;
     avctx->lowres = lowres;
-    if(lowres) avctx->flags |= CODEC_FLAG_EMU_EDGE;
+    if(avctx->lowres > codec->max_lowres){
+        av_log(avctx, AV_LOG_WARNING, "The maximum value for lowres supported by the decoder is %d\n",
+                codec->max_lowres);
+        avctx->lowres= codec->max_lowres;
+    }
+    if(avctx->lowres) avctx->flags |= CODEC_FLAG_EMU_EDGE;
     avctx->idct_algo= idct;
     if(fast) avctx->flags2 |= CODEC_FLAG2_FAST;
     avctx->skip_frame= skip_frame;
@@ -2348,6 +2353,8 @@ static void stream_component_close(VideoState *is, int stream_index)
         if (is->rdft) {
             av_rdft_end(is->rdft);
             av_freep(&is->rdft_data);
+            is->rdft = NULL;
+            is->rdft_bits = 0;
         }
         break;
     case AVMEDIA_TYPE_VIDEO:
