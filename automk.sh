@@ -16,7 +16,7 @@ if [ -f "config.mak" ]; then
   echo
   echo Beginning Make...
   echo
-  make
+  make -j4
   echo
   echo Beginning Install...
   echo
