@@ -166,7 +166,7 @@ static void get_tag(AVFormatContext *s, const char *key, int type, int len)
     if (type == 0) {         // UTF16-LE
         avio_get_str16le(s->pb, len, value, 2*len + 1);
     } else if (type == -1) { // ASCII
-        get_buffer(s->pb, value, len);
+        avio_read(s->pb, value, len);
         value[len]=0;
     } else if (type > 1 && type <= 5) {  // boolean or DWORD or QWORD or WORD
         uint64_t num = get_value(s->pb, type);
@@ -812,7 +812,7 @@ static int asf_read_frame_header(AVFormatContext *s, AVIOContext *pb){
     ASFContext *asf = s->priv_data;
     int rsize = 1;
     int num = avio_r8(pb);
-    int64_t ts0;
+    int64_t ts0, ts1 av_unused;
 
     asf->packet_segments--;
     asf->packet_key_frame = num >> 7;
@@ -839,7 +839,7 @@ static int asf_read_frame_header(AVFormatContext *s, AVIOContext *pb){
 //            av_log(s, AV_LOG_DEBUG, "\n");
             avio_skip(pb, 10);
             ts0= avio_rl64(pb);
-            avio_skip(pb, 8);;
+            ts1= avio_rl64(pb);
             avio_skip(pb, 12);
             avio_rl32(pb);
             avio_skip(pb, asf->packet_replic_size - 8 - 38 - 4);
@@ -1181,7 +1181,7 @@ static int64_t asf_read_pts(AVFormatContext *s, int stream_index, int64_t *ppos,
             return AV_NOPTS_VALUE;
         }
 
-        pts= pkt->pts;
+        pts= pkt->dts;
 
         av_free_packet(pkt);
         if(pkt->flags&AV_PKT_FLAG_KEY){

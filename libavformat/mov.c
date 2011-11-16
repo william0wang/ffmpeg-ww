@@ -1305,7 +1305,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                     st->codec->flags2 |= CODEC_FLAG2_DROP_FRAME_TIMECODE;
                 avio_rb32(pb);
                 avio_rb32(pb);
-                st->codec->time_base.den = get_byte(pb);
+                st->codec->time_base.den = avio_r8(pb);
                 st->codec->time_base.num = 1;
             }
             /* other codec type, just skip (rtp, mp4s, ...) */
@@ -1837,7 +1837,8 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
     }
 }
 
-static int mov_open_dref(AVIOContext **pb, const char *src, MOVDref *ref)
+static int mov_open_dref(AVIOContext **pb, const char *src, MOVDref *ref,
+                         AVIOInterruptCB *int_cb)
 {
     /* try relative path, we do not try the absolute because it can leak information about our
        system to an attacker */
@@ -1872,7 +1873,7 @@ static int mov_open_dref(AVIOContext **pb, const char *src, MOVDref *ref)
 
             av_strlcat(filename, ref->path + l + 1, 1024);
 
-            if (!avio_open(pb, filename, AVIO_FLAG_READ))
+            if (!avio_open2(pb, filename, AVIO_FLAG_READ, int_cb, NULL))
                 return 0;
         }
     }
@@ -1927,7 +1928,7 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     if (sc->dref_id-1 < sc->drefs_count && sc->drefs[sc->dref_id-1].path) {
         MOVDref *dref = &sc->drefs[sc->dref_id - 1];
-        if (mov_open_dref(&sc->pb, c->fc->filename, dref) < 0)
+        if (mov_open_dref(&sc->pb, c->fc->filename, dref, &c->fc->interrupt_callback) < 0)
             av_log(c->fc, AV_LOG_ERROR,
                    "stream %d, error opening alias: path='%s', dir='%s', "
                    "filename='%s', volume='%s', nlvl_from=%d, nlvl_to=%d\n",

@@ -94,6 +94,7 @@ Configuration options:
   --disable-avfilter       disable video filter support [no]
   --disable-pthreads       disable pthreads [auto]
   --disable-w32threads     disable Win32 threads [auto]
+  --disable-os2threads     disable OS/2 threads [auto]
   --enable-x11grab         enable X11 grabbing [no]
   --disable-network        disable network support [no]
   --enable-gray            enable full grayscale support (slower color)
@@ -109,6 +110,7 @@ Configuration options:
   --disable-mdct           disable MDCT code
   --disable-rdft           disable RDFT code
   --enable-vaapi           enable VAAPI code [autodetect]
+  --enable-vda             enable VDA code [autodetect]
   --enable-vdpau           enable VDPAU code [autodetect]
   --disable-dxva2          disable DXVA2 code
   --disable-vda            disable VDA code
@@ -1069,6 +1071,7 @@ CONFIG_LIST="
 THREADS_LIST='
     pthreads
     w32threads
+    os2threads
 '
 
 ARCH_LIST='
@@ -1385,8 +1388,8 @@ h264_crystalhd_decoder_select="crystalhd h264_mp4toannexb_bsf h264_parser"
 h264_dxva2_hwaccel_deps="dxva2api_h"
 h264_dxva2_hwaccel_select="dxva2 h264_decoder"
 h264_vaapi_hwaccel_select="vaapi h264_decoder"
-h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h"
-h264_vda_hwaccel_select="vda"
+h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
+h264_vda_hwaccel_select="vda h264_decoder"
 h264_vdpau_decoder_select="vdpau h264_decoder"
 imc_decoder_select="fft mdct sinewin"
 jpegls_decoder_select="golomb"
@@ -1494,6 +1497,7 @@ zmbv_encoder_select="zlib"
 
 crystalhd_deps="libcrystalhd_libcrystalhd_if_h"
 vaapi_deps="va_va_h"
+vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 
 # parsers
@@ -2655,6 +2659,7 @@ case $target_os in
           emximp -o $(SUBDIR)$(LIBPREF)$(NAME)_dll.lib $(SUBDIR)$(NAME).def;'
         SLIB_INSTALL_EXTRA_LIB='$(LIBPREF)$(NAME)_dll.a $(LIBPREF)$(NAME)_dll.lib'
         enable dos_paths
+        enable_weak os2threads
         ;;
     gnu/kfreebsd)
         add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
@@ -2994,7 +2999,7 @@ fi
 
 # check for some common methods of building with pthread support
 # do this before the optional library checks as some of them require pthreads
-if ! disabled pthreads && ! enabled w32threads; then
+if ! disabled pthreads && ! enabled w32threads && ! enabled os2threads; then
     enable pthreads
     if check_func pthread_create; then
         :

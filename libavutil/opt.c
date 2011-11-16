@@ -55,9 +55,10 @@ const AVOption *av_next_option(void *obj, const AVOption *last)
 
 const AVOption *av_opt_next(void *obj, const AVOption *last)
 {
-    if (last && last[1].name) return ++last;
-    else if (last || !(*(AVClass**)obj)->option->name) return NULL;
-    else                      return (*(AVClass**)obj)->option;
+    AVClass *class = *(AVClass**)obj;
+    if (!last && class->option[0].name) return class->option;
+    if (last && last[1].name)           return ++last;
+    return NULL;
 }
 
 static int read_number(const AVOption *o, void *dst, double *num, int *den, int64_t *intnum)
@@ -752,8 +753,13 @@ const AVOption *av_opt_find(void *obj, const char *name, const char *unit,
 const AVOption *av_opt_find2(void *obj, const char *name, const char *unit,
                              int opt_flags, int search_flags, void **target_obj)
 {
-    const AVClass  *c = *(AVClass**)obj;
+    const AVClass  *c;
     const AVOption *o = NULL;
+
+    if(!obj)
+        return NULL;
+
+    c= *(AVClass**)obj;
 
     if (search_flags & AV_OPT_SEARCH_CHILDREN) {
         if (search_flags & AV_OPT_SEARCH_FAKE_OBJ) {

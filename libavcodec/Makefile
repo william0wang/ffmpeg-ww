@@ -413,6 +413,7 @@ OBJS-$(CONFIG_V210_DECODER)            += v210dec.o
 OBJS-$(CONFIG_V210_ENCODER)            += v210enc.o
 OBJS-$(CONFIG_V210X_DECODER)           += v210x.o
 OBJS-$(CONFIG_VB_DECODER)              += vb.o
+OBJS-$(CONFIG_VBLE_DECODER)            += vble.o
 OBJS-$(CONFIG_VC1_DECODER)             += vc1dec.o vc1.o vc1data.o vc1dsp.o \
                                           msmpeg4.o msmpeg4data.o           \
                                           intrax8.o intrax8dsp.o
@@ -687,6 +688,7 @@ OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
 # thread libraries
 OBJS-$(HAVE_PTHREADS)                  += pthread.o
 OBJS-$(HAVE_W32THREADS)                += pthread.o
+OBJS-$(HAVE_OS2THREADS)                += pthread.o
 
 OBJS-$(CONFIG_MLIB)                    += mlib/dsputil_mlib.o           \
 

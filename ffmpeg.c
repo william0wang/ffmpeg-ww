@@ -640,7 +640,7 @@ static int decode_interrupt_cb(void)
     return received_nb_signals > 1;
 }
 
-void exit_program(int ret)
+void av_noreturn exit_program(int ret)
 {
     int i;
 
@@ -896,14 +896,14 @@ need_realloc:
                                   dec->channel_layout, dec->sample_fmt, dec->sample_rate,
                                   ost->audio_channels_mapped ? ost->audio_channels_map : NULL,
                                   0, NULL);
-            av_set_double(ost->swr, "rmvol", ost->rematrix_volume);
+            av_opt_set_double(ost->swr, "rmvol", ost->rematrix_volume, 0);
             if (ost->audio_channels_mapped) {
-                av_set_int(ost->swr, "icl", av_get_default_channel_layout(ost->audio_channels_mapped));
-                av_set_int(ost->swr, "uch", ost->audio_channels_mapped);
+                av_opt_set_int(ost->swr, "icl", av_get_default_channel_layout(ost->audio_channels_mapped), 0);
+                av_opt_set_int(ost->swr, "uch", ost->audio_channels_mapped, 0);
             }
-            av_set_int(ost->swr, "ich", dec->channels);
-            av_set_int(ost->swr, "och", enc->channels);
-            if(audio_sync_method>1) av_set_int(ost->swr, "flags", SWR_FLAG_RESAMPLE);
+            av_opt_set_int(ost->swr, "ich", dec->channels, 0);
+            av_opt_set_int(ost->swr, "och", enc->channels, 0);
+            if(audio_sync_method>1) av_opt_set_int(ost->swr, "flags", SWR_FLAG_RESAMPLE, 0);
             if(ost->swr && swr_init(ost->swr) < 0){
                 av_log(NULL, AV_LOG_FATAL, "swr_init() failed\n");
                 swr_free(&ost->swr);
@@ -2165,10 +2165,6 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
                 codec->frame_size = icodec->frame_size;
                 codec->audio_service_type = icodec->audio_service_type;
                 codec->block_align= icodec->block_align;
-                if(codec->block_align == 1 && codec->codec_id == CODEC_ID_MP3)
-                    codec->block_align= 0;
-                if(codec->codec_id == CODEC_ID_AC3)
-                    codec->block_align= 0;
                 break;
             case AVMEDIA_TYPE_VIDEO:
                 codec->pix_fmt = icodec->pix_fmt;
@@ -2579,7 +2575,8 @@ static int transcode(OutputFile *output_files, int nb_output_files,
                     while(debug & (FF_DEBUG_DCT_COEFF|FF_DEBUG_VIS_QP|FF_DEBUG_VIS_MB_TYPE)) //unsupported, would just crash
                         debug += debug;
                 }else
-                    scanf("%d", &debug);
+                    if(scanf("%d", &debug)!=1)
+                        fprintf(stderr,"error parsing debug value\n");
                 for(i=0;i<nb_input_streams;i++) {
                     input_streams[i].st->codec->debug = debug;
                 }
