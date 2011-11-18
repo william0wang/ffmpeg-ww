@@ -1474,6 +1474,25 @@ static void decode_postinit(H264Context *h, int setup_finished){
         s->low_delay= 0;
     }
 
+    for (i = 0; 1; i++) {
+        if(i == MAX_DELAYED_PIC_COUNT || cur->poc < h->last_pocs[i]){
+            if(i)
+                h->last_pocs[i-1] = cur->poc;
+            break;
+        } else if(i) {
+            h->last_pocs[i-1]= h->last_pocs[i];
+        }
+    }
+    out_of_order = MAX_DELAYED_PIC_COUNT - i;
+    if(   cur->f.pict_type == AV_PICTURE_TYPE_B
+       || (h->last_pocs[MAX_DELAYED_PIC_COUNT-2] > INT_MIN && h->last_pocs[MAX_DELAYED_PIC_COUNT-1] - h->last_pocs[MAX_DELAYED_PIC_COUNT-2] > 2))
+        out_of_order = FFMAX(out_of_order, 1);
+    if(s->avctx->has_b_frames < out_of_order && !h->sps.bitstream_restriction_flag){
+        av_log(s->avctx, AV_LOG_WARNING, "Increasing reorder buffer to %d\n", out_of_order);
+        s->avctx->has_b_frames = out_of_order;
+        s->low_delay = 0;
+    }
+
     pics = 0;
     while(h->delayed_pic[pics]) pics++;
 
@@ -1494,29 +1513,6 @@ static void decode_postinit(H264Context *h, int setup_finished){
         h->next_outputed_poc= INT_MIN;
     out_of_order = out->poc < h->next_outputed_poc;
 
-    if(h->sps.bitstream_restriction_flag && s->avctx->has_b_frames >= h->sps.num_reorder_frames)
-        { }
-    else if (out_of_order && pics-1 == s->avctx->has_b_frames &&
-             s->avctx->has_b_frames < MAX_DELAYED_PIC_COUNT) {
-        int cnt = 0, invalid = 0;
-        for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++) {
-            cnt += out->poc < h->last_pocs[i];
-            invalid += h->last_pocs[i] == INT_MIN;
-        }
-        if (invalid + cnt < MAX_DELAYED_PIC_COUNT) {
-            s->avctx->has_b_frames = FFMAX(s->avctx->has_b_frames, cnt);
-        } else if (cnt) {
-            for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++)
-                h->last_pocs[i] = INT_MIN;
-        }
-        s->low_delay = 0;
-    } else if (s->low_delay &&
-               ((h->next_outputed_poc != INT_MIN && out->poc > h->next_outputed_poc + 2) ||
-                cur->f.pict_type == AV_PICTURE_TYPE_B)) {
-        s->low_delay = 0;
-        s->avctx->has_b_frames++;
-    }
-
     if(out_of_order || pics > s->avctx->has_b_frames){
         out->f.reference &= ~DELAYED_PIC_REF;
         out->owner2 = s; // for frame threading, the owner must be the second field's thread
@@ -1524,8 +1520,6 @@ static void decode_postinit(H264Context *h, int setup_finished){
         for(i=out_idx; h->delayed_pic[i]; i++)
             h->delayed_pic[i] = h->delayed_pic[i+1];
     }
-    memmove(h->last_pocs, &h->last_pocs[1], sizeof(*h->last_pocs) * (MAX_DELAYED_PIC_COUNT - 1));
-    h->last_pocs[MAX_DELAYED_PIC_COUNT - 1] = out->poc;
     if(!out_of_order && pics > s->avctx->has_b_frames){
         h->next_output_pic = out;
         if (out_idx == 0 && h->delayed_pic[0] && (h->delayed_pic[0]->f.key_frame || h->delayed_pic[0]->mmco_reset)) {
@@ -2371,11 +2365,14 @@ static void implicit_weight_table(H264Context *h, int field){
  * instantaneous decoder refresh.
  */
 static void idr(H264Context *h){
+    int i;
     ff_h264_remove_all_refs(h);
     h->prev_frame_num= 0;
     h->prev_frame_num_offset= 0;
     h->prev_poc_msb=
     h->prev_poc_lsb= 0;
+    for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++)
+        h->last_pocs[i] = INT_MIN;
 }
 
 /* forget old pics after a seek */
@@ -2849,6 +2846,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
                 c->sps = h->sps;
                 c->pps = h->pps;
                 c->pixel_shift = h->pixel_shift;
+                c->cur_chroma_format_idc = h->cur_chroma_format_idc;
                 init_scan_tables(c);
                 clone_tables(c, h, i);
             }

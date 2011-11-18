@@ -302,9 +302,9 @@ static inline void writer_show_tags(WriterContext *wctx, AVDictionary *dict)
 
 #define MAX_REGISTERED_WRITERS_NB 64
 
-static Writer *registered_writers[MAX_REGISTERED_WRITERS_NB + 1];
+static const Writer *registered_writers[MAX_REGISTERED_WRITERS_NB + 1];
 
-static int writer_register(Writer *writer)
+static int writer_register(const Writer *writer)
 {
     static int next_registered_writer_idx = 0;
 
@@ -315,7 +315,7 @@ static int writer_register(Writer *writer)
     return 0;
 }
 
-static Writer *writer_get_by_name(const char *name)
+static const Writer *writer_get_by_name(const char *name)
 {
     int i;
 
@@ -450,7 +450,7 @@ static void default_show_tags(WriterContext *wctx, AVDictionary *dict)
     }
 }
 
-static Writer default_writer = {
+static const Writer default_writer = {
     .name                  = "default",
     .print_footer          = default_print_footer,
     .print_chapter_header  = default_print_chapter_header,
@@ -674,18 +674,37 @@ static void compact_show_tags(WriterContext *wctx, AVDictionary *dict)
     }
 }
 
-static Writer compact_writer = {
-    .name          = "compact",
-    .priv_size     = sizeof(CompactContext),
+static const Writer compact_writer = {
+    .name                 = "compact",
+    .priv_size            = sizeof(CompactContext),
+    .init                 = compact_init,
+    .uninit               = compact_uninit,
+    .print_section_header = compact_print_section_header,
+    .print_section_footer = compact_print_section_footer,
+    .print_integer        = compact_print_int,
+    .print_string         = compact_print_str,
+    .show_tags            = compact_show_tags,
+    .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS,
+};
 
-    .init                  = compact_init,
-    .uninit                = compact_uninit,
-    .print_section_header  = compact_print_section_header,
-    .print_section_footer  = compact_print_section_footer,
-    .print_integer         = compact_print_int,
-    .print_string          = compact_print_str,
-    .show_tags             = compact_show_tags,
-    .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS
+/* CSV output */
+
+static av_cold int csv_init(WriterContext *wctx, const char *args, void *opaque)
+{
+    return compact_init(wctx, "item_sep=,:nokey=1:escape=csv", opaque);
+}
+
+static const Writer csv_writer = {
+    .name                 = "csv",
+    .priv_size            = sizeof(CompactContext),
+    .init                 = csv_init,
+    .uninit               = compact_uninit,
+    .print_section_header = compact_print_section_header,
+    .print_section_footer = compact_print_section_footer,
+    .print_integer        = compact_print_int,
+    .print_string         = compact_print_str,
+    .show_tags            = compact_show_tags,
+    .flags = WRITER_FLAG_DISPLAY_OPTIONAL_FIELDS,
 };
 
 /* JSON output */
@@ -830,10 +849,9 @@ static void json_show_tags(WriterContext *wctx, AVDictionary *dict)
     printf("\n    }");
 }
 
-static Writer json_writer = {
-    .name         = "json",
-    .priv_size    = sizeof(JSONContext),
-
+static const Writer json_writer = {
+    .name                 = "json",
+    .priv_size            = sizeof(JSONContext),
     .init                 = json_init,
     .uninit               = json_uninit,
     .print_header         = json_print_header,
@@ -857,6 +875,7 @@ static void writer_register_all(void)
 
     writer_register(&default_writer);
     writer_register(&compact_writer);
+    writer_register(&csv_writer);
     writer_register(&json_writer);
 }
 
@@ -1103,7 +1122,7 @@ static int probe_file(const char *filename)
 {
     AVFormatContext *fmt_ctx;
     int ret;
-    Writer *w;
+    const Writer *w;
     char *buf;
     char *w_name = NULL, *w_args = NULL;
     WriterContext *wctx;
@@ -1203,7 +1222,8 @@ static const OptionDef options[] = {
       "use sexagesimal format HOURS:MM:SS.MICROSECONDS for time units" },
     { "pretty", 0, {(void*)&opt_pretty},
       "prettify the format of displayed values, make it more human readable" },
-    { "print_format", OPT_STRING | HAS_ARG, {(void*)&print_format}, "set the output printing format (available formats are: default, compact, json)", "format" },
+    { "print_format", OPT_STRING | HAS_ARG, {(void*)&print_format},
+      "set the output printing format (available formats are: default, compact, csv, json)", "format" },
     { "show_format",  OPT_BOOL, {(void*)&do_show_format} , "show format/container info" },
     { "show_packets", OPT_BOOL, {(void*)&do_show_packets}, "show packets info" },
     { "show_streams", OPT_BOOL, {(void*)&do_show_streams}, "show streams info" },

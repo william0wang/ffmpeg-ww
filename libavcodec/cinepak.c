@@ -269,8 +269,8 @@ static int cinepak_decode_strip (CinepakContext *s,
     int      chunk_id, chunk_size;
 
     /* coordinate sanity checks */
-    if (strip->x1 >= s->width  || strip->x2 > s->width  ||
-        strip->y1 >= s->height || strip->y2 > s->height ||
+    if (strip->x2 > s->width  ||
+        strip->y2 > s->height ||
         strip->x1 >= strip->x2 || strip->y1 >= strip->y2)
         return -1;
 
@@ -326,16 +326,21 @@ static int cinepak_decode (CinepakContext *s)
 
     frame_flags = s->data[0];
     num_strips  = AV_RB16 (&s->data[8]);
-    encoded_buf_size = ((s->data[1] << 16) | AV_RB16 (&s->data[2]));
+    encoded_buf_size = AV_RB24(&s->data[1]);
 
     /* if this is the first frame, check for deviant Sega FILM data */
     if (s->sega_film_skip_bytes == -1) {
-        if (encoded_buf_size != s->size) {
+        if (!encoded_buf_size){
+            av_log_ask_for_sample(s->avctx, "encoded_buf_size is 0");
+            return -1;
+        }
+        if (encoded_buf_size != s->size && (s->size % encoded_buf_size) != 0) {
             /* If the encoded frame size differs from the frame size as indicated
              * by the container file, this data likely comes from a Sega FILM/CPK file.
              * If the frame header is followed by the bytes FE 00 00 06 00 00 then
              * this is probably one of the two known files that have 6 extra bytes
-             * after the frame header. Else, assume 2 extra bytes. */
+             * after the frame header. Else, assume 2 extra bytes. The container
+             * size also cannot be a multiple of the encoded size. */
             if (s->size >= 16 &&
                 (s->data[10] == 0xFE) &&
                 (s->data[11] == 0x00) &&
@@ -352,8 +357,7 @@ static int cinepak_decode (CinepakContext *s)
 
     s->data += 10 + s->sega_film_skip_bytes;
 
-    if (num_strips > MAX_STRIPS)
-        num_strips = MAX_STRIPS;
+    num_strips = FFMIN(num_strips, MAX_STRIPS);
 
     s->frame.key_frame = 0;
 
@@ -371,6 +375,8 @@ static int cinepak_decode (CinepakContext *s)
             s->frame.key_frame = 1;
 
         strip_size = AV_RB24 (&s->data[1]) - 12;
+        if(strip_size < 0)
+            return -1;
         s->data   += 12;
         strip_size = ((s->data + strip_size) > eod) ? (eod - s->data) : strip_size;
 
