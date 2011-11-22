@@ -1205,7 +1205,8 @@ static void copy_parameter_set(void **to, void **from, int count, int size)
 static int decode_init_thread_copy(AVCodecContext *avctx){
     H264Context *h= avctx->priv_data;
 
-    if (!avctx->is_copy) return 0;
+    if (!avctx->internal->is_copy)
+        return 0;
     memset(h->sps_buffers, 0, sizeof(h->sps_buffers));
     memset(h->pps_buffers, 0, sizeof(h->pps_buffers));
 
@@ -2367,7 +2368,7 @@ static void implicit_weight_table(H264Context *h, int field){
 static void idr(H264Context *h){
     int i;
     ff_h264_remove_all_refs(h);
-    h->prev_frame_num= 0;
+    h->prev_frame_num= -1;
     h->prev_frame_num_offset= 0;
     h->prev_poc_msb=
     h->prev_poc_lsb= 0;
@@ -2882,7 +2883,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
 
     if(h0->current_slice == 0){
         // Shorten frame num gaps so we don't have to allocate reference frames just to throw them away
-        if(h->frame_num != h->prev_frame_num) {
+        if(h->frame_num != h->prev_frame_num && h->prev_frame_num >= 0) {
             int unwrap_prev_frame_num = h->prev_frame_num, max_frame_num = 1<<h->sps.log2_max_frame_num;
 
             if (unwrap_prev_frame_num > h->frame_num) unwrap_prev_frame_num -= max_frame_num;
@@ -2896,7 +2897,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
             }
         }
 
-        while(h->frame_num !=  h->prev_frame_num &&
+        while(h->frame_num !=  h->prev_frame_num && h->prev_frame_num >= 0 &&
               h->frame_num != (h->prev_frame_num+1)%(1<<h->sps.log2_max_frame_num)){
             Picture *prev = h->short_ref_count ? h->short_ref[0] : NULL;
             av_log(h->s.avctx, AV_LOG_DEBUG, "Frame num gap %d %d\n", h->frame_num, h->prev_frame_num);

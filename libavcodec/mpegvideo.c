@@ -859,7 +859,7 @@ void MPV_common_end(MpegEncContext *s)
     av_freep(&s->reordered_input_picture);
     av_freep(&s->dct_offset);
 
-    if(s->picture && !s->avctx->is_copy){
+    if(s->picture && !s->avctx->internal->is_copy){
         for(i=0; i<s->picture_count; i++){
             free_picture(s, &s->picture[i]);
         }
@@ -1134,7 +1134,7 @@ int MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
             if(ff_alloc_picture(s, s->last_picture_ptr, 0) < 0)
                 return -1;
 
-            if(s->codec_id == CODEC_ID_FLV1){
+            if(s->codec_id == CODEC_ID_FLV1 || s->codec_id == CODEC_ID_H263){
                 for(i=0; i<s->height; i++)
                     memset(s->last_picture_ptr->f.data[0] + s->last_picture_ptr->f.linesize[0]*i, 16, s->width);
             }
