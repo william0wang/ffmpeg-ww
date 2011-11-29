@@ -131,6 +131,7 @@ static const char *audio_codec_name    = NULL;
 static const char *subtitle_codec_name = NULL;
 
 static int file_overwrite = 0;
+static int no_file_overwrite = 0;
 static int do_benchmark = 0;
 static int do_hex_dump = 0;
 static int do_pkt_dump = 0;
@@ -1246,7 +1247,7 @@ static void do_video_out(AVFormatContext *s,
 
     format_video_sync = video_sync_method;
     if (format_video_sync < 0)
-        format_video_sync = (s->oformat->flags & AVFMT_VARIABLE_FPS) ? 2 : 1;
+        format_video_sync = (s->oformat->flags & AVFMT_VARIABLE_FPS) ? ((s->oformat->flags & AVFMT_NOTIMESTAMPS) ? 0 : 2) : 1;
 
     if (format_video_sync) {
         double vdelta = sync_ipts - ost->sync_opts + duration;
@@ -1525,6 +1526,9 @@ static void print_report(OutputFile *output_files,
                extra_size/1024.0,
                100.0*(total_size - raw)/raw
         );
+        if(video_size + audio_size + extra_size == 0){
+            av_log(NULL, AV_LOG_WARNING, "Output file is empty, nothing was encoded (check -ss / -t / -frames parameters if used)\n");
+        }
     }
 }
 
@@ -1735,15 +1739,13 @@ static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
                                 pkt);
     if (ret < 0)
         return ret;
-    pkt->data   += ret;
-    pkt->size   -= ret;
     *got_output  = decoded_data_size > 0;
 
     /* Some bug in mpeg audio decoder gives */
     /* decoded_data_size < 0, it seems they are overflows */
     if (!*got_output) {
         /* no audio frame */
-        return 0;
+        return ret;
     }
 
     decoded_data_buf = (uint8_t *)samples;
@@ -1816,7 +1818,7 @@ static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
         do_audio_out(output_files[ost->file_index].ctx, ost, ist,
                      decoded_data_buf, decoded_data_size);
     }
-    return 0;
+    return ret;
 }
 
 static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_t *pkt_pts, int64_t *pkt_dts)
@@ -1852,7 +1854,7 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
     if (!*got_output) {
         /* no picture yet */
         av_freep(&decoded_frame);
-        return 0;
+        return ret;
     }
 
     if(decoded_frame->best_effort_timestamp != AV_NOPTS_VALUE)
@@ -1943,9 +1945,7 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
     if (ret < 0)
         return ret;
     if (!*got_output)
-        return 0;
-
-    pkt->size = 0;
+        return ret;
 
     rate_emu_sleep(ist);
 
@@ -1959,15 +1959,14 @@ static int transcode_subtitles(InputStream *ist, AVPacket *pkt, int *got_output)
     }
 
     avsubtitle_free(&subtitle);
-    return 0;
+    return ret;
 }
 
 /* pkt = NULL means EOF (needed to flush decoder buffers) */
-static int output_packet(InputStream *ist, int ist_index,
+static int output_packet(InputStream *ist,
                          OutputStream *ost_table, int nb_ostreams,
                          const AVPacket *pkt)
 {
-    OutputStream *ost;
     int ret = 0, i;
     int got_output;
     int64_t pkt_dts = AV_NOPTS_VALUE;
@@ -1975,8 +1974,8 @@ static int output_packet(InputStream *ist, int ist_index,
 
     AVPacket avpkt;
 
-    if(ist->next_pts == AV_NOPTS_VALUE)
-        ist->next_pts= ist->pts;
+    if (ist->next_pts == AV_NOPTS_VALUE)
+        ist->next_pts = ist->pts;
 
     if (pkt == NULL) {
         /* EOF handling */
@@ -1999,12 +1998,14 @@ static int output_packet(InputStream *ist, int ist_index,
     //while we have more to decode or while the decoder did output something on EOF
     while (ist->decoding_needed && (avpkt.size > 0 || (!pkt && got_output))) {
     handle_eof:
-        ist->pts= ist->next_pts;
 
-        if(avpkt.size && avpkt.size != pkt->size)
+        ist->pts = ist->next_pts;
+
+        if (avpkt.size && avpkt.size != pkt->size) {
             av_log(NULL, ist->showed_multi_packet_warning ? AV_LOG_VERBOSE : AV_LOG_WARNING,
                    "Multiple frames in a packet from stream %d\n", pkt->stream_index);
-            ist->showed_multi_packet_warning=1;
+            ist->showed_multi_packet_warning = 1;
+        }
 
         switch(ist->st->codec->codec_type) {
         case AVMEDIA_TYPE_AUDIO:
@@ -2022,13 +2023,17 @@ static int output_packet(InputStream *ist, int ist_index,
 
         if (ret < 0)
             return ret;
+        // touch data and size only if not EOF
+        if (pkt) {
+            if(ist->st->codec->codec_type != AVMEDIA_TYPE_AUDIO)
+                ret = avpkt.size;
+            avpkt.data += ret;
+            avpkt.size -= ret;
+        }
         if (!got_output) {
-            if (ist->st->codec->codec_type == AVMEDIA_TYPE_AUDIO)
-                continue;
-            goto discard_packet;
+            continue;
         }
     }
- discard_packet:
 
     /* handle stream copy */
     if (!ist->decoding_needed) {
@@ -2049,7 +2054,7 @@ static int output_packet(InputStream *ist, int ist_index,
         }
     }
     for (i = 0; pkt && i < nb_ostreams; i++) {
-        ost = &ost_table[i];
+        OutputStream *ost = &ost_table[i];
 
         if (!check_output_constraints(ist, ost) || ost->encoding_needed)
             continue;
@@ -2753,7 +2758,7 @@ static int transcode(OutputFile *output_files, int nb_output_files,
         }
 
         //fprintf(stderr,"read #%d.%d size=%d\n", ist->file_index, ist->st->index, pkt.size);
-        if (output_packet(ist, ist_index, output_streams, nb_output_streams, &pkt) < 0) {
+        if (output_packet(ist, output_streams, nb_output_streams, &pkt) < 0) {
 
             av_log(NULL, AV_LOG_ERROR, "Error while decoding stream #%d:%d\n",
                    ist->file_index, ist->st->index);
@@ -2774,7 +2779,7 @@ static int transcode(OutputFile *output_files, int nb_output_files,
     for (i = 0; i < nb_input_streams; i++) {
         ist = &input_streams[i];
         if (ist->decoding_needed) {
-            output_packet(ist, i, output_streams, nb_output_streams, NULL);
+            output_packet(ist, output_streams, nb_output_streams, NULL);
         }
     }
     flush_encoders(output_streams, nb_output_streams);
@@ -3184,7 +3189,7 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         ist->st = st;
         ist->file_index = nb_input_files;
         ist->discard = 1;
-        ist->opts = filter_codec_opts(codec_opts, ist->st->codec->codec_id, ic, st);
+        ist->opts = filter_codec_opts(codec_opts, choose_decoder(o, ic, st), ic, st);
 
         ist->ts_scale = 1.0;
         MATCH_PER_STREAM_OPT(ts_scale, dbl, ist->ts_scale, ic, st);
@@ -3246,11 +3251,11 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
 
 static void assert_file_overwrite(const char *filename)
 {
-    if (!file_overwrite &&
+    if ((!file_overwrite || no_file_overwrite) &&
         (strchr(filename, ':') == NULL || filename[1] == ':' ||
          av_strstart(filename, "file:", NULL))) {
         if (avio_check(filename, 0) == 0) {
-            if (!using_stdin) {
+            if (!using_stdin && (!no_file_overwrite || file_overwrite)) {
                 fprintf(stderr,"File '%s' already exists. Overwrite ? [y/N] ", filename);
                 fflush(stderr);
                 term_exit();
@@ -3541,7 +3546,7 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     st->codec->codec_type = type;
     choose_encoder(o, oc, ost);
     if (ost->enc) {
-        ost->opts  = filter_codec_opts(codec_opts, ost->enc->id, oc, st);
+        ost->opts  = filter_codec_opts(codec_opts, ost->enc, oc, st);
     }
 
     avcodec_get_context_defaults3(st->codec, ost->enc);
@@ -4618,6 +4623,7 @@ static const OptionDef options[] = {
     { "f", HAS_ARG | OPT_STRING | OPT_OFFSET, {.off = OFFSET(format)}, "force format", "fmt" },
     { "i", HAS_ARG | OPT_FUNC2, {(void*)opt_input_file}, "input file name", "filename" },
     { "y", OPT_BOOL, {(void*)&file_overwrite}, "overwrite output files" },
+    { "n", OPT_BOOL, {(void*)&no_file_overwrite}, "do not overwrite output files" },
     { "c", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(codec_names)}, "codec name", "codec" },
     { "codec", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(codec_names)}, "codec name", "codec" },
     { "pre", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(presets)}, "preset name", "preset" },

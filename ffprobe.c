@@ -892,7 +892,7 @@ static void writer_register_all(void)
 #define print_time(k, v, tb)    writer_print_time(w, k, v, tb)
 #define print_ts(k, v)          writer_print_ts(w, k, v)
 #define print_val(k, v, u)      writer_print_string(w, k, \
-    value_string(val_str, sizeof(val_str), (struct unit_value){.val.i = v, .unit=u}), 1)
+    value_string(val_str, sizeof(val_str), (struct unit_value){.val.i = v, .unit=u}), 0)
 #define print_section_header(s) writer_print_section_header(w, s)
 #define print_section_footer(s) writer_print_section_footer(w, s)
 #define show_tags(metadata)     writer_show_tags(w, metadata)
@@ -993,6 +993,17 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
             if (s) print_str    ("pix_fmt", s);
             else   print_str_opt("pix_fmt", "unknown");
             print_int("level",   dec_ctx->level);
+            if (dec_ctx->timecode_frame_start >= 0) {
+                uint32_t tc = dec_ctx->timecode_frame_start;
+                print_fmt("timecode", "%02d:%02d:%02d%c%02d",
+                          tc>>19 & 0x1f,              // hours
+                          tc>>13 & 0x3f,              // minutes
+                          tc>>6  & 0x3f,              // seconds
+                          tc     & 1<<24 ? ';' : ':', // drop
+                          tc     & 0x3f);             // frames
+            } else {
+                print_str_opt("timecode", "N/A");
+            }
             break;
 
         case AVMEDIA_TYPE_AUDIO:
