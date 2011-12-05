@@ -30,8 +30,8 @@
 #include <time.h>
 
 #include "libavutil/colorspace.h"
-#include "libavutil/eval.h"
 #include "libavutil/file.h"
+#include "libavutil/eval.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
@@ -47,8 +47,8 @@
 #include FT_GLYPH_H
 
 static const char * const var_names[] = {
-    "w",                      ///< width  of the input video
-    "h",                      ///< height of the input video
+    "main_w", "w", "W",       ///< width  of the input video
+    "main_h", "h", "H",       ///< height of the input video
     "tw", "text_w",           ///< width  of the rendered text
     "th", "text_h",           ///< height of the rendered text
     "max_glyph_w",            ///< max glyph width
@@ -68,8 +68,8 @@ static const char * const var_names[] = {
 };
 
 enum var_name {
-    VAR_W,
-    VAR_H,
+    VAR_MAIN_W, VAR_w, VAR_W,
+    VAR_MAIN_H, VAR_h, VAR_H,
     VAR_TW, VAR_TEXT_W,
     VAR_TH, VAR_TEXT_H,
     VAR_MAX_GLYPH_W,
@@ -101,9 +101,6 @@ typedef struct {
     char *textfile;                 ///< file with text to be drawn
     int x;                          ///< x position to start drawing text
     int y;                          ///< y position to start drawing text
-    char *x_expr;                   ///< expression for x position
-    char *y_expr;                   ///< expression for y position
-    AVExpr *x_pexpr, *y_pexpr;      ///< parsed expressions for x and y
     int max_glyph_w;                ///< max glyph width
     int max_glyph_h;                ///< max glyph heigth
     int shadowx, shadowy;
@@ -130,6 +127,9 @@ typedef struct {
     int pixel_step[4];              ///< distance in bytes between the component of each pixel
     uint8_t rgba_map[4];            ///< map RGBA offsets to the positions in the packed RGBA format
     uint8_t *box_line[4];           ///< line used for filling the box background
+    char *x_expr;                   ///< expression for x position
+    char *y_expr;                   ///< expression for y position
+    AVExpr *x_pexpr, *y_pexpr;      ///< parsed expressions for x and y
     int64_t basetime;               ///< base pts time in the real world for display
     double var_values[VAR_VARS_NB];
 } DrawTextContext;
@@ -423,10 +423,15 @@ static av_cold void uninit(AVFilterContext *ctx)
     }
 }
 
+static inline int is_newline(uint32_t c)
+{
+    return (c == '\n' || c == '\r' || c == '\f' || c == '\v');
+}
+
 static int config_input(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
-    DrawTextContext *dtext = inlink->dst->priv;
+    DrawTextContext *dtext = ctx->priv;
     const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[inlink->format];
     int ret;
 
@@ -453,8 +458,8 @@ static int config_input(AVFilterLink *inlink)
         dtext->shadowcolor[3] = rgba[3];
     }
 
-    dtext->var_values[VAR_W]     = inlink->w;
-    dtext->var_values[VAR_H]     = inlink->h;
+    dtext->var_values[VAR_w]     = dtext->var_values[VAR_W]     = dtext->var_values[VAR_MAIN_W] = inlink->w;
+    dtext->var_values[VAR_h]     = dtext->var_values[VAR_H]     = dtext->var_values[VAR_MAIN_H] = inlink->h;
     dtext->var_values[VAR_SAR]   = inlink->sample_aspect_ratio.num ? av_q2d(inlink->sample_aspect_ratio) : 1;
     dtext->var_values[VAR_DAR]   = (double)inlink->w / inlink->h * dtext->var_values[VAR_SAR];
     dtext->var_values[VAR_HSUB]  = 1<<pix_desc->log2_chroma_w;
@@ -590,11 +595,6 @@ static inline void drawbox(AVFilterBufferRef *picref, int x, int y,
                           line, pixel_step, hsub, vsub,
                           x, y, width, height);
     }
-}
-
-static inline int is_newline(uint32_t c)
-{
-    return (c == '\n' || c == '\r' || c == '\f' || c == '\v');
 }
 
 static int draw_glyphs(DrawTextContext *dtext, AVFilterBufferRef *picref,

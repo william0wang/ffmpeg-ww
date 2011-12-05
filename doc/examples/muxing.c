@@ -199,6 +199,7 @@ static AVStream *add_video_stream(AVFormatContext *oc, enum CodecID codec_id)
 {
     AVCodecContext *c;
     AVStream *st;
+    AVCodec *codec;
 
     st = avformat_new_stream(oc, NULL);
     if (!st) {
@@ -207,8 +208,16 @@ static AVStream *add_video_stream(AVFormatContext *oc, enum CodecID codec_id)
     }
 
     c = st->codec;
+
+    /* find the video encoder */
+    codec = avcodec_find_encoder(codec_id);
+    if (!codec) {
+        fprintf(stderr, "codec not found\n");
+        exit(1);
+    }
+    avcodec_get_context_defaults3(c, codec);
+
     c->codec_id = codec_id;
-    c->codec_type = AVMEDIA_TYPE_VIDEO;
 
     /* put sample parameters */
     c->bit_rate = 400000;
@@ -491,7 +500,7 @@ int main(int argc, char **argv)
 
     /* write the stream header, if any */
     av_write_header(oc);
-
+    picture->pts = 0;
     for(;;) {
         /* compute current audio and video time */
         if (audio_st)
@@ -513,6 +522,7 @@ int main(int argc, char **argv)
             write_audio_frame(oc, audio_st);
         } else {
             write_video_frame(oc, video_st);
+            picture->pts++;
         }
     }
 

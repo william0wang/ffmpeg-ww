@@ -764,6 +764,8 @@ static void choose_pixel_fmt(AVStream *st, AVCodec *codec)
 {
     if(codec && codec->pix_fmts){
         const enum PixelFormat *p= codec->pix_fmts;
+        int has_alpha= av_pix_fmt_descriptors[st->codec->pix_fmt].nb_components % 2 == 0;
+        enum PixelFormat best= PIX_FMT_NONE;
         if(st->codec->strict_std_compliance <= FF_COMPLIANCE_UNOFFICIAL){
             if(st->codec->codec_id==CODEC_ID_MJPEG){
                 p= (const enum PixelFormat[]){PIX_FMT_YUVJ420P, PIX_FMT_YUVJ422P, PIX_FMT_YUV420P, PIX_FMT_YUV422P, PIX_FMT_NONE};
@@ -772,6 +774,7 @@ static void choose_pixel_fmt(AVStream *st, AVCodec *codec)
             }
         }
         for (; *p != PIX_FMT_NONE; p++) {
+            best= avcodec_find_best_pix_fmt2(best, *p, st->codec->pix_fmt, has_alpha, NULL);
             if(*p == st->codec->pix_fmt)
                 break;
         }
@@ -781,8 +784,8 @@ static void choose_pixel_fmt(AVStream *st, AVCodec *codec)
                         "Incompatible pixel format '%s' for codec '%s', auto-selecting format '%s'\n",
                         av_pix_fmt_descriptors[st->codec->pix_fmt].name,
                         codec->name,
-                        av_pix_fmt_descriptors[codec->pix_fmts[0]].name);
-            st->codec->pix_fmt = codec->pix_fmts[0];
+                        av_pix_fmt_descriptors[best].name);
+            st->codec->pix_fmt = best;
         }
     }
 }
@@ -1295,7 +1298,8 @@ static void do_video_out(AVFormatContext *s,
         av_init_packet(&pkt);
         pkt.stream_index= ost->index;
 
-        if (s->oformat->flags & AVFMT_RAWPICTURE) {
+        if (s->oformat->flags & AVFMT_RAWPICTURE &&
+            enc->codec->id == CODEC_ID_RAWVIDEO) {
             /* raw pictures are written as AVPicture structure to
                avoid any copies. We support temporarily the older
                method. */
@@ -1560,7 +1564,7 @@ static void flush_encoders(OutputStream *ost_table, int nb_ostreams)
 
         if (ost->st->codec->codec_type == AVMEDIA_TYPE_AUDIO && enc->frame_size <=1)
             continue;
-        if (ost->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && (os->oformat->flags & AVFMT_RAWPICTURE))
+        if (ost->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && (os->oformat->flags & AVFMT_RAWPICTURE) && enc->codec->id == CODEC_ID_RAWVIDEO)
             continue;
 
         for(;;) {
@@ -2052,8 +2056,10 @@ static int output_packet(InputStream *ist,
                              ist->st->codec->sample_rate;
             break;
         case AVMEDIA_TYPE_VIDEO:
-            if (ist->st->codec->time_base.num != 0) {
-                int ticks = ist->st->parser ? ist->st->parser->repeat_pict+1 : ist->st->codec->ticks_per_frame;
+            if (pkt->duration) {
+                ist->next_pts += av_rescale_q(pkt->duration, ist->st->time_base, AV_TIME_BASE_Q);
+            } else if(ist->st->codec->time_base.num != 0) {
+                int ticks= ist->st->parser ? ist->st->parser->repeat_pict+1 : ist->st->codec->ticks_per_frame;
                 ist->next_pts += ((int64_t)AV_TIME_BASE *
                                   ist->st->codec->time_base.num * ticks) /
                                   ist->st->codec->time_base.den;
