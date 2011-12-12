@@ -266,7 +266,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_TARGA,        MKTAG('t', 'g', 'a', ' ') },
     { CODEC_ID_PNG,          MKTAG('M', 'P', 'N', 'G') },
     { CODEC_ID_PNG,          MKTAG('P', 'N', 'G', '1') },
-    { CODEC_ID_CLJR,         MKTAG('c', 'l', 'j', 'r') },
+    { CODEC_ID_CLJR,         MKTAG('C', 'L', 'J', 'R') },
     { CODEC_ID_DIRAC,        MKTAG('d', 'r', 'a', 'c') },
     { CODEC_ID_RPZA,         MKTAG('a', 'z', 'p', 'r') },
     { CODEC_ID_RPZA,         MKTAG('R', 'P', 'Z', 'A') },
@@ -286,6 +286,8 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_UTVIDEO,      MKTAG('U', 'L', 'Y', '0') },
     { CODEC_ID_UTVIDEO,      MKTAG('U', 'L', 'Y', '2') },
     { CODEC_ID_VBLE,         MKTAG('V', 'B', 'L', 'E') },
+    { CODEC_ID_ESCAPE130,    MKTAG('E', '1', '3', '0') },
+    { CODEC_ID_DXTORY,       MKTAG('x', 't', 'o', 'r') },
     { CODEC_ID_NONE,         0 }
 };
 

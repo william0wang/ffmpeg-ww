@@ -106,6 +106,10 @@ if [ -n "$do_mkv" ] ; then
 do_lavf mkv "-acodec mp2 -ab 64k -vcodec mpeg4"
 fi
 
+if [ -n "$do_wtv" ] ; then
+do_lavf wtv "-acodec mp2"
+fi
+
 
 # streamed images
 # mjpeg
@@ -215,6 +219,14 @@ fi
 
 if [ -n "$do_rso" ] ; then
 do_audio_only rso
+fi
+
+if [ -n "$do_sox" ] ; then
+do_audio_only sox
+fi
+
+if [ -n "$do_caf" ] ; then
+do_audio_only caf
 fi
 
 # pix_fmt conversions

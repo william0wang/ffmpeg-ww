@@ -1156,6 +1156,7 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx){
     for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++)
         h->last_pocs[i] = INT_MIN;
     h->prev_poc_msb= 1<<16;
+    h->prev_frame_num= -1;
     h->x264_build = -1;
     ff_h264_reset_sei(h);
     if(avctx->codec_id == CODEC_ID_H264){
@@ -1381,7 +1382,6 @@ static void decode_postinit(H264Context *h, int setup_finished){
     Picture *out = s->current_picture_ptr;
     Picture *cur = s->current_picture_ptr;
     int i, pics, out_of_order, out_idx;
-    int invalid = 0, cnt = 0;
 
     s->current_picture_ptr->f.qscale_type = FF_QSCALE_TYPE_H264;
     s->current_picture_ptr->f.pict_type   = s->pict_type;
@@ -1460,6 +1460,8 @@ static void decode_postinit(H264Context *h, int setup_finished){
         }
     }
 
+    cur->mmco_reset = h->mmco_reset;
+    h->mmco_reset = 0;
     //FIXME do something with unavailable reference frames
 
     /* Sort B-frames into display order */
@@ -1476,6 +1478,25 @@ static void decode_postinit(H264Context *h, int setup_finished){
         s->low_delay= 0;
     }
 
+    for (i = 0; 1; i++) {
+        if(i == MAX_DELAYED_PIC_COUNT || cur->poc < h->last_pocs[i]){
+            if(i)
+                h->last_pocs[i-1] = cur->poc;
+            break;
+        } else if(i) {
+            h->last_pocs[i-1]= h->last_pocs[i];
+        }
+    }
+    out_of_order = MAX_DELAYED_PIC_COUNT - i;
+    if(   cur->f.pict_type == AV_PICTURE_TYPE_B
+       || (h->last_pocs[MAX_DELAYED_PIC_COUNT-2] > INT_MIN && h->last_pocs[MAX_DELAYED_PIC_COUNT-1] - h->last_pocs[MAX_DELAYED_PIC_COUNT-2] > 2))
+        out_of_order = FFMAX(out_of_order, 1);
+    if(s->avctx->has_b_frames < out_of_order && !h->sps.bitstream_restriction_flag){
+        av_log(s->avctx, AV_LOG_WARNING, "Increasing reorder buffer to %d\n", out_of_order);
+        s->avctx->has_b_frames = out_of_order;
+        s->low_delay = 0;
+    }
+
     pics = 0;
     while(h->delayed_pic[pics]) pics++;
 
@@ -1485,89 +1506,32 @@ static void decode_postinit(H264Context *h, int setup_finished){
     if (cur->f.reference == 0)
         cur->f.reference = DELAYED_PIC_REF;
 
-    /* Frame reordering. This code takes pictures from coding order and sorts
-     * them by their incremental POC value into display order. It supports POC
-     * gaps, MMCO reset codes and random resets.
-     * A "display group" can start either with a IDR frame (f.key_frame = 1),
-     * and/or can be closed down with a MMCO reset code. In sequences where
-     * there is no delay, we can't detect that (since the frame was already
-     * output to the user), so we also set h->mmco_reset to detect the MMCO
-     * reset code.
-     * FIXME: if we detect insufficient delays (as per s->avctx->has_b_frames),
-     * we increase the delay between input and output. All frames affected by
-     * the lag (e.g. those that should have been output before another frame
-     * that we already returned to the user) will be dropped. This is a bug
-     * that we will fix later. */
-    for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++) {
-        cnt     += out->poc < h->last_pocs[i];
-        invalid += out->poc == INT_MIN;
-    }
-    if (!h->mmco_reset && !cur->f.key_frame && cnt + invalid == MAX_DELAYED_PIC_COUNT && cnt > 0) {
-        h->mmco_reset = 2;
-        if (pics > 1)
-            h->delayed_pic[pics - 2]->mmco_reset = 2;
-    }
-    if (h->mmco_reset || cur->f.key_frame) {
-        for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++)
-            h->last_pocs[i] = INT_MIN;
-        cnt     = 0;
-        invalid = MAX_DELAYED_PIC_COUNT;
-    }
     out = h->delayed_pic[0];
     out_idx = 0;
-    for (i = 1; i < MAX_DELAYED_PIC_COUNT && h->delayed_pic[i] &&
-         !h->delayed_pic[i-1]->mmco_reset && !h->delayed_pic[i]->f.key_frame; i++)
-    {
+    for (i = 1; h->delayed_pic[i] && !h->delayed_pic[i]->f.key_frame && !h->delayed_pic[i]->mmco_reset; i++)
         if(h->delayed_pic[i]->poc < out->poc){
             out = h->delayed_pic[i];
             out_idx = i;
         }
-    }
-    if (s->avctx->has_b_frames == 0 && (h->delayed_pic[0]->f.key_frame || h->mmco_reset))
-        h->next_outputed_poc = INT_MIN;
-    out_of_order = !out->f.key_frame && !h->mmco_reset && (out->poc < h->next_outputed_poc);
+    if (s->avctx->has_b_frames == 0 && (h->delayed_pic[0]->f.key_frame || h->delayed_pic[0]->mmco_reset))
+        h->next_outputed_poc= INT_MIN;
+    out_of_order = out->poc < h->next_outputed_poc;
 
-    if(h->sps.bitstream_restriction_flag && s->avctx->has_b_frames >= h->sps.num_reorder_frames)
-        { }
-    else if (out_of_order && pics-1 == s->avctx->has_b_frames &&
-             s->avctx->has_b_frames < MAX_DELAYED_PIC_COUNT) {
-        if (invalid + cnt < MAX_DELAYED_PIC_COUNT) {
-            if(cnt > s->avctx->has_b_frames)
-                av_log(s->avctx, AV_LOG_WARNING, "Increasing reorder buffer to %d\n", cnt);
-            s->avctx->has_b_frames = FFMAX(s->avctx->has_b_frames, cnt);
-        }
-        s->low_delay = 0;
-    } else if (s->low_delay &&
-               ((h->next_outputed_poc != INT_MIN && out->poc > h->next_outputed_poc + 2) ||
-                cur->f.pict_type == AV_PICTURE_TYPE_B)) {
-        s->low_delay = 0;
-        s->avctx->has_b_frames++;
-    }
-
-    if(pics > s->avctx->has_b_frames){
+    if(out_of_order || pics > s->avctx->has_b_frames){
         out->f.reference &= ~DELAYED_PIC_REF;
         out->owner2 = s; // for frame threading, the owner must be the second field's thread
                          // or else the first thread can release the picture and reuse it unsafely
         for(i=out_idx; h->delayed_pic[i]; i++)
             h->delayed_pic[i] = h->delayed_pic[i+1];
     }
-    memmove(h->last_pocs, &h->last_pocs[1], sizeof(*h->last_pocs) * (MAX_DELAYED_PIC_COUNT - 1));
-    h->last_pocs[MAX_DELAYED_PIC_COUNT - 1] = cur->poc;
     if(!out_of_order && pics > s->avctx->has_b_frames){
         h->next_output_pic = out;
-        if (out->mmco_reset) {
-            if (out_idx > 0) {
-                h->next_outputed_poc = out->poc;
-                h->delayed_pic[out_idx - 1]->mmco_reset = out->mmco_reset;
-            } else {
-                h->next_outputed_poc = INT_MIN;
-            }
-        } else {
+        if (out_idx == 0 && h->delayed_pic[0] && (h->delayed_pic[0]->f.key_frame || h->delayed_pic[0]->mmco_reset)) {
+            h->next_outputed_poc = INT_MIN;
+        } else
             h->next_outputed_poc = out->poc;
-        }
-        h->mmco_reset = 0;
     }else{
-        av_log(s->avctx, AV_LOG_DEBUG, "no picture\n");
+        av_log(s->avctx, AV_LOG_DEBUG, "no picture %s\n", out_of_order ? "ooo" : "");
     }
 
     if (h->next_output_pic && h->next_output_pic->sync) {
@@ -2237,8 +2201,8 @@ static av_always_inline void hl_decode_mb_444_internal(H264Context *h, int simpl
 static void hl_decode_mb_simple_ ## bits(H264Context *h){ \
     hl_decode_mb_internal(h, 1, sh); \
 }
-hl_decode_mb_simple(0, 8);
-hl_decode_mb_simple(1, 16);
+hl_decode_mb_simple(0, 8)
+hl_decode_mb_simple(1, 16)
 
 /**
  * Process a macroblock; this handles edge cases, such as interlacing.
@@ -2407,9 +2371,9 @@ static void implicit_weight_table(H264Context *h, int field){
 static void idr(H264Context *h){
     int i;
     ff_h264_remove_all_refs(h);
-    h->prev_frame_num= -1;
+    h->prev_frame_num= 0;
     h->prev_frame_num_offset= 0;
-    h->prev_poc_msb=
+    h->prev_poc_msb= 1<<16;
     h->prev_poc_lsb= 0;
     for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++)
         h->last_pocs[i] = INT_MIN;
@@ -2424,11 +2388,10 @@ static void flush_dpb(AVCodecContext *avctx){
             h->delayed_pic[i]->f.reference = 0;
         h->delayed_pic[i]= NULL;
     }
-    for (i = 0; i < MAX_DELAYED_PIC_COUNT; i++)
-        h->last_pocs[i] = INT_MIN;
     h->outputed_poc=h->next_outputed_poc= INT_MIN;
     h->prev_interlaced_frame = 1;
     idr(h);
+    h->prev_frame_num= -1;
     if(h->s.current_picture_ptr)
         h->s.current_picture_ptr->f.reference = 0;
     h->s.first_field= 0;
@@ -2963,7 +2926,7 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
              * FIXME: avoiding a memcpy would be nice, but ref handling makes many assumptions
              * about there being no actual duplicates.
              * FIXME: this doesn't copy padding for out-of-frame motion vectors.  Given we're
-             * concealing a lost frame, this probably isn't noticable by comparison, but it should
+             * concealing a lost frame, this probably isn't noticeable by comparison, but it should
              * be fixed. */
             if (h->short_ref_count) {
                 if (prev) {
@@ -3391,7 +3354,7 @@ static av_always_inline void fill_filter_caches_inter(H264Context *h, MpegEncCon
 
 /**
  *
- * @return non zero if the loop filter can be skiped
+ * @return non zero if the loop filter can be skipped
  */
 static int fill_filter_caches(H264Context *h, int mb_type){
     MpegEncContext * const s = &h->s;
@@ -3916,7 +3879,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
                 av_log(h->s.avctx, AV_LOG_ERROR, "Invalid mix of idr and non-idr slices");
                 return -1;
             }
-            idr(h); //FIXME ensure we don't loose some frames if there is reordering
+            idr(h); // FIXME ensure we don't lose some frames if there is reordering
         case NAL_SLICE:
             init_get_bits(&hx->s.gb, ptr, bit_length);
             hx->intra_gb_ptr=
@@ -4266,6 +4229,7 @@ av_cold int ff_h264_decode_end(AVCodecContext *avctx)
     H264Context *h = avctx->priv_data;
     MpegEncContext *s = &h->s;
 
+    ff_h264_remove_all_refs(h);
     ff_h264_free_context(h);
 
     MPV_common_end(s);

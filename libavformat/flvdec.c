@@ -26,7 +26,7 @@
 
 #include "libavutil/avstring.h"
 #include "libavutil/dict.h"
-#include "libavutil/intfloat_readwrite.h"
+#include "libavutil/intfloat.h"
 #include "libavutil/mathematics.h"
 #include "libavcodec/bytestream.h"
 #include "libavcodec/mpeg4audio.h"
@@ -187,7 +187,7 @@ static int parse_keyframes_index(AVFormatContext *s, AVIOContext *ioc, AVStream 
         for (i = 0; i < arraylen && avio_tell(ioc) < max_pos - 1; i++) {
             if (avio_r8(ioc) != AMF_DATA_TYPE_NUMBER)
                 goto finish;
-            current_array[0][i] = av_int2dbl(avio_rb64(ioc));
+            current_array[0][i] = av_int2double(avio_rb64(ioc));
         }
         if (times && filepositions) {
             // All done, exiting at a position allowing amf_parse_object
@@ -224,7 +224,7 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
 
     switch(amf_type) {
         case AMF_DATA_TYPE_NUMBER:
-            num_val = av_int2dbl(avio_rb64(ioc)); break;
+            num_val = av_int2double(avio_rb64(ioc)); break;
         case AMF_DATA_TYPE_BOOL:
             num_val = avio_r8(ioc); break;
         case AMF_DATA_TYPE_STRING:
@@ -292,6 +292,11 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
                 acodec->bit_rate = num_val * 1024.0;
         }
 
+        if (amf_type == AMF_DATA_TYPE_OBJECT && s->nb_streams == 1 &&
+           ((!acodec && !strcmp(key, "audiocodecid")) ||
+            (!vcodec && !strcmp(key, "videocodecid"))))
+                s->ctx_flags &= ~AVFMTCTX_NOHEADER; //If there is either audio/video missing, codecid will be an empty object
+
         if (!strcmp(key, "duration")        ||
             !strcmp(key, "filesize")        ||
             !strcmp(key, "width")           ||
@@ -312,10 +317,6 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
         } else if(amf_type == AMF_DATA_TYPE_NUMBER) {
             snprintf(str_val, sizeof(str_val), "%.f", num_val);
             av_dict_set(&s->metadata, key, str_val, 0);
-        } else if(amf_type == AMF_DATA_TYPE_OBJECT){
-            if(s->nb_streams==1 && ((!acodec && !strcmp(key, "audiocodecid")) || (!vcodec && !strcmp(key, "videocodecid")))){
-                s->ctx_flags &= ~AVFMTCTX_NOHEADER; //If there is either audio/video missing, codecid will be an empty object
-            }
         } else if (amf_type == AMF_DATA_TYPE_STRING)
             av_dict_set(&s->metadata, key, str_val, 0);
     }

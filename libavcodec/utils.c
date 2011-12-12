@@ -544,7 +544,8 @@ void avcodec_default_release_buffer(AVCodecContext *s, AVFrame *pic){
         avci->buffer_count--;
         last = &avci->buffer[avci->buffer_count];
 
-        FFSWAP(InternalBuffer, *buf, *last);
+        if (buf != last)
+            FFSWAP(InternalBuffer, *buf, *last);
     }
 
     for (i = 0; i < AV_NUM_DATA_POINTERS; i++) {
@@ -1468,8 +1469,8 @@ int av_get_bits_per_sample(enum CodecID codec_id){
     case CODEC_ID_ADPCM_SWF:
     case CODEC_ID_ADPCM_MS:
     case CODEC_ID_ADPCM_YAMAHA:
-        return 4;
     case CODEC_ID_ADPCM_G722:
+        return 4;
     case CODEC_ID_PCM_ALAW:
     case CODEC_ID_PCM_MULAW:
     case CODEC_ID_PCM_S8:

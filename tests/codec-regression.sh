@@ -19,6 +19,11 @@ if [ -n "$do_aref" ]; then
 do_avconv $pcm_ref -b 128k -ac 2 -ar 44100 -f s16le -i $pcm_src -f wav
 fi
 
+if [ -n "$do_cljr" ] ; then
+do_video_encoding cljr.avi "-an -vcodec cljr"
+do_video_decoding
+fi
+
 if [ -n "$do_mpeg" ] ; then
 # mpeg1
 do_video_encoding mpeg1.mpg "-qscale 10 -f mpeg1video"
@@ -268,6 +273,11 @@ do_video_encoding dnxhd-720p-10bit.dnxhd "-s hd720 -b 90M -pix_fmt yuv422p10 -vf
 do_video_decoding "" "-s cif -pix_fmt yuv420p"
 fi
 
+if [ -n "$do_mpng" ] ; then
+do_video_encoding mpng.avi "-an -vcodec png"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
 if [ -n "$do_prores" ] ; then
 do_video_encoding prores.mov "-vcodec prores"
 do_video_decoding "" "-pix_fmt yuv420p"
@@ -309,8 +319,25 @@ do_video_encoding rgb.avi "-an -vcodec rawvideo -pix_fmt bgr24"
 do_video_decoding "" "-pix_fmt yuv420p"
 fi
 
+if [ -n "$do_v210" ] ; then
+do_video_encoding v210.avi "-an -vcodec v210"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
 if [ -n "$do_yuv" ] ; then
 do_video_encoding yuv.avi "-an -vcodec rawvideo -pix_fmt yuv420p"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
+if [ -n "$do_zlib" ] ; then
+do_video_encoding zlib.avi "-an -vcodec zlib"
+do_video_decoding "" "-pix_fmt yuv420p"
+fi
+
+if [ -n "$do_zmbv" ] ; then
+# default level of 9 leads to different results with
+# different zlib versions, and even with 0 md5 differs
+do_video_encoding_nomd5 zmbv.avi "-an -vcodec zmbv -compression_level 0"
 do_video_decoding "" "-pix_fmt yuv420p"
 fi
 
@@ -329,6 +356,11 @@ fi
 
 if [ -n "$do_g723_1" ] ; then
 do_audio_encoding g723_1.tco "-b:a 6.3k -ac 1 -ar 8000 -acodec g723_1"
+do_audio_decoding
+fi
+
+if [ -n "$do_g722" ] ; then
+do_audio_encoding g722.wav "-b 64k -ac 1 -ar 16000 -acodec g722"
 do_audio_decoding
 fi
 

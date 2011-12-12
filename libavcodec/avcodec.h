@@ -253,7 +253,9 @@ enum CodecID {
     CODEC_ID_UTVIDEO_DEPRECATED,
     CODEC_ID_BMV_VIDEO,
     CODEC_ID_VBLE,
+    CODEC_ID_DXTORY,
     CODEC_ID_UTVIDEO = 0x800,
+    CODEC_ID_ESCAPE130  = MKBETAG('E','1','3','0'),
 
     CODEC_ID_G2M        = MKBETAG( 0 ,'G','2','M'),
 
@@ -944,9 +946,12 @@ typedef struct AVPacket {
 /**
  * Audio Video Frame.
  * New fields can be added to the end of AVFRAME with minor version
- * bumps. Removal, reordering and changes to existing fields require
+ * bumps. Similarly fields that are marked as to be only accessed by
+ * av_opt_ptr() can be reordered. This allows 2 forks to add fields
+ * without breaking compatibility with each other.
+ * Removal, reordering and changes in the remaining cases require
  * a major version bump.
- * sizeof(AVFrame) must not be used outside libav*.
+ * sizeof(AVFrame) must not be used outside libavcodec.
  */
 typedef struct AVFrame {
 #if FF_API_DATA_POINTERS
@@ -1253,6 +1258,8 @@ typedef struct AVFrame {
 
     /**
      * frame timestamp estimated using various heuristics, in stream time base
+     * Code outside libavcodec should access this field using:
+     *  av_opt_ptr(avcodec_get_frame_class(), frame, "best_effort_timestamp");
      * - encoding: unused
      * - decoding: set by libavcodec, read by user.
      */
@@ -1260,6 +1267,8 @@ typedef struct AVFrame {
 
     /**
      * reordered pos from the last AVPacket that has been input into the decoder
+     * Code outside libavcodec should access this field using:
+     *  av_opt_ptr(avcodec_get_frame_class(), frame, "pkt_pos");
      * - encoding: unused
      * - decoding: Read by user.
      */
@@ -1267,6 +1276,8 @@ typedef struct AVFrame {
 
     /**
      * reordered sample aspect ratio for the video frame, 0/1 if unknown\unspecified
+     * Code outside libavcodec should access this field using:
+     *  av_opt_ptr(avcodec_get_frame_class(), frame, "sample_aspect_ratio");
      * - encoding: unused
      * - decoding: Read by user.
      */
@@ -1274,6 +1285,8 @@ typedef struct AVFrame {
 
     /**
      * width and height of the video frame
+     * Code outside libavcodec should access this field using:
+     *  av_opt_ptr(avcodec_get_frame_class(), frame, "width");
      * - encoding: unused
      * - decoding: Read by user.
      */
@@ -1283,6 +1296,8 @@ typedef struct AVFrame {
      * format of the frame, -1 if unknown or unset
      * It should be cast to the corresponding enum (enum PixelFormat
      * for video, enum AVSampleFormat for audio)
+     * Code outside libavcodec should access this field using:
+     *  av_opt_ptr(avcodec_get_frame_class(), frame, "format");
      * - encoding: unused
      * - decoding: Read by user.
      */
@@ -1333,7 +1348,7 @@ typedef struct AVCodecContext {
      * Some codecs need additional format info. It is stored here.
      * If any muxer uses this then ALL demuxers/parsers AND encoders for the
      * specific codec MUST set it correctly otherwise stream copy breaks.
-     * In general use of this field by muxers is not recommanded.
+     * In general use of this field by muxers is not recommended.
      * - encoding: Set by libavcodec.
      * - decoding: Set by libavcodec. (FIXME: Is this OK?)
      */
@@ -3526,7 +3541,7 @@ typedef struct ReSampleContext ReSampleContext;
  * @param linear           if 1 then the used FIR filter will be linearly interpolated
                            between the 2 closest, if 0 the closest will be used
  * @param cutoff           cutoff frequency, 1.0 corresponds to half the output sampling rate
- * @return allocated ReSampleContext, NULL if error occured
+ * @return allocated ReSampleContext, NULL if error occurred
  */
 ReSampleContext *av_audio_resample_init(int output_channels, int input_channels,
                                         int output_rate, int input_rate,
@@ -4686,5 +4701,13 @@ enum AVMediaType avcodec_get_type(enum CodecID codec_id);
  * @see av_opt_find().
  */
 const AVClass *avcodec_get_class(void);
+
+/**
+ * Get the AVClass for AVFrame. It can be used in combination with
+ * AV_OPT_SEARCH_FAKE_OBJ for examining options.
+ *
+ * @see av_opt_find().
+ */
+const AVClass *avcodec_get_frame_class(void);
 
 #endif /* AVCODEC_AVCODEC_H */

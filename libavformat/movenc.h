@@ -50,6 +50,7 @@ typedef struct MOVIentry {
 #define MOV_SYNC_SAMPLE         0x0001
 #define MOV_PARTIAL_SYNC_SAMPLE 0x0002
     uint32_t     flags;
+    uint8_t      *data;
 } MOVIentry;
 
 typedef struct HintSample {
@@ -86,6 +87,7 @@ typedef struct MOVIndex {
 
     int         vosLen;
     uint8_t     *vosData;
+    int         cluster_write_index;
     MOVIentry   *cluster;
     int         audio_vbr;
     int         height; ///< active picture (w/o VBI) height for D-10/IMX
@@ -98,6 +100,7 @@ typedef struct MOVIndex {
     uint32_t    prev_rtp_ts;
     int64_t     cur_rtp_ts_unwrapped;
     uint32_t    max_packet_size;
+    int64_t     base_data_offset_pos;
 
     HintSampleQueue sample_queue;
 } MOVTrack;
@@ -111,11 +114,15 @@ typedef struct MOVMuxContext {
     int64_t mdat_pos;
     uint64_t mdat_size;
     MOVTrack *tracks;
+    int fragments;
+    int frag_seq_num;
 
     int flags;
     int rtp_flags;
     int reserved_moov_size;
     int64_t reserved_moov_pos;
+    int max_fragment_duration;
+    int max_fragment_size;
 } MOVMuxContext;
 
 #define FF_MOV_FLAG_RTP_HINT 1
@@ -124,7 +131,8 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt);
 
 int ff_mov_init_hinting(AVFormatContext *s, int index, int src_index);
 int ff_mov_add_hinted_packet(AVFormatContext *s, AVPacket *pkt,
-                             int track_index, int sample);
+                             int track_index, int sample,
+                             uint8_t *sample_data, int sample_size);
 void ff_mov_close_hinting(MOVTrack *track);
 
 #endif /* AVFORMAT_MOVENC_H */

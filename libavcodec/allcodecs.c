@@ -89,7 +89,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (CAVS, cavs);
     REGISTER_DECODER (CDGRAPHICS, cdgraphics);
     REGISTER_DECODER (CINEPAK, cinepak);
-    REGISTER_DECODER (CLJR, cljr);
+    REGISTER_ENCDEC  (CLJR, cljr);
     REGISTER_DECODER (CSCD, cscd);
     REGISTER_DECODER (CYUV, cyuv);
     REGISTER_DECODER (DFA, dfa);
@@ -99,6 +99,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (DSICINVIDEO, dsicinvideo);
     REGISTER_ENCDEC  (DVVIDEO, dvvideo);
     REGISTER_DECODER (DXA, dxa);
+    REGISTER_DECODER (DXTORY, dxtory);
     REGISTER_DECODER (EACMV, eacmv);
     REGISTER_DECODER (EAMAD, eamad);
     REGISTER_DECODER (EATGQ, eatgq);
@@ -108,6 +109,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (EIGHTSVX_EXP, eightsvx_exp);
     REGISTER_DECODER (EIGHTSVX_FIB, eightsvx_fib);
     REGISTER_DECODER (ESCAPE124, escape124);
+    REGISTER_DECODER (ESCAPE130, escape130);
     REGISTER_ENCDEC  (FFV1, ffv1);
     REGISTER_ENCDEC  (FFVHUFF, ffvhuff);
     REGISTER_ENCDEC  (FLASHSV, flashsv);

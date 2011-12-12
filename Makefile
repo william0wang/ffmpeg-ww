@@ -47,7 +47,7 @@ include $(SRC_PATH)/common.mak
 FF_EXTRALIBS := $(FFEXTRALIBS)
 FF_DEP_LIBS  := $(DEP_LIBS)
 
-all: $(PROGS)
+all: $(filter-out avconv, $(PROGS))
 
 $(PROGS): %$(EXESUF): %$(PROGSSUF)_g$(EXESUF)
 	$(CP) $< $@$(PROGSSUF)
@@ -144,6 +144,8 @@ clean::
 	$(RM) $(CLEANSUFFIXES)
 	$(RM) $(TOOLS)
 	$(RM) $(CLEANSUFFIXES:%=tools/%)
+	$(RM) coverage.info
+	$(RM) -r coverage-html
 
 distclean::
 	$(RM) $(DISTCLEANSUFFIXES)
@@ -151,6 +153,15 @@ distclean::
 
 config:
 	$(SRC_PATH)/configure $(value FFMPEG_CONFIGURATION)
+
+# Without the sed genthml thinks "libavutil" and "./libavutil" are two different things
+coverage.info: $(wildcard *.gcda *.gcno */*.gcda */*.gcno */*/*.gcda */*/*.gcno)
+	$(Q)lcov -c -d . -b . | sed -e 's#/./#/#g' > $@
+
+coverage-html: coverage.info
+	$(Q)mkdir -p $@
+	$(Q)genhtml -o $@ $<
+	$(Q)touch $@
 
 include $(SRC_PATH)/doc/Makefile
 include $(SRC_PATH)/tests/Makefile

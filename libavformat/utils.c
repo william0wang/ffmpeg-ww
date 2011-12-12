@@ -1123,7 +1123,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
             FFSWAP(int64_t, st->pts_buffer[i], st->pts_buffer[i+1]);
         if(pkt->dts == AV_NOPTS_VALUE)
             pkt->dts= st->pts_buffer[0];
-        if(st->codec->codec_id == CODEC_ID_H264){ //we skiped it above so we try here
+        if(st->codec->codec_id == CODEC_ID_H264){ // we skipped it above so we try here
             update_initial_timestamps(s, pkt->stream_index, pkt->dts, pkt->pts); // this should happen on the first packet
         }
         if(pkt->dts > st->cur_dts)
@@ -1271,7 +1271,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
             if (st->need_parsing && !st->parser && !(s->flags & AVFMT_FLAG_NOPARSE)) {
                 st->parser = av_parser_init(st->codec->codec_id);
                 if (!st->parser) {
-                    av_log(s, AV_LOG_WARNING, "parser not found for codec "
+                    av_log(s, AV_LOG_VERBOSE, "parser not found for codec "
                            "%s, packets or times may be invalid.\n",
                            avcodec_get_name(st->codec->codec_id));
                     /* no parser available: just output the raw packets */
@@ -2209,10 +2209,10 @@ static int has_decode_delay_been_guessed(AVStream *st)
 
 static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **options)
 {
-    int16_t *samples;
     AVCodec *codec;
-    int got_picture, data_size, ret=0;
+    int got_picture, ret = 0;
     AVFrame picture;
+    AVPacket pkt = *avpkt;
 
     if(!st->codec->codec){
         codec = avcodec_find_decoder(st->codec->codec_id);
@@ -2223,30 +2223,30 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
             return ret;
     }
 
-    if(!has_codec_parameters(st->codec) || !has_decode_delay_been_guessed(st) ||
-       (!st->codec_info_nb_frames && st->codec->codec->capabilities & CODEC_CAP_CHANNEL_CONF)) {
+    while (pkt.size > 0 && ret >= 0 &&
+           (!has_codec_parameters(st->codec)  ||
+           !has_decode_delay_been_guessed(st) ||
+           (!st->codec_info_nb_frames && st->codec->codec->capabilities & CODEC_CAP_CHANNEL_CONF))) {
+        got_picture = 0;
+        avcodec_get_frame_defaults(&picture);
         switch(st->codec->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
-            avcodec_get_frame_defaults(&picture);
             ret = avcodec_decode_video2(st->codec, &picture,
-                                        &got_picture, avpkt);
-            if (got_picture)
-                st->info->nb_decoded_frames++;
+                                        &got_picture, &pkt);
             break;
         case AVMEDIA_TYPE_AUDIO:
-            data_size = FFMAX(avpkt->size, AVCODEC_MAX_AUDIO_FRAME_SIZE);
-            samples = av_malloc(data_size);
-            if (!samples)
-                goto fail;
-            ret = avcodec_decode_audio3(st->codec, samples,
-                                        &data_size, avpkt);
-            av_free(samples);
+            ret = avcodec_decode_audio4(st->codec, &picture, &got_picture, &pkt);
             break;
         default:
             break;
         }
+        if (ret >= 0) {
+            if (got_picture)
+                st->info->nb_decoded_frames++;
+            pkt.data += ret;
+            pkt.size -= ret;
+        }
     }
- fail:
     return ret;
 }
 

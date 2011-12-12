@@ -133,6 +133,7 @@ OBJS-$(CONFIG_DVDSUB_ENCODER)          += dvdsubenc.o
 OBJS-$(CONFIG_DVVIDEO_DECODER)         += dv.o dvdata.o
 OBJS-$(CONFIG_DVVIDEO_ENCODER)         += dv.o dvdata.o
 OBJS-$(CONFIG_DXA_DECODER)             += dxa.o
+OBJS-$(CONFIG_DXTORY_DECODER)          += dxtory.o
 OBJS-$(CONFIG_EAC3_DECODER)            += eac3dec.o eac3_data.o
 OBJS-$(CONFIG_EAC3_ENCODER)            += eac3enc.o ac3enc.o ac3enc_float.o \
                                           ac3tab.o ac3.o kbdwin.o eac3_data.o
@@ -150,6 +151,7 @@ OBJS-$(CONFIG_EIGHTSVX_EXP_DECODER)    += 8svx.o
 OBJS-$(CONFIG_EIGHTSVX_FIB_DECODER)    += 8svx.o
 OBJS-$(CONFIG_EIGHTSVX_RAW_DECODER)    += 8svx.o
 OBJS-$(CONFIG_ESCAPE124_DECODER)       += escape124.o
+OBJS-$(CONFIG_ESCAPE130_DECODER)       += escape130.o
 OBJS-$(CONFIG_FFV1_DECODER)            += ffv1.o rangecoder.o
 OBJS-$(CONFIG_FFV1_ENCODER)            += ffv1.o rangecoder.o
 OBJS-$(CONFIG_FFVHUFF_DECODER)         += huffyuv.o

@@ -76,6 +76,8 @@ int opt_default(const char *opt, const char *arg);
  */
 int opt_loglevel(const char *opt, const char *arg);
 
+int opt_report(const char *opt);
+
 int opt_codec_debug(const char *opt, const char *arg);
 
 /**
@@ -89,7 +91,7 @@ int opt_timelimit(const char *opt, const char *arg);
  * parsed or the corresponding value is invalid.
  *
  * @param context the context of the value to be set (e.g. the
- * corresponding commandline option name)
+ * corresponding command line option name)
  * @param numstr the string to be parsed
  * @param type the type (OPT_INT64 or OPT_FLOAT) as which the
  * string should be parsed
@@ -104,7 +106,7 @@ double parse_number_or_die(const char *context, const char *numstr, int type, do
  * the string cannot be correctly parsed.
  *
  * @param context the context of the value to be set (e.g. the
- * corresponding commandline option name)
+ * corresponding command line option name)
  * @param timestr the string to be parsed
  * @param is_duration a flag which tells how to interpret timestr, if
  * not zero timestr is interpreted as a duration, otherwise as a
@@ -187,7 +189,7 @@ void parse_options(void *optctx, int argc, char **argv, const OptionDef *options
 int parse_option(void *optctx, const char *opt, const char *arg, const OptionDef *options);
 
 /**
- * Find the '-loglevel' option in the commandline args and apply it.
+ * Find the '-loglevel' option in the command line args and apply it.
  */
 void parse_loglevel(int argc, char **argv, const OptionDef *options);
 
@@ -196,7 +198,7 @@ void parse_loglevel(int argc, char **argv, const OptionDef *options);
  *
  * @param s  Corresponding format context.
  * @param st Stream from s to be checked.
- * @param spec A stream specifier of the [v|a|s|d]:[<stream index>] form.
+ * @param spec A stream specifier of the [v|a|s|d]:[\<stream index\>] form.
  *
  * @return 1 if the stream matches, 0 if it doesn't, <0 on error
  */

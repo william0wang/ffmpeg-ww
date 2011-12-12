@@ -22,6 +22,12 @@
 #define AVFORMAT_AVFORMAT_H
 
 /**
+ * @file
+ * @ingroup libavf
+ * Main libavformat public API header
+ */
+
+/**
  * @defgroup libavf I/O and Muxing/Demuxing Library
  * @{
  *
@@ -33,7 +39,7 @@
  * @{
  * @}
  *
- * @defgroup lavf_proto I/O Read/Write
+ * @defgroup lavf_io I/O Read/Write
  * @{
  * @}
  *
@@ -86,10 +92,17 @@ struct AVFormatContext;
 /**
  * @defgroup metadata_api Public Metadata API
  * @{
+ * @ingroup libavf
  * The metadata API allows libavformat to export metadata tags to a client
- * application using a sequence of key/value pairs. Like all strings in FFmpeg,
- * metadata must be stored as UTF-8 encoded Unicode. Note that metadata
+ * application when demuxing. Conversely it allows a client application to
+ * set metadata when muxing.
+ *
+ * Metadata is exported or set as pairs of key/value strings in the 'metadata'
+ * fields of the AVFormatContext, AVStream, AVChapter and AVProgram structs
+ * using the @ref lavu_dict "AVDictionary" API. Like all strings in FFmpeg,
+ * metadata is assumed to be UTF-8 encoded Unicode. Note that metadata
  * exported by demuxers isn't checked to be valid UTF-8 in most cases.
+ *
  * Important concepts to keep in mind:
  * -  Keys are unique; there can never be 2 tags with the same key. This is
  *    also meant semantically, i.e., a demuxer should not knowingly produce
@@ -293,7 +306,7 @@ typedef struct AVFormatParameters {
 #endif
 } AVFormatParameters;
 
-//! Demuxer will use avio_open, no opened file should be provided by the caller.
+/// Demuxer will use avio_open, no opened file should be provided by the caller.
 #define AVFMT_NOFILE        0x0001
 #define AVFMT_NEEDNUMBER    0x0002 /**< Needs '%d' in filename. */
 #define AVFMT_SHOW_IDS      0x0008 /**< Show format stream IDs numbers. */
@@ -313,6 +326,10 @@ typedef struct AVFormatParameters {
                                            increasing timestamps, but they must
                                            still be monotonic */
 
+/**
+ * @addtogroup lavf_encoding
+ * @{
+ */
 typedef struct AVOutputFormat {
     const char *name;
     /**
@@ -373,7 +390,14 @@ typedef struct AVOutputFormat {
     /* private fields */
     struct AVOutputFormat *next;
 } AVOutputFormat;
+/**
+ * @}
+ */
 
+/**
+ * @addtogroup lavf_decoding
+ * @{
+ */
 typedef struct AVInputFormat {
     /**
      * A comma separated list of short names for the format. New names
@@ -495,6 +519,9 @@ typedef struct AVInputFormat {
     /* private fields */
     struct AVInputFormat *next;
 } AVInputFormat;
+/**
+ * @}
+ */
 
 enum AVStreamParseType {
     AVSTREAM_PARSE_NONE,
@@ -670,7 +697,8 @@ typedef struct AVStream {
 
     /**
      * last packet in packet_buffer for this stream when muxing.
-     * used internally, NOT PART OF PUBLIC API, dont read or write from outside of libav*
+     * Used internally, NOT PART OF PUBLIC API, do not read or
+     * write from outside of libav*
      */
     struct AVPacketList *last_in_packet_buffer;
 #endif
@@ -704,7 +732,7 @@ typedef struct AVStream {
     int64_t interleaver_chunk_duration;
 
     /**
-     * Stream informations used internally by av_find_stream_info()
+     * Stream information used internally by av_find_stream_info()
      */
 #define MAX_STD_TIMEBASES (60*12+5)
     struct {
@@ -882,7 +910,7 @@ typedef struct AVFormatContext {
     /**
      * Decoding: duration of the stream, in AV_TIME_BASE fractional
      * seconds. Only set this value if you know none of the individual stream
-     * durations and also dont set any of them. This is deduced from the
+     * durations and also do not set any of them. This is deduced from the
      * AVStream values if not set.
      */
     int64_t duration;
@@ -1281,7 +1309,46 @@ enum CodecID av_codec_get_id(const struct AVCodecTag * const *tags, unsigned int
  */
 unsigned int av_codec_get_tag(const struct AVCodecTag * const *tags, enum CodecID id);
 
-/* media file input */
+/**
+ * Allocate an AVFormatContext.
+ * avformat_free_context() can be used to free the context and everything
+ * allocated by the framework within it.
+ */
+AVFormatContext *avformat_alloc_context(void);
+
+#if FF_API_ALLOC_OUTPUT_CONTEXT
+/**
+ * @deprecated deprecated in favor of avformat_alloc_output_context2()
+ */
+attribute_deprecated
+AVFormatContext *avformat_alloc_output_context(const char *format,
+                                               AVOutputFormat *oformat,
+                                               const char *filename);
+#endif
+
+/**
+ * Allocate an AVFormatContext for an output format.
+ * avformat_free_context() can be used to free the context and
+ * everything allocated by the framework within it.
+ *
+ * @param *ctx is set to the created format context, or to NULL in
+ * case of failure
+ * @param oformat format to use for allocating the context, if NULL
+ * format_name and filename are used instead
+ * @param format_name the name of output format to use for allocating the
+ * context, if NULL filename is used instead
+ * @param filename the name of the filename to use for allocating the
+ * context, may be NULL
+ * @return >= 0 in case of success, a negative AVERROR code in case of
+ * failure
+ */
+int avformat_alloc_output_context2(AVFormatContext **ctx, AVOutputFormat *oformat,
+                                   const char *format_name, const char *filename);
+
+/**
+ * @addtogroup lavf_decoding
+ * @{
+ */
 
 /**
  * Find AVInputFormat based on the short name of the input format.
@@ -1389,42 +1456,6 @@ attribute_deprecated int av_open_input_file(AVFormatContext **ic_ptr, const char
 int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputFormat *fmt, AVDictionary **options);
 
 int av_demuxer_open(AVFormatContext *ic, AVFormatParameters *ap);
-
-/**
- * Allocate an AVFormatContext.
- * avformat_free_context() can be used to free the context and everything
- * allocated by the framework within it.
- */
-AVFormatContext *avformat_alloc_context(void);
-
-#if FF_API_ALLOC_OUTPUT_CONTEXT
-/**
- * @deprecated deprecated in favor of avformat_alloc_output_context2()
- */
-attribute_deprecated
-AVFormatContext *avformat_alloc_output_context(const char *format,
-                                               AVOutputFormat *oformat,
-                                               const char *filename);
-#endif
-
-/**
- * Allocate an AVFormatContext for an output format.
- * avformat_free_context() can be used to free the context and
- * everything allocated by the framework within it.
- *
- * @param *ctx is set to the created format context, or to NULL in
- * case of failure
- * @param oformat format to use for allocating the context, if NULL
- * format_name and filename are used instead
- * @param format_name the name of output format to use for allocating the
- * context, if NULL filename is used instead
- * @param filename the name of the filename to use for allocating the
- * context, may be NULL
- * @return >= 0 in case of success, a negative AVERROR code in case of
- * failure
- */
-int avformat_alloc_output_context2(AVFormatContext **ctx, AVOutputFormat *oformat,
-                                   const char *format_name, const char *filename);
 
 #if FF_API_FORMAT_PARAMETERS
 /**
@@ -1617,6 +1648,9 @@ void av_close_input_stream(AVFormatContext *s);
  * @param s media file handle
  */
 void av_close_input_file(AVFormatContext *s);
+/**
+ * @}
+ */
 
 /**
  * Free an AVFormatContext and all its streams.
@@ -1708,9 +1742,6 @@ int64_t av_gen_search(AVFormatContext *s, int stream_index,
                       int64_t (*read_timestamp)(struct AVFormatContext *, int , int64_t *, int64_t ));
 #endif
 
-/**
- * media file output
- */
 #if FF_API_FORMAT_PARAMETERS
 /**
  * @deprecated pass the options to avformat_write_header directly.
@@ -1743,7 +1774,10 @@ void av_url_split(char *proto,         int proto_size,
                   int *port_ptr,
                   char *path,          int path_size,
                   const char *url);
-
+/**
+ * @addtogroup lavf_encoding
+ * @{
+ */
 /**
  * Allocate the stream private data and write the stream header to
  * an output media file.
@@ -1835,6 +1869,9 @@ int av_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
  * @return 0 if OK, AVERROR_xxx on error
  */
 int av_write_trailer(AVFormatContext *s);
+/**
+ * @}
+ */
 
 /**
  * Get timing information for the data currently output.

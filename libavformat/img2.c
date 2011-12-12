@@ -284,6 +284,8 @@ static int read_header(AVFormatContext *s1, AVFormatParameters *ap)
         s->split_planes = str && !av_strcasecmp(str + 1, "y");
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
         st->codec->codec_id = av_str2id(img_tags, s->path);
+        if (st->codec->codec_id == CODEC_ID_LJPEG)
+            st->codec->codec_id = CODEC_ID_MJPEG;
     }
     if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO && pix_fmt != PIX_FMT_NONE)
         st->codec->pix_fmt = pix_fmt;
@@ -444,7 +446,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
                      (!st->codec->extradata_size &&
                       AV_RL32(pkt->data+4) != MKTAG('j','P',' ',' '))){ // signature
             error:
-                av_log(s, AV_LOG_ERROR, "malformated jpeg2000 codestream %X\n", AV_RB32(pkt->data));
+                av_log(s, AV_LOG_ERROR, "malformed JPEG 2000 codestream %X\n", AV_RB32(pkt->data));
                 return -1;
             }
         }

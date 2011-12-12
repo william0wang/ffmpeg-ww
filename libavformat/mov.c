@@ -26,7 +26,7 @@
 //#define MOV_EXPORT_ALL_METADATA
 
 #include "libavutil/intreadwrite.h"
-#include "libavutil/intfloat_readwrite.h"
+#include "libavutil/intfloat.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/avstring.h"
 #include "libavutil/dict.h"
@@ -37,6 +37,7 @@
 #include "isom.h"
 #include "libavcodec/get_bits.h"
 #include "id3v1.h"
+#include "mov_chan.h"
 
 #if CONFIG_ZLIB
 #include <zlib.h>
@@ -307,25 +308,23 @@ static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     if (atom.size < 0)
         atom.size = INT64_MAX;
-    while (total_size + 8 < atom.size && !url_feof(pb)) {
+    while (total_size + 8 <= atom.size && !url_feof(pb)) {
         int (*parse)(MOVContext*, AVIOContext*, MOVAtom) = NULL;
         a.size = atom.size;
         a.type=0;
         if (atom.size >= 8) {
             a.size = avio_rb32(pb);
             a.type = avio_rl32(pb);
+            total_size += 8;
+            if (a.size == 1) { /* 64 bit extended size */
+                a.size = avio_rb64(pb) - 8;
+                total_size += 8;
+            }
         }
         av_dlog(c->fc, "type: %08x '%.4s' parent:'%.4s' sz: %"PRId64" %"PRId64" %"PRId64"\n",
                 a.type, (char*)&a.type, (char*)&atom.type, a.size, total_size, atom.size);
-        total_size += 8;
-        if (a.size == 1) { /* 64 bit extended size */
-            a.size = avio_rb64(pb) - 8;
-            total_size += 8;
-        }
         if (a.size == 0) {
-            a.size = atom.size - total_size;
-            if (a.size <= 8)
-                break;
+            a.size = atom.size - total_size + 8;
         }
         a.size -= 8;
         if (a.size < 0)
@@ -566,6 +565,51 @@ static int mov_read_dac3(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     st->codec->audio_service_type = bsmod;
     if (st->codec->channels > 1 && bsmod == 0x7)
         st->codec->audio_service_type = AV_AUDIO_SERVICE_TYPE_KARAOKE;
+
+    return 0;
+}
+
+static int mov_read_chan(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    AVStream *st;
+    uint8_t version;
+    uint32_t flags, layout_tag, bitmap, num_descr;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+
+    if (atom.size < 16)
+        return 0;
+
+    version = avio_r8(pb);
+    flags   = avio_rb24(pb);
+
+    layout_tag = avio_rb32(pb);
+    bitmap     = avio_rb32(pb);
+    num_descr  = avio_rb32(pb);
+
+    if (atom.size < 16ULL + num_descr * 20ULL)
+        return 0;
+
+    av_dlog(c->fc, "chan: size=%ld version=%u flags=%u layout=%u bitmap=%u num_descr=%u\n",
+            atom.size, version, flags, layout_tag, bitmap, num_descr);
+
+#if 0
+    /* TODO: use the channel descriptions if the layout tag is 0 */
+    int i;
+    for (i = 0; i < num_descr; i++) {
+        uint32_t label, cflags;
+        float coords[3];
+        label     = avio_rb32(pb);          // mChannelLabel
+        cflags    = avio_rb32(pb);          // mChannelFlags
+        AV_WN32(&coords[0], avio_rl32(pb)); // mCoordinates[0]
+        AV_WN32(&coords[1], avio_rl32(pb)); // mCoordinates[1]
+        AV_WN32(&coords[2], avio_rl32(pb)); // mCoordinates[2]
+    }
+#endif
+
+    st->codec->channel_layout = ff_mov_get_channel_layout(layout_tag, bitmap);
 
     return 0;
 }
@@ -957,6 +1001,8 @@ static int mov_read_stco(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     entries = avio_rb32(pb);
 
+    if (!entries)
+        return 0;
     if (entries >= UINT_MAX/sizeof(int64_t))
         return -1;
 
@@ -1215,7 +1261,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                     avio_rb32(pb); /* bytes per sample */
                 } else if (version==2) {
                     avio_rb32(pb); /* sizeof struct only */
-                    st->codec->sample_rate = av_int2dbl(avio_rb64(pb)); /* float 64 */
+                    st->codec->sample_rate = av_int2double(avio_rb64(pb)); /* float 64 */
                     st->codec->channels = avio_rb32(pb);
                     avio_rb32(pb); /* always 0x7F000000 */
                     st->codec->bits_per_coded_sample = avio_rb32(pb); /* bits per channel if sound is uncompressed */
@@ -1398,6 +1444,8 @@ static int mov_read_stsc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     av_dlog(c->fc, "track[%i].stsc.entries = %i\n", c->fc->nb_streams-1, entries);
 
+    if (!entries)
+        return 0;
     if (entries >= UINT_MAX / sizeof(*sc->stsc_data))
         return -1;
     sc->stsc_data = av_malloc(entries * sizeof(*sc->stsc_data));
@@ -1513,6 +1561,8 @@ static int mov_read_stsz(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return -1;
     }
 
+    if (!entries)
+        return 0;
     if (entries >= UINT_MAX / sizeof(int) || entries >= (UINT_MAX - 4) / field_size)
         return -1;
     sc->sample_sizes = av_malloc(entries * sizeof(int));
@@ -1615,6 +1665,8 @@ static int mov_read_ctts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     av_dlog(c->fc, "track[%i].ctts.entries = %i\n", c->fc->nb_streams-1, entries);
 
+    if (!entries)
+        return 0;
     if (entries >= UINT_MAX / sizeof(*sc->ctts_data))
         return -1;
     sc->ctts_data = av_malloc(entries * sizeof(*sc->ctts_data));
@@ -1675,6 +1727,8 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
 
         current_dts -= sc->dts_shift;
 
+        if (!sc->sample_count)
+            return;
         if (sc->sample_count >= UINT_MAX / sizeof(*st->index_entries))
             return;
         st->index_entries = av_malloc(sc->sample_count*sizeof(*st->index_entries));
@@ -2338,10 +2392,10 @@ static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
-static int mov_read_chan(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+static int mov_read_chan2(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     if (atom.size < 16)
-        return AVERROR_INVALIDDATA;
+        return 0;
     avio_skip(pb, 4);
     ff_mov_read_chan(c->fc, atom.size - 4, c->fc->streams[0]->codec);
     return 0;
@@ -2401,7 +2455,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('w','i','d','e'), mov_read_wide }, /* place holder */
 { MKTAG('w','f','e','x'), mov_read_wfex },
 { MKTAG('c','m','o','v'), mov_read_cmov },
-{ MKTAG('c','h','a','n'), mov_read_chan },
+{ MKTAG('c','h','a','n'), mov_read_chan }, /* channel layout */
 { 0, NULL }
 };
 
