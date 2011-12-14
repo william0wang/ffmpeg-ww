@@ -1447,7 +1447,16 @@ static int mov_write_trun_tag(AVIOContext *pb, MOVTrack *track)
     int tr_flags=0;
     int i;
 
-    tr_flags |= 0xF00; //FIXME
+    for(i=track->cluster_write_index; i<track->entry; i++){
+        int64_t duration = i + 1 == track->entry ?
+                track->trackDuration - track->cluster[i].dts + track->cluster[0].dts : /* readjusting */
+                track->cluster[i+1].dts - track->cluster[i].dts;
+        if(duration         != 1) tr_flags |= 0x100;
+        if(track->trex_size != track->cluster[i].size) tr_flags |= 0x200;
+        if(track->trex_flags != ((track->cluster[i].flags&MOV_SYNC_SAMPLE) ? 0x02000000 : 0x01010000))
+                                  tr_flags |= 0x400;
+        if(track->cluster[i].cts) tr_flags |= 0x800;
+    }
 
     avio_wb32(pb, 0);
     ffio_wfourcc(pb, "trun");
@@ -1904,8 +1913,10 @@ static int mov_write_trex_tag(AVIOContext *pb, MOVTrack *track, AVStream *st)
     avio_wb32(pb, track->trackID);
     avio_wb32(pb, 1); // stsd_id
     avio_wb32(pb, 1); // duration
-    avio_wb32(pb, 1/*Size*/);
-    avio_wb32(pb, 1<<16);
+    track->trex_size= track->entry ? track->cluster[FFMIN(1, track->entry-1)].size : 1;
+    avio_wb32(pb, track->trex_size);
+    track->trex_flags= st->codec->codec_type != AVMEDIA_TYPE_VIDEO ?  0x02000000 : 0x01010000;
+    avio_wb32(pb, track->trex_flags);
     return updateSize(pb, pos);
 }
 
@@ -2575,7 +2586,7 @@ static int update_first_fragment(AVFormatContext *s)
     if(mov->reserved_moov_size){
         int64_t size=  mov->reserved_moov_size - (avio_tell(pb) - mov->reserved_moov_pos);
         if(size < 8){
-            av_log(s, AV_LOG_ERROR, "reserved_moov_size is too small, needed %Ld additional\n", 8-size);
+            av_log(s, AV_LOG_ERROR, "reserved_moov_size is too small, needed %"PRId64" additional\n", 8-size);
             return -1;
         }
         avio_wb32(pb, size);

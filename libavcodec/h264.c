@@ -63,7 +63,8 @@ static const enum PixelFormat hwaccel_pixfmt_list_h264_jpeg_420[] = {
 };
 
 /**
- * checks if the top & left blocks are available if needed & changes the dc mode so it only uses the available blocks.
+ * Check if the top & left blocks are available if needed and
+ * change the dc mode so it only uses the available blocks.
  */
 int ff_h264_check_intra4x4_pred_mode(H264Context *h){
     MpegEncContext * const s = &h->s;
@@ -2597,7 +2598,7 @@ static void clone_slice(H264Context *dst, H264Context *src)
 }
 
 /**
- * computes profile from profile_idc and constraint_set?_flags
+ * Compute profile from profile_idc and constraint_set?_flags.
  *
  * @param sps SPS
  *
@@ -2624,7 +2625,7 @@ int ff_h264_get_profile(SPS *sps)
 }
 
 /**
- * decodes a slice header.
+ * Decode a slice header.
  * This will also call MPV_common_init() and frame_start() as needed.
  *
  * @param h h264context
@@ -3592,7 +3593,7 @@ static void decode_finish_row(H264Context *h){
 static int decode_slice(struct AVCodecContext *avctx, void *arg){
     H264Context *h = *(void**)arg;
     MpegEncContext * const s = &h->s;
-    const int part_mask= s->partitioned_frame ? (AC_END|AC_ERROR) : 0x7F;
+    const int part_mask= s->partitioned_frame ? (ER_AC_END|ER_AC_ERROR) : 0x7F;
     int lf_x_start = s->mb_x;
 
     s->mb_skip_run= -1;
@@ -3631,13 +3632,13 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
             eos = get_cabac_terminate( &h->cabac );
 
             if((s->workaround_bugs & FF_BUG_TRUNCATED) && h->cabac.bytestream > h->cabac.bytestream_end + 2){
-                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, (AC_END|DC_END|MV_END)&part_mask);
+                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_MB_END&part_mask);
                 if (s->mb_x >= lf_x_start) loop_filter(h, lf_x_start, s->mb_x + 1);
                 return 0;
             }
             if( ret < 0 || h->cabac.bytestream > h->cabac.bytestream_end + 2) {
                 av_log(h->s.avctx, AV_LOG_ERROR, "error while decoding MB %d %d, bytestream (%td)\n", s->mb_x, s->mb_y, h->cabac.bytestream_end - h->cabac.bytestream);
-                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, (AC_ERROR|DC_ERROR|MV_ERROR)&part_mask);
+                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, ER_MB_ERROR&part_mask);
                 return -1;
             }
 
@@ -3655,7 +3656,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
 
             if( eos || s->mb_y >= s->mb_height ) {
                 tprintf(s->avctx, "slice end %d %d\n", get_bits_count(&s->gb), s->gb.size_in_bits);
-                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, (AC_END|DC_END|MV_END)&part_mask);
+                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_MB_END&part_mask);
                 if (s->mb_x > lf_x_start) loop_filter(h, lf_x_start, s->mb_x);
                 return 0;
             }
@@ -3677,7 +3678,7 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
 
             if(ret<0){
                 av_log(h->s.avctx, AV_LOG_ERROR, "error while decoding MB %d %d\n", s->mb_x, s->mb_y);
-                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, (AC_ERROR|DC_ERROR|MV_ERROR)&part_mask);
+                ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, ER_MB_ERROR&part_mask);
                 return -1;
             }
 
@@ -3696,11 +3697,11 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
 
                     if(   get_bits_count(&s->gb) == s->gb.size_in_bits
                        || get_bits_count(&s->gb) <  s->gb.size_in_bits && s->avctx->error_recognition < FF_ER_AGGRESSIVE) {
-                        ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, (AC_END|DC_END|MV_END)&part_mask);
+                        ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_MB_END&part_mask);
 
                         return 0;
                     }else{
-                        ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, (AC_END|DC_END|MV_END)&part_mask);
+                        ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, ER_MB_END&part_mask);
 
                         return -1;
                     }
@@ -3710,12 +3711,12 @@ static int decode_slice(struct AVCodecContext *avctx, void *arg){
             if(get_bits_count(&s->gb) >= s->gb.size_in_bits && s->mb_skip_run<=0){
                 tprintf(s->avctx, "slice end %d %d\n", get_bits_count(&s->gb), s->gb.size_in_bits);
                 if(get_bits_count(&s->gb) == s->gb.size_in_bits ){
-                    ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, (AC_END|DC_END|MV_END)&part_mask);
+                    ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x-1, s->mb_y, ER_MB_END&part_mask);
                     if (s->mb_x > lf_x_start) loop_filter(h, lf_x_start, s->mb_x);
 
                     return 0;
                 }else{
-                    ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, (AC_ERROR|DC_ERROR|MV_ERROR)&part_mask);
+                    ff_er_add_slice(s, s->resync_mb_x, s->resync_mb_y, s->mb_x, s->mb_y, ER_MB_ERROR&part_mask);
 
                     return -1;
                 }
@@ -3743,12 +3744,12 @@ static int execute_decode_slices(H264Context *h, int context_count){
     } else {
         for(i = 1; i < context_count; i++) {
             hx = h->thread_context[i];
-            hx->s.error_recognition = avctx->error_recognition;
+            hx->s.err_recognition = avctx->err_recognition;
             hx->s.error_count = 0;
             hx->x264_build= h->x264_build;
         }
 
-        avctx->execute(avctx, (void *)decode_slice,
+        avctx->execute(avctx, decode_slice,
                        h->thread_context, NULL, context_count, sizeof(void*));
 
         /* pull back stuff from slices to master context */
@@ -4024,7 +4025,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
 }
 
 /**
- * returns the number of bytes consumed for building the current frame
+ * Return the number of bytes consumed for building the current frame.
  */
 static int get_consumed_bytes(MpegEncContext *s, int pos, int buf_size){
         if(pos==0) pos=1; //avoid infinite loops (i doubt that is needed but ...)

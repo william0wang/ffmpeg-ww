@@ -626,7 +626,7 @@ enum PixelFormat avcodec_default_get_format(struct AVCodecContext *s, const enum
 void avcodec_get_frame_defaults(AVFrame *pic){
     memset(pic, 0, sizeof(AVFrame));
 
-    pic->pts = pic->best_effort_timestamp = AV_NOPTS_VALUE;
+    pic->pts = pic->pkt_dts = pic->pkt_pts = pic->best_effort_timestamp = AV_NOPTS_VALUE;
     pic->pkt_pos = -1;
     pic->key_frame= 1;
     pic->sample_aspect_ratio = (AVRational){0, 1};
@@ -749,7 +749,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
     avctx->frame_number = 0;
 #if FF_API_ER
 
-    av_log(avctx, AV_LOG_DEBUG, "err{or,}_recognition separate: %d; %d\n",
+    av_log(avctx, AV_LOG_DEBUG, "err{or,}_recognition separate: %d; %X\n",
            avctx->error_recognition, avctx->err_recognition);
     switch(avctx->error_recognition){
         case FF_ER_EXPLODE        : avctx->err_recognition |= AV_EF_EXPLODE | AV_EF_COMPLIANT | AV_EF_CAREFUL;
@@ -760,7 +760,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
         case FF_ER_CAREFUL        : avctx->err_recognition |= AV_EF_CAREFUL;
     }
 
-    av_log(avctx, AV_LOG_DEBUG, "err{or,}_recognition combined: %d; %d\n",
+    av_log(avctx, AV_LOG_DEBUG, "err{or,}_recognition combined: %d; %X\n",
            avctx->error_recognition, avctx->err_recognition);
 #endif
 

@@ -657,7 +657,7 @@ void av_noreturn exit_program(int ret)
         av_dict_free(&output_files[i].opts);
     }
     for(i=0;i<nb_input_files;i++) {
-        av_close_input_file(input_files[i].ctx);
+        avformat_close_input(&input_files[i].ctx);
     }
     for (i = 0; i < nb_input_streams; i++) {
         av_freep(&input_streams[i].decoded_frame);
@@ -2047,6 +2047,10 @@ static int output_packet(InputStream *ist,
 
         if (ret < 0)
             return ret;
+
+        avpkt.dts=
+        avpkt.pts= AV_NOPTS_VALUE;
+
         // touch data and size only if not EOF
         if (pkt) {
             if(ist->st->codec->codec_type != AVMEDIA_TYPE_AUDIO)
@@ -3423,7 +3427,7 @@ static int opt_input_file(OptionsContext *o, const char *opt, const char *filena
     ret = avformat_find_stream_info(ic, opts);
     if (ret < 0) {
         av_log(NULL, AV_LOG_FATAL, "%s: could not find codec parameters\n", filename);
-        av_close_input_file(ic);
+        avformat_close_input(&ic);
         exit_program(1);
     }
 
@@ -3962,6 +3966,7 @@ static int read_ffserver_streams(OptionsContext *o, AVFormatContext *s, const ch
         ost   = new_output_stream(o, s, codec->type);
         st    = ost->st;
         avctx = st->codec;
+        ost->enc = codec;
 
         // FIXME: a more elegant solution is needed
         memcpy(st, ic->streams[i], sizeof(AVStream));
@@ -4666,7 +4671,7 @@ static const OptionDef options[] = {
     { "c", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(codec_names)}, "codec name", "codec" },
     { "codec", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(codec_names)}, "codec name", "codec" },
     { "pre", HAS_ARG | OPT_STRING | OPT_SPEC, {.off = OFFSET(presets)}, "preset name", "preset" },
-    { "map", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map}, "set input stream mapping", "file.stream[:syncfile.syncstream]" },
+    { "map", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map}, "set input stream mapping", "[-]input_file_id[:stream_specifier][,sync_file_id[:stream_specifier]]" },
     { "map_channel", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map_channel}, "map an audio channel from one stream to another", "file.stream.channel[:syncfile.syncstream]" },
     { "map_meta_data", HAS_ARG | OPT_EXPERT | OPT_FUNC2, {(void*)opt_map_meta_data}, "DEPRECATED set meta data information of outfile from infile",
       "outfile[,metadata]:infile[,metadata]" },

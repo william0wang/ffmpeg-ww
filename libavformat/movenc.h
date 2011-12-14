@@ -93,6 +93,8 @@ typedef struct MOVIndex {
     int         height; ///< active picture (w/o VBI) height for D-10/IMX
     uint32_t    tref_tag;
     int         tref_id; ///< trackID of the referenced track
+    uint32_t    trex_flags;
+    int         trex_size;
 
     int         hint_track;   ///< the track that hints this track, -1 if no hint track is set
     int         src_track;    ///< the track that this hint track describes
