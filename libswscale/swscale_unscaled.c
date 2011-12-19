@@ -210,6 +210,27 @@ static void gray8aToPacked24(const uint8_t *src, uint8_t *dst, int num_pixels, c
     }
 }
 
+static int packed_16bpc_bswap(SwsContext *c, const uint8_t* src[],
+                              int srcStride[], int srcSliceY, int srcSliceH,
+                              uint8_t* dst[], int dstStride[])
+{
+    int i, j;
+    int srcstr = srcStride[0] >> 1;
+    int dststr = dstStride[0] >> 1;
+    uint16_t       *dstPtr =       (uint16_t *)dst[0];
+    const uint16_t *srcPtr = (const uint16_t *)src[0];
+
+    for (i = 0; i < srcSliceH; i++) {
+        for (j = 0; j < srcstr; j++) {
+            dstPtr[j] = av_bswap16(srcPtr[j]);
+        }
+        srcPtr += srcstr;
+        dstPtr += dststr;
+    }
+
+    return srcSliceH;
+}
+
 static int palToRgbWrapper(SwsContext *c, const uint8_t* src[], int srcStride[], int srcSliceY,
                            int srcSliceH, uint8_t* dst[], int dstStride[])
 {
@@ -646,6 +667,12 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t* src[], int srcStride[
     return srcSliceH;
 }
 
+
+#define IS_DIFFERENT_ENDIANESS(src_fmt, dst_fmt, pix_fmt)          \
+    ((src_fmt == pix_fmt ## BE && dst_fmt == pix_fmt ## LE) ||     \
+     (src_fmt == pix_fmt ## LE && dst_fmt == pix_fmt ## BE))
+
+
 void ff_get_unscaled_swscale(SwsContext *c)
 {
     const enum PixelFormat srcFormat = c->srcFormat;
@@ -704,6 +731,18 @@ void ff_get_unscaled_swscale(SwsContext *c)
 
     if (isAnyRGB(srcFormat) && isPlanar(srcFormat) && isByteRGB(dstFormat))
         c->swScale= planarRgbToRgbWrapper;
+
+    /* bswap 16 bits per pixel/component packed formats */
+    if (IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR444) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR48)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR555) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_BGR565) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_GRAY16) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB444) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB48)  ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB555) ||
+        IS_DIFFERENT_ENDIANESS(srcFormat, dstFormat, PIX_FMT_RGB565))
+        c->swScale = packed_16bpc_bswap;
 
     if (usePal(srcFormat) && isByteRGB(dstFormat))
         c->swScale= palToRgbWrapper;

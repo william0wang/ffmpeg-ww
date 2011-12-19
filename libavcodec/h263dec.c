@@ -25,6 +25,8 @@
  * H.263 decoder.
  */
 
+#define UNCHECKED_BITSTREAM_READER 1
+
 #include "libavutil/cpu.h"
 #include "internal.h"
 #include "avcodec.h"
@@ -410,6 +412,8 @@ retry:
      * otherwise we cannot store anyting in there */
     if (s->current_picture_ptr == NULL || s->current_picture_ptr->f.data[0]) {
         int i= ff_find_unused_picture(s, 0);
+        if (i < 0)
+            return i;
         s->current_picture_ptr= &s->picture[i];
     }
 

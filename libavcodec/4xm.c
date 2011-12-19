@@ -440,15 +440,6 @@ static int decode_p_frame(FourXContext *f, const uint8_t *buf, int length){
         dst += 8*stride;
     }
 
-    if(   bitstream_size != (get_bits_count(&f->gb)+31)/32*4
-       || (((const char*)f->wordstream - (const char*)buf + 2)&~2) != extra + bitstream_size + wordstream_size
-       || (((const char*)f->bytestream - (const char*)buf + 3)&~3) != extra + bitstream_size + wordstream_size + bytestream_size)
-        av_log(f->avctx, AV_LOG_ERROR, " %d %td %td bytes left\n",
-            bitstream_size - (get_bits_count(&f->gb)+31)/32*4,
-            -(((const char*)f->bytestream - (const char*)buf + 3)&~3) + (extra + bitstream_size + wordstream_size + bytestream_size),
-            -(((const char*)f->wordstream - (const char*)buf + 2)&~2) + (extra + bitstream_size + wordstream_size)
-        );
-
     return 0;
 }
 
@@ -458,6 +449,11 @@ static int decode_p_frame(FourXContext *f, const uint8_t *buf, int length){
  */
 static int decode_i_block(FourXContext *f, DCTELEM *block){
     int code, i, j, level, val;
+
+    if(get_bits_left(&f->gb) < 2){
+        av_log(f->avctx, AV_LOG_ERROR, "%d bits left before decode_i_block()\n", get_bits_left(&f->gb));
+        return -1;
+    }
 
     /* DC coef */
     val = get_vlc2(&f->pre_gb, f->pre_vlc.table, ACDC_VLC_BITS, 3);

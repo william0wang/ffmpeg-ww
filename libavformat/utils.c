@@ -267,7 +267,24 @@ AVInputFormat *av_find_input_format(const char *short_name)
 
 int av_get_packet(AVIOContext *s, AVPacket *pkt, int size)
 {
-    int ret= av_new_packet(pkt, size);
+    int ret;
+
+    if(s->maxsize>=0){
+        int64_t remaining= s->maxsize - avio_tell(s);
+        if(remaining < size){
+            int64_t newsize= avio_size(s);
+            if(!s->maxsize || s->maxsize<newsize)
+                s->maxsize= newsize;
+            remaining= s->maxsize - avio_tell(s);
+        }
+
+        if(s->maxsize>=0 && remaining>=0 && remaining+1 < size){
+            av_log(0, AV_LOG_ERROR, "Truncating packet of size %d to %"PRId64"\n", size, remaining+1);
+            size= remaining+1;
+        }
+    }
+
+    ret= av_new_packet(pkt, size);
 
     if(ret<0)
         return ret;
@@ -2376,6 +2393,11 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         assert(!st->codec->codec);
         codec = avcodec_find_decoder(st->codec->codec_id);
 
+        /* this function doesn't flush the decoders, so force thread count
+         * to 1 to fix behavior when thread count > number of frames in the file */
+        if (options)
+            av_dict_set(&options[i], "threads", 0, 0);
+
         /* Ensure that subtitle_header is properly set. */
         if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE
             && codec && !st->codec->codec)
@@ -2383,15 +2405,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
         //try to just open decoders, in case this is enough to get parameters
         if(!has_codec_parameters(st->codec)){
-            if (codec && !st->codec->codec){
-                AVDictionary *tmp = NULL;
-                if (options){
-                    av_dict_copy(&tmp, options[i], 0);
-                    av_dict_set(&tmp, "threads", 0, 0);
-                }
-                avcodec_open2(st->codec, codec, options ? &tmp : NULL);
-                av_dict_free(&tmp);
-            }
+            if (codec && !st->codec->codec)
+                avcodec_open2(st->codec, codec, options ? &options[i] : NULL);
         }
     }
 
@@ -2494,8 +2509,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 double dts= pkt->dts * av_q2d(st->time_base);
                 int64_t duration= pkt->dts - last;
 
-//                if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-//                    av_log(NULL, AV_LOG_ERROR, "%f\n", dur);
+//                 if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+//                     av_log(NULL, AV_LOG_ERROR, "%f\n", dts);
                 for (i=1; i<FF_ARRAY_ELEMS(st->info->duration_error[0][0]); i++) {
                     int framerate= get_std_framerate(i);
                     double sdts= dts*framerate/(1001*12);
@@ -2574,6 +2589,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                     int k;
 
                     if(st->info->codec_info_duration && st->info->codec_info_duration*av_q2d(st->time_base) < (1001*12.0)/get_std_framerate(j))
+                        continue;
+                    if(!st->info->codec_info_duration && 1.0 < (1001*12.0)/get_std_framerate(j))
                         continue;
                     for(k=0; k<2; k++){
                         int n= st->info->duration_count;
@@ -2809,10 +2826,10 @@ void av_close_input_file(AVFormatContext *s)
 void avformat_close_input(AVFormatContext **ps)
 {
     AVFormatContext *s = *ps;
-    AVIOContext *pb = (s->iformat->flags & AVFMT_NOFILE) || (s->flags & AVFMT_FLAG_CUSTOM_IO) ?
+    AVIOContext *pb = (s->iformat && (s->iformat->flags & AVFMT_NOFILE)) || (s->flags & AVFMT_FLAG_CUSTOM_IO) ?
                        NULL : s->pb;
     flush_packet_queue(s);
-    if (s->iformat->read_close)
+    if (s->iformat && (s->iformat->read_close))
         s->iformat->read_close(s);
     avformat_free_context(s);
     *ps = NULL;

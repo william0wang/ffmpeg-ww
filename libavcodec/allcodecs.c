@@ -215,6 +215,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (UTVIDEO, utvideo);
     REGISTER_ENCDEC  (V210,  v210);
     REGISTER_DECODER (V210X, v210x);
+    REGISTER_ENCDEC  (V410, v410);
     REGISTER_DECODER (VB, vb);
     REGISTER_DECODER (VBLE, vble);
     REGISTER_DECODER (VC1, vc1);
@@ -264,6 +265,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (DCA, dca);
     REGISTER_DECODER (DSICINAUDIO, dsicinaudio);
     REGISTER_ENCDEC  (EAC3, eac3);
+    REGISTER_DECODER (FFWAVESYNTH, ffwavesynth);
     REGISTER_ENCDEC  (FLAC, flac);
     REGISTER_ENCDEC  (G723_1, g723_1);
     REGISTER_DECODER (G729, g729);

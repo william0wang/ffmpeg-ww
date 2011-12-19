@@ -174,6 +174,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_RAWVIDEO,     MKTAG('2', 'V', 'u', '1') },
     { CODEC_ID_RAWVIDEO,     MKTAG('2', 'v', 'u', 'y') },
     { CODEC_ID_RAWVIDEO,     MKTAG('y', 'u', 'v', 's') },
+    { CODEC_ID_RAWVIDEO,     MKTAG('y', 'u', 'v', '2') },
     { CODEC_ID_RAWVIDEO,     MKTAG('P', '4', '2', '2') },
     { CODEC_ID_RAWVIDEO,     MKTAG('Y', 'V', '1', '2') },
     { CODEC_ID_RAWVIDEO,     MKTAG('Y', 'V', '1', '6') },
@@ -198,6 +199,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_R10K,         MKTAG('R', '1', '0', 'k') },
     { CODEC_ID_R210,         MKTAG('r', '2', '1', '0') },
     { CODEC_ID_V210,         MKTAG('v', '2', '1', '0') },
+    { CODEC_ID_V410,         MKTAG('v', '4', '1', '0') },
     { CODEC_ID_INDEO3,       MKTAG('I', 'V', '3', '1') },
     { CODEC_ID_INDEO3,       MKTAG('I', 'V', '3', '2') },
     { CODEC_ID_INDEO4,       MKTAG('I', 'V', '4', '1') },
@@ -517,7 +519,7 @@ void ff_put_bmp_header(AVIOContext *pb, AVCodecContext *enc, const AVCodecTag *t
     avio_wl16(pb, enc->bits_per_coded_sample ? enc->bits_per_coded_sample : 24); /* depth */
     /* compression type */
     avio_wl32(pb, enc->codec_tag);
-    avio_wl32(pb, enc->width * enc->height * 3);
+    avio_wl32(pb, (enc->width * enc->height * (enc->bits_per_coded_sample ? enc->bits_per_coded_sample : 24)+7) / 8);
     avio_wl32(pb, 0);
     avio_wl32(pb, 0);
     avio_wl32(pb, 0);
@@ -713,8 +715,7 @@ int ff_read_riff_info(AVFormatContext *s, int64_t size)
         AV_WL32(key, chunk_code);
 
         if (avio_read(pb, value, chunk_size) != chunk_size) {
-            av_freep(key);
-            av_freep(value);
+            av_freep(&value);
             av_log(s, AV_LOG_ERROR, "premature end of file while reading INFO tag\n");
             return AVERROR_INVALIDDATA;
         }

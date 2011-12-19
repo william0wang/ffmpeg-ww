@@ -101,8 +101,9 @@ static av_cold int adpcm_decode_init(AVCodecContext * avctx)
         max_channels = 6;
         break;
     }
-    if(avctx->channels > max_channels){
-        return -1;
+    if (avctx->channels <= 0 || avctx->channels > max_channels) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid number of channels\n");
+        return AVERROR(EINVAL);
     }
 
     switch(avctx->codec->id) {
@@ -816,6 +817,9 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
 
         /* Each EA ADPCM frame has a 12-byte header followed by 30-byte pieces,
            each coding 28 stereo samples. */
+
+        if(avctx->channels != 2)
+            return AVERROR_INVALIDDATA;
 
         src += 4; // skip sample count (already read)
 

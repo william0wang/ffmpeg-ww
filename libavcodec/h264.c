@@ -25,6 +25,8 @@
  * @author Michael Niedermayer <michaelni@gmx.at>
  */
 
+#define UNCHECKED_BITSTREAM_READER 1
+
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "internal.h"
@@ -1816,7 +1818,7 @@ static av_always_inline void hl_decode_mb_predict_luma(H264Context *h, int mb_ty
                                     idct_dc_add(ptr, h->mb + (i*16+p*256 << pixel_shift), linesize);
                                 else
                                     idct_add   (ptr, h->mb + (i*16+p*256 << pixel_shift), linesize);
-                            }else
+                            }else if(CONFIG_SVQ3_DECODER)
                                 ff_svq3_add_idct_c(ptr, h->mb + i*16+p*256, linesize, qscale, 0);
                         }
                     }
@@ -1836,7 +1838,7 @@ static av_always_inline void hl_decode_mb_predict_luma(H264Context *h, int mb_ty
                         dctcoef_set(h->mb+(p*256 << pixel_shift), pixel_shift, dc_mapping[i], dctcoef_get(h->mb_luma_dc[p], pixel_shift, i));
                 }
             }
-        }else
+        }else if(CONFIG_SVQ3_DECODER)
             ff_svq3_luma_dc_dequant_idct_c(h->mb+p*256, h->mb_luma_dc[p], qscale);
     }
 }
@@ -1880,7 +1882,7 @@ static av_always_inline void hl_decode_mb_idct_luma(H264Context *h, int mb_type,
                     }
                 }
             }
-        }else{
+        }else if(CONFIG_SVQ3_DECODER) {
             for(i=0; i<16; i++){
                 if(h->non_zero_count_cache[ scan8[i+p*16] ] || h->mb[i*16+p*256]){ //FIXME benchmark weird rule, & below
                     uint8_t * const ptr= dest_y + block_offset[i];
@@ -3777,6 +3779,8 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
     int nals_needed=0; ///< number of NALs that need decoding before the next frame thread starts
     int nal_index;
 
+    h->nal_unit_type= 0;
+
     h->max_contexts = (HAVE_THREADS && (s->avctx->active_thread_type&FF_THREAD_SLICE)) ? avctx->thread_count : 1;
     if(!(s->flags2 & CODEC_FLAG2_CHUNKS)){
         h->current_slice = 0;
@@ -4044,15 +4048,15 @@ static int decode_frame(AVCodecContext *avctx,
     MpegEncContext *s = &h->s;
     AVFrame *pict = data;
     int buf_index;
+    Picture *out;
+    int i, out_idx;
 
     s->flags= avctx->flags;
     s->flags2= avctx->flags2;
 
    /* end of stream, output what is still in the buffers */
- out:
     if (buf_size == 0) {
-        Picture *out;
-        int i, out_idx;
+ out:
 
         s->current_picture_ptr = NULL;
 
@@ -4073,24 +4077,45 @@ static int decode_frame(AVCodecContext *avctx,
             *pict= *(AVFrame*)out;
         }
 
-        return 0;
+        return buf_size;
     }
-    if(h->is_avc && buf_size >= 9 && AV_RB32(buf)==0x0164001F && buf[5] && buf[8]==0x67)
+    if(h->is_avc && buf_size >= 9 && buf[0]==1 && buf[2]==0 && (buf[4]&0xFC)==0xFC && (buf[5]&0x1F) && buf[8]==0x67){
+        int cnt= buf[5]&0x1f;
+        uint8_t *p= buf+6;
+        while(cnt--){
+            int nalsize= AV_RB16(p) + 2;
+            if(nalsize > buf_size - (p-buf) || p[2]!=0x67)
+                goto not_extra;
+            p += nalsize;
+        }
+        cnt = *(p++);
+        if(!cnt)
+            goto not_extra;
+        while(cnt--){
+            int nalsize= AV_RB16(p) + 2;
+            if(nalsize > buf_size - (p-buf) || p[2]!=0x68)
+                goto not_extra;
+            p += nalsize;
+        }
+
         return ff_h264_decode_extradata(h, buf, buf_size);
+    }
+not_extra:
 
     buf_index=decode_nal_units(h, buf, buf_size);
     if(buf_index < 0)
         return -1;
 
     if (!s->current_picture_ptr && h->nal_unit_type == NAL_END_SEQUENCE) {
-        buf_size = 0;
+        av_assert0(buf_index <= buf_size);
+        buf_size = buf_index;
         goto out;
     }
 
     if(!(s->flags2 & CODEC_FLAG2_CHUNKS) && !s->current_picture_ptr){
         if (avctx->skip_frame >= AVDISCARD_NONREF ||
             buf_size >= 4 && !memcmp("Q264", buf, 4))
-            return 0;
+            return buf_size;
         av_log(avctx, AV_LOG_ERROR, "no frame!\n");
         return -1;
     }

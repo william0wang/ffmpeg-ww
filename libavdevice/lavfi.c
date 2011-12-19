@@ -141,7 +141,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
             FAIL(AVERROR(EINVAL));
         }
 
-        /* is a video output? */
+        /* is an audio or video output? */
         type = inout->filter_ctx->output_pads[inout->pad_idx].type;
         if (type != AVMEDIA_TYPE_VIDEO && type != AVMEDIA_TYPE_AUDIO) {
             av_log(avctx,  AV_LOG_ERROR,
@@ -151,7 +151,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
 
         if (lavfi->stream_sink_map[stream_idx] != -1) {
             av_log(avctx,  AV_LOG_ERROR,
-                   "An with stream index %d was already specified\n",
+                   "An output with stream index %d was already specified\n",
                    stream_idx);
             FAIL(AVERROR(EINVAL));
         }
@@ -185,7 +185,6 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
 
         if (type == AVMEDIA_TYPE_VIDEO) {
         AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
-        buffersink_params->pixel_fmts = pix_fmts;
 
 #if FF_API_OLD_VSINK_API
         ret = avfilter_graph_create_filter(&sink, buffersink,
