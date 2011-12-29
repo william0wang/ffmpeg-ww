@@ -1,5 +1,4 @@
 /*
- * Multiple format streaming server
  * Copyright (c) 2000, 2001, 2002 Fabrice Bellard
  *
  * This file is part of FFmpeg.
@@ -17,6 +16,11 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+/**
+ * @file
+ * multiple format streaming server based on the FFmpeg libraries
  */
 
 #include "config.h"
@@ -4673,7 +4677,7 @@ int main(int argc, char **argv)
     av_register_all();
     avformat_network_init();
 
-    show_banner();
+    show_banner(argc, argv, options);
 
     my_program_name = argv[0];
     my_program_dir = getcwd(0, 0);

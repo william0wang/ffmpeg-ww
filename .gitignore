@@ -20,6 +20,7 @@ config.*
 doc/*.1
 doc/*.html
 doc/*.pod
+doc/fate.txt
 doxy
 ffmpeg
 ffmpeg_g

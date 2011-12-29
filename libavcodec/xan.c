@@ -35,7 +35,7 @@
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
 #include "bytestream.h"
-#define ALT_BITSTREAM_READER_LE
+#define BITSTREAM_READER_LE
 #include "get_bits.h"
 // for av_memcpy_backptr
 #include "libavutil/lzo.h"
@@ -535,7 +535,7 @@ static int xan_decode_frame(AVCodecContext *avctx,
                     int g = gamma_lookup[*buf++];
                     int b = gamma_lookup[*buf++];
 #endif
-                    *tmpptr++ = (r << 16) | (g << 8) | b;
+                    *tmpptr++ = (0xFFU << 24) | (r << 16) | (g << 8) | b;
                 }
                 s->palettes_count++;
                 break;

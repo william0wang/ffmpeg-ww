@@ -71,6 +71,7 @@ av_cold static int lavfi_read_close(AVFormatContext *avctx)
 
     av_freep(&lavfi->sink_stream_map);
     av_freep(&lavfi->stream_sink_map);
+    av_freep(&lavfi->sinks);
     avfilter_graph_free(&lavfi->graph);
 
     return 0;
@@ -87,6 +88,9 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
     int ret = 0, i, n;
 
 #define FAIL(ERR) { ret = ERR; goto end; }
+
+    if (!pix_fmts)
+        FAIL(AVERROR(ENOMEM));
 
     avfilter_register_all();
 
@@ -184,22 +188,22 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
         }
 
         if (type == AVMEDIA_TYPE_VIDEO) {
-        AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
+            AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
 
 #if FF_API_OLD_VSINK_API
-        ret = avfilter_graph_create_filter(&sink, buffersink,
-                                           inout->name, NULL,
-                                           pix_fmts, lavfi->graph);
+            ret = avfilter_graph_create_filter(&sink, buffersink,
+                                               inout->name, NULL,
+                                               pix_fmts, lavfi->graph);
 #else
-        buffersink_params->pixel_fmts = pix_fmts;
-        ret = avfilter_graph_create_filter(&sink, buffersink,
-                                           inout->name, NULL,
-                                           buffersink_params, lavfi->graph);
+            buffersink_params->pixel_fmts = pix_fmts;
+            ret = avfilter_graph_create_filter(&sink, buffersink,
+                                               inout->name, NULL,
+                                               buffersink_params, lavfi->graph);
 #endif
-        av_freep(&buffersink_params);
+            av_freep(&buffersink_params);
 
-        if (ret < 0)
-            goto end;
+            if (ret < 0)
+                goto end;
         } else if (type == AVMEDIA_TYPE_AUDIO) {
             enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_S16, -1 };
             const int packing_fmts[] = { AVFILTER_PACKED, -1 };
@@ -251,6 +255,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx,
     }
 
 end:
+    av_free(pix_fmts);
     avfilter_inout_free(&input_links);
     avfilter_inout_free(&output_links);
     if (ret < 0)

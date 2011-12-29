@@ -1,5 +1,4 @@
 /*
- * ffmpeg main
  * Copyright (c) 2000-2003 Fabrice Bellard
  *
  * This file is part of FFmpeg.
@@ -17,6 +16,11 @@
  * You should have received a copy of the GNU Lesser General Public
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+/**
+ * @file
+ * multimedia converter based on the FFmpeg libraries
  */
 
 #include "config.h"
@@ -44,6 +48,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/avstring.h"
 #include "libavutil/libm.h"
+#include "libavutil/imgutils.h"
 #include "libavformat/os_support.h"
 #include "libswresample/swresample.h"
 
@@ -54,6 +59,7 @@
 # include "libavfilter/avfilter.h"
 # include "libavfilter/avfiltergraph.h"
 # include "libavfilter/buffersink.h"
+# include "libavfilter/buffersrc.h"
 # include "libavfilter/vsrc_buffer.h"
 #endif
 
@@ -172,6 +178,19 @@ static uint8_t *input_tmp= NULL;
 
 #define DEFAULT_PASS_LOGFILENAME_PREFIX "ffmpeg2pass"
 
+typedef struct FrameBuffer {
+    uint8_t *base[4];
+    uint8_t *data[4];
+    int  linesize[4];
+
+    int h, w;
+    enum PixelFormat pix_fmt;
+
+    int refcount;
+    struct InputStream *ist;
+    struct FrameBuffer *next;
+} FrameBuffer;
+
 typedef struct InputStream {
     int file_index;
     AVStream *st;
@@ -189,6 +208,10 @@ typedef struct InputStream {
     int is_start;            /* is 1 at the start and after a discontinuity */
     int showed_multi_packet_warning;
     AVDictionary *opts;
+
+    /* a pool of free buffers for decoded data */
+    FrameBuffer *buffer_pool;
+    int dr1;
 } InputStream;
 
 typedef struct InputFile {
@@ -441,6 +464,135 @@ static void reset_options(OptionsContext *o, int is_input)
     init_opts();
 }
 
+static int alloc_buffer(InputStream *ist, FrameBuffer **pbuf)
+{
+    AVCodecContext *s = ist->st->codec;
+    FrameBuffer  *buf = av_mallocz(sizeof(*buf));
+    int ret, i;
+    const int pixel_size = av_pix_fmt_descriptors[s->pix_fmt].comp[0].step_minus1+1;
+    int h_chroma_shift, v_chroma_shift;
+    int edge = 32; // XXX should be avcodec_get_edge_width(), but that fails on svq1
+    int w = s->width, h = s->height;
+
+    if (!buf)
+        return AVERROR(ENOMEM);
+
+    if (!(s->flags & CODEC_FLAG_EMU_EDGE)) {
+        w += 2*edge;
+        h += 2*edge;
+    }
+
+    avcodec_align_dimensions(s, &w, &h);
+    if ((ret = av_image_alloc(buf->base, buf->linesize, w, h,
+                              s->pix_fmt, 32)) < 0) {
+        av_freep(&buf);
+        return ret;
+    }
+    /* XXX this shouldn't be needed, but some tests break without this line
+     * those decoders are buggy and need to be fixed.
+     * the following tests fail:
+     * bethsoft-vid, cdgraphics, ansi, aasc, fraps-v1, qtrle-1bit
+     */
+    memset(buf->base[0], 128, ret);
+
+    avcodec_get_chroma_sub_sample(s->pix_fmt, &h_chroma_shift, &v_chroma_shift);
+    for (i = 0; i < FF_ARRAY_ELEMS(buf->data); i++) {
+        const int h_shift = i==0 ? 0 : h_chroma_shift;
+        const int v_shift = i==0 ? 0 : v_chroma_shift;
+        if (s->flags & CODEC_FLAG_EMU_EDGE)
+            buf->data[i] = buf->base[i];
+        else
+            buf->data[i] = buf->base[i] +
+                           FFALIGN((buf->linesize[i]*edge >> v_shift) +
+                                   (pixel_size*edge >> h_shift), 32);
+    }
+    buf->w       = s->width;
+    buf->h       = s->height;
+    buf->pix_fmt = s->pix_fmt;
+    buf->ist     = ist;
+
+    *pbuf = buf;
+    return 0;
+}
+
+static void free_buffer_pool(InputStream *ist)
+{
+    FrameBuffer *buf = ist->buffer_pool;
+    while (buf) {
+        ist->buffer_pool = buf->next;
+        av_freep(&buf->base[0]);
+        av_free(buf);
+        buf = ist->buffer_pool;
+    }
+}
+
+static void unref_buffer(InputStream *ist, FrameBuffer *buf)
+{
+    av_assert0(buf->refcount);
+    buf->refcount--;
+    if (!buf->refcount) {
+        buf->next = ist->buffer_pool;
+        ist->buffer_pool = buf;
+    }
+}
+
+static int codec_get_buffer(AVCodecContext *s, AVFrame *frame)
+{
+    InputStream *ist = s->opaque;
+    FrameBuffer *buf;
+    int ret, i;
+
+    if (!ist->buffer_pool && (ret = alloc_buffer(ist, &ist->buffer_pool)) < 0)
+        return ret;
+
+    buf              = ist->buffer_pool;
+    ist->buffer_pool = buf->next;
+    buf->next        = NULL;
+    if (buf->w != s->width || buf->h != s->height || buf->pix_fmt != s->pix_fmt) {
+        av_freep(&buf->base[0]);
+        av_free(buf);
+        ist->dr1 = 0;
+        if ((ret = alloc_buffer(ist, &buf)) < 0)
+            return ret;
+    }
+    buf->refcount++;
+
+    frame->opaque        = buf;
+    frame->type          = FF_BUFFER_TYPE_USER;
+    frame->extended_data = frame->data;
+    frame->pkt_pts       = s->pkt ? s->pkt->pts : AV_NOPTS_VALUE;
+
+    for (i = 0; i < FF_ARRAY_ELEMS(buf->data); i++) {
+        frame->base[i]     = buf->base[i];  // XXX h264.c uses base though it shouldn't
+        frame->data[i]     = buf->data[i];
+        frame->linesize[i] = buf->linesize[i];
+    }
+
+    return 0;
+}
+
+static void codec_release_buffer(AVCodecContext *s, AVFrame *frame)
+{
+    InputStream *ist = s->opaque;
+    FrameBuffer *buf = frame->opaque;
+    int i;
+
+    if(frame->type!=FF_BUFFER_TYPE_USER)
+        return avcodec_default_release_buffer(s, frame);
+
+    for (i = 0; i < FF_ARRAY_ELEMS(frame->data); i++)
+        frame->data[i] = NULL;
+
+    unref_buffer(ist, buf);
+}
+
+static void filter_release_buffer(AVFilterBuffer *fb)
+{
+    FrameBuffer *buf = fb->priv;
+    av_free(fb);
+    unref_buffer(buf->ist, buf);
+}
+
 #if CONFIG_AVFILTER
 
 static int configure_video_filters(InputStream *ist, OutputStream *ost)
@@ -667,6 +819,7 @@ void av_noreturn exit_program(int ret)
         av_freep(&input_streams[i].decoded_frame);
         av_freep(&input_streams[i].filtered_frame);
         av_dict_free(&input_streams[i].opts);
+        free_buffer_pool(&input_streams[i]);
     }
 
     if (vstats_file)
@@ -1905,7 +2058,22 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
             if (!frame_sample_aspect->num)
                 *frame_sample_aspect = ist->st->sample_aspect_ratio;
             decoded_frame->pts = ist->pts;
+            if (ist->dr1 && decoded_frame->type==FF_BUFFER_TYPE_USER) {
+                FrameBuffer      *buf = decoded_frame->opaque;
+                AVFilterBufferRef *fb = avfilter_get_video_buffer_ref_from_arrays(
+                                            decoded_frame->data, decoded_frame->linesize,
+                                            AV_PERM_READ | AV_PERM_PRESERVE,
+                                            ist->st->codec->width, ist->st->codec->height,
+                                            ist->st->codec->pix_fmt);
 
+                avfilter_copy_frame_props(fb, decoded_frame);
+                fb->pts                 = ist->pts;
+                fb->buf->priv           = buf;
+                fb->buf->free           = filter_release_buffer;
+
+                buf->refcount++;
+                av_buffersrc_buffer(ost->input_video_filter, fb);
+            } else
             if((av_vsrc_buffer_add_frame(ost->input_video_filter, decoded_frame, AV_VSRC_BUF_FLAG_OVERWRITE)) < 0){
                 av_log(0, AV_LOG_FATAL, "Failed to inject frame into filter network\n");
                 exit_program(1);
@@ -2131,6 +2299,14 @@ static int init_input_stream(int ist_index, OutputStream *output_streams, int nb
                     avcodec_get_name(ist->st->codec->codec_id), ist->file_index, ist->st->index);
             return AVERROR(EINVAL);
         }
+
+        ist->dr1 = codec->capabilities & CODEC_CAP_DR1;
+        if (codec->type == AVMEDIA_TYPE_VIDEO && ist->dr1) {
+            ist->st->codec->get_buffer     = codec_get_buffer;
+            ist->st->codec->release_buffer = codec_release_buffer;
+            ist->st->codec->opaque         = ist;
+        }
+
         if (avcodec_open2(ist->st->codec, codec, &ist->opts) < 0) {
             snprintf(error, error_len, "Error while opening decoder for input stream #%d:%d",
                     ist->file_index, ist->st->index);
@@ -2213,6 +2389,7 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
             codec->bit_rate       = icodec->bit_rate;
             codec->rc_max_rate    = icodec->rc_max_rate;
             codec->rc_buffer_size = icodec->rc_buffer_size;
+            codec->field_order    = icodec->field_order;
             codec->extradata      = av_mallocz(extra_size);
             if (!codec->extradata) {
                 return AVERROR(ENOMEM);
@@ -4857,7 +5034,7 @@ int main(int argc, char **argv)
     av_register_all();
     avformat_network_init();
 
-    show_banner();
+    show_banner(argc, argv, options);
 
     term_init();
 

@@ -20,8 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/intreadwrite.h"
 #include "avcodec.h"
-#include "get_bits.h"
 
 static av_cold int v410_decode_init(AVCodecContext *avctx)
 {
@@ -54,6 +54,11 @@ static int v410_decode_frame(AVCodecContext *avctx, void *data,
 
     if (pic->data[0])
         avctx->release_buffer(avctx, pic);
+
+    if (avpkt->size < 4 * avctx->height * avctx->width) {
+        av_log(avctx, AV_LOG_ERROR, "Insufficient input data.\n");
+        return AVERROR(EINVAL);
+    }
 
     pic->reference = 0;
 

@@ -432,7 +432,7 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
             for (type = 0; type != -1 && avio_tell(pb) < next; ) {
                 if(url_feof(pb))
-                    return AVERROR(EOF);
+                    return AVERROR_EOF;
                 type = avio_rb16(pb);
                 len = avio_rb16(pb);
                 av_log(c->fc, AV_LOG_DEBUG, "type %d, len %d\n", type, len);
@@ -857,6 +857,40 @@ static int mov_read_enda(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_fiel(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    AVStream *st;
+    unsigned mov_field_order;
+    enum AVFieldOrder decoded_field_order = AV_FIELD_UNKNOWN;
+
+    if (c->fc->nb_streams < 1) // will happen with jp2 files
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+    if (atom.size < 2)
+        return AVERROR_INVALIDDATA;
+    mov_field_order = avio_rb16(pb);
+    if ((mov_field_order & 0xFF00) == 0x0100)
+        decoded_field_order = AV_FIELD_PROGRESSIVE;
+    else if ((mov_field_order & 0xFF00) == 0x0200) {
+        switch (mov_field_order & 0xFF) {
+        case 0x01: decoded_field_order = AV_FIELD_TT;
+                   break;
+        case 0x06: decoded_field_order = AV_FIELD_BB;
+                   break;
+        case 0x09: decoded_field_order = AV_FIELD_TB;
+                   break;
+        case 0x0E: decoded_field_order = AV_FIELD_BT;
+                   break;
+        }
+    }
+    if (decoded_field_order == AV_FIELD_UNKNOWN && mov_field_order) {
+        av_log(NULL, AV_LOG_ERROR, "Unknown MOV field order 0x%04x\n", mov_field_order);
+    }
+    st->codec->field_order = decoded_field_order;
+
+    return 0;
+}
+
 /* FIXME modify qdm2/svq3/h264 decoders to take full atom as extradata */
 static int mov_read_extradata(MOVContext *c, AVIOContext *pb, MOVAtom atom,
                               enum CodecID codec_id)
@@ -896,11 +930,6 @@ static int mov_read_alac(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 static int mov_read_avss(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     return mov_read_extradata(c, pb, atom, CODEC_ID_AVS);
-}
-
-static int mov_read_fiel(MOVContext *c, AVIOContext *pb, MOVAtom atom)
-{
-    return mov_read_extradata(c, pb, atom, CODEC_ID_MJPEG);
 }
 
 static int mov_read_jp2h(MOVContext *c, AVIOContext *pb, MOVAtom atom)
@@ -950,6 +979,15 @@ static int mov_read_glbl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if ((uint64_t)atom.size > (1<<30))
         return -1;
 
+    if (atom.size >= 10) {
+        // Broken files created by legacy versions of Libav and FFmpeg will
+        // wrap a whole fiel atom inside of a glbl atom.
+        unsigned size = avio_rb32(pb);
+        unsigned type = avio_rl32(pb);
+        avio_seek(pb, -8, SEEK_CUR);
+        if (type == MKTAG('f','i','e','l') && size == atom.size)
+            return mov_read_default(c, pb, atom);
+    }
     av_free(st->codec->extradata);
     st->codec->extradata = av_mallocz(atom.size + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!st->codec->extradata)
@@ -1175,7 +1213,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                 (color_depth == 8)) {
                 /* for palette traversal */
                 unsigned int color_start, color_count, color_end;
-                unsigned char r, g, b;
+                unsigned char a, r, g, b;
 
                 if (color_greyscale) {
                     int color_index, color_dec;
@@ -1190,7 +1228,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                         }else
                         r = g = b = color_index;
                         sc->palette[j] =
-                            (r << 16) | (g << 8) | (b);
+                            (0xFFU << 24) | (r << 16) | (g << 8) | (b);
                         color_index -= color_dec;
                         if (color_index < 0)
                             color_index = 0;
@@ -1211,7 +1249,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                         g = color_table[j * 3 + 1];
                         b = color_table[j * 3 + 2];
                         sc->palette[j] =
-                            (r << 16) | (g << 8) | (b);
+                            (0xFFU << 24) | (r << 16) | (g << 8) | (b);
                     }
                 } else {
                     /* load the palette from the file */
@@ -1221,10 +1259,9 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                     if ((color_start <= 255) &&
                         (color_end <= 255)) {
                         for (j = color_start; j <= color_end; j++) {
-                            /* each R, G, or B component is 16 bits;
-                             * only use the top 8 bits; skip alpha bytes
-                             * up front */
-                            avio_r8(pb);
+                            /* each A, R, G, or B component is 16 bits;
+                             * only use the top 8 bits */
+                            a = avio_r8(pb);
                             avio_r8(pb);
                             r = avio_r8(pb);
                             avio_r8(pb);
@@ -1233,7 +1270,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                             b = avio_r8(pb);
                             avio_r8(pb);
                             sc->palette[j] =
-                                (r << 16) | (g << 8) | (b);
+                                (a << 24 ) | (r << 16) | (g << 8) | (b);
                         }
                     }
                 }

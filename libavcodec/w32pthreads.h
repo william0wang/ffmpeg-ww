@@ -120,7 +120,7 @@ typedef struct {
     volatile int waiter_count;
     HANDLE semaphore;
     HANDLE waiters_done;
-    int is_broadcast;
+    volatile int is_broadcast;
 } win32_cond_t;
 
 static void pthread_cond_init(pthread_cond_t *cond, const void *unused_attr)
@@ -139,7 +139,7 @@ static void pthread_cond_init(pthread_cond_t *cond, const void *unused_attr)
     win32_cond->semaphore = CreateSemaphore(NULL, 0, 0x7fffffff, NULL);
     if (!win32_cond->semaphore)
         return;
-    win32_cond->waiters_done = CreateEvent(NULL, FALSE, FALSE, NULL);
+    win32_cond->waiters_done = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!win32_cond->waiters_done)
         return;
 
@@ -187,6 +187,7 @@ static void pthread_cond_broadcast(pthread_cond_t *cond)
         ReleaseSemaphore(win32_cond->semaphore, win32_cond->waiter_count, NULL);
         pthread_mutex_unlock(&win32_cond->mtx_waiter_count);
         WaitForSingleObject(win32_cond->waiters_done, INFINITE);
+        ResetEvent(win32_cond->waiters_done);
         win32_cond->is_broadcast = 0;
     } else
         pthread_mutex_unlock(&win32_cond->mtx_waiter_count);
@@ -204,11 +205,10 @@ static void pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 
     /* non native condition variables */
     pthread_mutex_lock(&win32_cond->mtx_broadcast);
-    pthread_mutex_unlock(&win32_cond->mtx_broadcast);
-
     pthread_mutex_lock(&win32_cond->mtx_waiter_count);
     win32_cond->waiter_count++;
     pthread_mutex_unlock(&win32_cond->mtx_waiter_count);
+    pthread_mutex_unlock(&win32_cond->mtx_broadcast);
 
     // unlock the external mutex
     pthread_mutex_unlock(mutex);
@@ -216,7 +216,7 @@ static void pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 
     pthread_mutex_lock(&win32_cond->mtx_waiter_count);
     win32_cond->waiter_count--;
-    last_waiter = !win32_cond->waiter_count && win32_cond->is_broadcast;
+    last_waiter = !win32_cond->waiter_count || !win32_cond->is_broadcast;
     pthread_mutex_unlock(&win32_cond->mtx_waiter_count);
 
     if (last_waiter)
@@ -235,13 +235,20 @@ static void pthread_cond_signal(pthread_cond_t *cond)
         return;
     }
 
+    pthread_mutex_lock(&win32_cond->mtx_broadcast);
+
     /* non-native condition variables */
     pthread_mutex_lock(&win32_cond->mtx_waiter_count);
     have_waiter = win32_cond->waiter_count;
     pthread_mutex_unlock(&win32_cond->mtx_waiter_count);
 
-    if (have_waiter)
+    if (have_waiter) {
         ReleaseSemaphore(win32_cond->semaphore, 1, NULL);
+        WaitForSingleObject(win32_cond->waiters_done, INFINITE);
+        ResetEvent(win32_cond->waiters_done);
+    }
+
+    pthread_mutex_unlock(&win32_cond->mtx_broadcast);
 }
 
 static void w32thread_init(void)
