@@ -50,7 +50,7 @@ static int pam_encode_frame(AVCodecContext *avctx, unsigned char *outbuf,
     h = avctx->height;
     w = avctx->width;
     switch (avctx->pix_fmt) {
-    case PIX_FMT_MONOWHITE:
+    case PIX_FMT_MONOBLACK:
         n          = (w + 7) >> 3;
         depth      = 1;
         maxval     = 1;
@@ -61,6 +61,18 @@ static int pam_encode_frame(AVCodecContext *avctx, unsigned char *outbuf,
         depth      = 1;
         maxval     = 255;
         tuple_type = "GRAYSCALE";
+        break;
+    case PIX_FMT_GRAY16BE:
+        n          = w * 2;
+        depth      = 1;
+        maxval     = 0xFFFF;
+        tuple_type = "GRAYSCALE";
+        break;
+    case PIX_FMT_GRAY8A:
+        n          = w * 2;
+        depth      = 2;
+        maxval     = 255;
+        tuple_type = "GRAYSCALE_ALPHA";
         break;
     case PIX_FMT_RGB24:
         n          = w * 3;
@@ -73,6 +85,12 @@ static int pam_encode_frame(AVCodecContext *avctx, unsigned char *outbuf,
         depth      = 4;
         maxval     = 255;
         tuple_type = "RGB_ALPHA";
+        break;
+    case PIX_FMT_RGB48BE:
+        n          = w * 6;
+        depth      = 3;
+        maxval     = 0xFFFF;
+        tuple_type = "RGB";
         break;
     default:
         return -1;
@@ -97,6 +115,13 @@ static int pam_encode_frame(AVCodecContext *avctx, unsigned char *outbuf,
             }
             ptr += linesize;
         }
+    } else if (avctx->pix_fmt == PIX_FMT_MONOBLACK){
+        int j;
+        for (i = 0; i < h; i++) {
+            for (j = 0; j < w; j++)
+                *s->bytestream++ = ptr[j >> 3] >> (7 - j & 7) & 1;
+            ptr += linesize;
+        }
     } else {
         for (i = 0; i < h; i++) {
             memcpy(s->bytestream, ptr, n);
@@ -115,6 +140,6 @@ AVCodec ff_pam_encoder = {
     .priv_data_size = sizeof(PNMContext),
     .init           = ff_pnm_init,
     .encode         = pam_encode_frame,
-    .pix_fmts  = (const enum PixelFormat[]){PIX_FMT_RGB24, PIX_FMT_RGB32, PIX_FMT_GRAY8, PIX_FMT_MONOWHITE, PIX_FMT_NONE},
+    .pix_fmts  = (const enum PixelFormat[]){PIX_FMT_RGB24, PIX_FMT_RGB32, PIX_FMT_RGB48BE, PIX_FMT_GRAY8, PIX_FMT_GRAY8A, PIX_FMT_GRAY16BE, PIX_FMT_MONOBLACK, PIX_FMT_NONE},
     .long_name = NULL_IF_CONFIG_SMALL("PAM (Portable AnyMap) image"),
 };

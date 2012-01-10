@@ -404,7 +404,7 @@ static int ea_read_header(AVFormatContext *s,
     EaDemuxContext *ea = s->priv_data;
     AVStream *st;
 
-    if (!process_ea_header(s))
+    if (process_ea_header(s)<=0)
         return AVERROR(EIO);
 
     if (ea->video_codec) {
@@ -434,6 +434,11 @@ static int ea_read_header(AVFormatContext *s,
         if (ea->sample_rate <= 0) {
             av_log(s, AV_LOG_ERROR, "Unsupported sample rate: %d\n", ea->sample_rate);
             ea->audio_codec = 0;
+            return 1;
+        }
+        if (ea->bytes <= 0) {
+            av_log(s, AV_LOG_ERROR, "Invalid number of bytes per sample: %d\n", ea->bytes);
+            ea->audio_codec = CODEC_ID_NONE;
             return 1;
         }
 

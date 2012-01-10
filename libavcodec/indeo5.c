@@ -482,7 +482,7 @@ static int decode_mb_info(IVI5DecContext *ctx, IVIBandDesc *band,
                 }
 
                 mb->mv_x = mb->mv_y = 0; /* no motion vector coded */
-                if (band->inherit_mv){
+                if (band->inherit_mv && ref_mb){
                     /* motion vector inheritance */
                     if (mv_scale) {
                         mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
@@ -493,7 +493,7 @@ static int decode_mb_info(IVI5DecContext *ctx, IVIBandDesc *band,
                     }
                 }
             } else {
-                if (band->inherit_mv) {
+                if (band->inherit_mv && ref_mb) {
                     mb->type = ref_mb->type; /* copy mb_type from corresponding reference mb */
                 } else if (ctx->frame_type == FRAMETYPE_INTRA) {
                     mb->type = 0; /* mb_type is always INTRA for intra-frames */
@@ -519,7 +519,7 @@ static int decode_mb_info(IVI5DecContext *ctx, IVIBandDesc *band,
                 if (!mb->type) {
                     mb->mv_x = mb->mv_y = 0; /* there is no motion vector in intra-macroblocks */
                 } else {
-                    if (band->inherit_mv){
+                    if (band->inherit_mv && ref_mb){
                         /* motion vector inheritance */
                         if (mv_scale) {
                             mb->mv_x = ivi_scale_mv(ref_mb->mv_x, mv_scale);
@@ -760,7 +760,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     switch_buffers(ctx);
 
-    //START_TIMER;
+    //{ START_TIMER;
 
     if (ctx->frame_type != FRAMETYPE_NULL) {
         for (p = 0; p < 3; p++) {
@@ -775,7 +775,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
     }
 
-    //STOP_TIMER("decode_planes");
+    //STOP_TIMER("decode_planes"); }
 
     if (ctx->frame.data[0])
         avctx->release_buffer(avctx, &ctx->frame);

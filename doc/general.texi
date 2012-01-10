@@ -134,7 +134,7 @@ library:
 @item Brute Force & Ignorance   @tab   @tab X
     @tab Used in the game Flash Traffic: City of Angels.
 @item BWF                       @tab X @tab X
-@item CRI ADX                   @tab   @tab X
+@item CRI ADX                   @tab X @tab X
     @tab Audio-only format used in console video games.
 @item Discworld II BMV          @tab   @tab X
 @item Interplay C93             @tab   @tab X
@@ -438,6 +438,8 @@ following image formats are supported:
 @item Autodesk Animator Flic video  @tab     @tab  X
 @item Autodesk RLE           @tab     @tab  X
     @tab fourcc: AASC
+@item Avid 1:1 10-bit RGB Packer  @tab   @tab  X
+    @tab fourcc: AVrp
 @item AVS (Audio Video Standard) video  @tab     @tab  X
     @tab Video encoding used by the Creature Shock game.
 @item Beam Software VB       @tab     @tab  X
@@ -445,6 +447,7 @@ following image formats are supported:
     @tab Used in some games from Bethesda Softworks.
 @item Bink Video             @tab     @tab  X
 @item Bitmap Brothers JV video  @tab   @tab X
+@item y41p Brooktree uncompressed 4:1:1 12-bit     @tab  X  @tab  X
 @item Brute Force & Ignorance   @tab   @tab X
     @tab Used in the game Flash Traffic: City of Angels.
 @item C93 video              @tab     @tab  X
@@ -606,6 +609,7 @@ following image formats are supported:
     @tab Codec used in DOS CD-ROM FlashBack game.
 @item Ut Video               @tab     @tab  X
 @item v210 QuickTime uncompressed 4:2:2 10-bit     @tab  X  @tab  X
+@item v308 QuickTime uncompressed 4:4:4            @tab  X  @tab  X
 @item v410 QuickTime uncompressed 4:4:4 10-bit     @tab  X  @tab  X
 @item VBLE Lossless Codec    @tab     @tab  X
 @item VMware Screen Codec / VMware Video  @tab     @tab  X
@@ -624,6 +628,8 @@ following image formats are supported:
 @item WMV7                   @tab  X  @tab  X
 @item YAMAHA SMAF            @tab  X  @tab  X
 @item Psygnosis YOP Video    @tab     @tab  X
+@item yuv4                   @tab  X  @tab  X
+    @tab libquicktime uncompressed packed 4:2:0
 @item ZLIB                   @tab  X  @tab  X
     @tab part of LCL, encoder experimental
 @item Zip Motion Blocks Video  @tab   X @tab  X
