@@ -133,6 +133,23 @@ particular shown element.
 This option is enabled by default, but you may need to disable it
 for specific uses, for example when creating XSD-compliant XML output.
 
+@item -show_program_version
+Show information related to program version.
+
+Version information is printed within a section with name
+"PROGRAM_VERSION".
+
+@item -show_library_versions
+Show information related to library versions.
+
+Version information for each library is printed within a section with
+name "LIBRARY_VERSION".
+
+@item -show_versions
+Show information related to program and library versions. This is the
+equivalent of setting both @option{-show_program_version} and
+@option{-show_library_versions} options.
+
 @item -i @var{input_file}
 Read @var{input_file}.
 
@@ -227,6 +244,18 @@ This writer is equivalent to
 JSON based format.
 
 Each section is printed using JSON notation.
+
+This writer accepts options as a list of @var{key}=@var{value} pairs,
+separated by ":".
+
+The description of the accepted options follows.
+
+@table @option
+
+@item compact, c
+If set to 1 enable compact output, that is each section will be
+printed on a single line. Default value is 0.
+@end table
 
 For more information about JSON, see @url{http://www.json.org/}.
 

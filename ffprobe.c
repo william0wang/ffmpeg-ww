@@ -24,6 +24,7 @@
  */
 
 #include "config.h"
+#include "version.h"
 
 #include "libavformat/avformat.h"
 #include "libavcodec/avcodec.h"
@@ -32,6 +33,9 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/dict.h"
 #include "libavdevice/avdevice.h"
+#include "libswscale/swscale.h"
+#include "libswresample/swresample.h"
+#include "libpostproc/postprocess.h"
 #include "cmdutils.h"
 
 const char program_name[] = "ffprobe";
@@ -42,6 +46,8 @@ static int do_show_format  = 0;
 static int do_show_frames  = 0;
 static int do_show_packets = 0;
 static int do_show_streams = 0;
+static int do_show_program_version  = 0;
+static int do_show_library_versions = 0;
 
 static int show_value_unit              = 0;
 static int use_value_prefix             = 0;
@@ -417,7 +423,7 @@ static inline char *upcase_string(char *dst, size_t dst_size, const char *src)
 {
     int i;
     for (i = 0; src[i] && i < dst_size-1; i++)
-        dst[i] = src[i]-32;
+        dst[i] = av_toupper(src[i]);
     dst[i] = 0;
     return dst;
 }
@@ -717,16 +723,52 @@ static const Writer csv_writer = {
 /* JSON output */
 
 typedef struct {
+    const AVClass *class;
     int multiple_entries; ///< tells if the given chapter requires multiple entries
     char *buf;
     size_t buf_size;
     int print_packets_and_frames;
     int indent_level;
+    int compact;
+    const char *item_sep, *item_start_end;
 } JSONContext;
+
+#undef OFFSET
+#define OFFSET(x) offsetof(JSONContext, x)
+
+static const AVOption json_options[]= {
+    { "compact", "enable compact output", OFFSET(compact), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { "c",       "enable compact output", OFFSET(compact), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { NULL }
+};
+
+static const char *json_get_name(void *ctx)
+{
+    return "json";
+}
+
+static const AVClass json_class = {
+    "JSONContext",
+    json_get_name,
+    json_options
+};
 
 static av_cold int json_init(WriterContext *wctx, const char *args, void *opaque)
 {
     JSONContext *json = wctx->priv;
+    int err;
+
+    json->class = &json_class;
+    av_opt_set_defaults(json);
+
+    if (args &&
+        (err = (av_set_options_string(json, args, "=", ":"))) < 0) {
+        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        return err;
+    }
+
+    json->item_sep       = json->compact ? ", " : ",\n";
+    json->item_start_end = json->compact ? " "  : "\n";
 
     json->buf_size = ESCAPE_INIT_BUF_SIZE;
     if (!(json->buf = av_malloc(json->buf_size)))
@@ -801,7 +843,7 @@ static void json_print_chapter_header(WriterContext *wctx, const char *chapter)
     printf("\n");
     json->multiple_entries = !strcmp(chapter, "packets") || !strcmp(chapter, "frames" ) ||
                              !strcmp(chapter, "packets_and_frames") ||
-                             !strcmp(chapter, "streams");
+                             !strcmp(chapter, "streams") || !strcmp(chapter, "library_versions");
     if (json->multiple_entries) {
         JSON_INDENT();
         printf("\"%s\": [\n", json_escape_str(&json->buf, &json->buf_size, chapter, wctx));
@@ -831,11 +873,13 @@ static void json_print_section_header(WriterContext *wctx, const char *section)
     JSON_INDENT();
     if (!json->multiple_entries)
         printf("\"%s\": ", section);
-    printf("{\n");
+    printf("{%s", json->item_start_end);
     json->indent_level++;
     /* this is required so the parser can distinguish between packets and frames */
     if (json->print_packets_and_frames) {
-        JSON_INDENT(); printf("\"type\": \"%s\",\n", section);
+        if (!json->compact)
+            JSON_INDENT();
+        printf("\"type\": \"%s\"%s", section, json->item_sep);
     }
 }
 
@@ -843,9 +887,11 @@ static void json_print_section_footer(WriterContext *wctx, const char *section)
 {
     JSONContext *json = wctx->priv;
 
-    printf("\n");
+    printf("%s", json->item_start_end);
     json->indent_level--;
-    JSON_INDENT(); printf("}");
+    if (!json->compact)
+        JSON_INDENT();
+    printf("}");
 }
 
 static inline void json_print_item_str(WriterContext *wctx,
@@ -853,14 +899,17 @@ static inline void json_print_item_str(WriterContext *wctx,
 {
     JSONContext *json = wctx->priv;
 
-    JSON_INDENT();
     printf("\"%s\":", json_escape_str(&json->buf, &json->buf_size, key,   wctx));
     printf(" \"%s\"", json_escape_str(&json->buf, &json->buf_size, value, wctx));
 }
 
 static void json_print_str(WriterContext *wctx, const char *key, const char *value)
 {
-    if (wctx->nb_item) printf(",\n");
+    JSONContext *json = wctx->priv;
+
+    if (wctx->nb_item) printf("%s", json->item_sep);
+    if (!json->compact)
+        JSON_INDENT();
     json_print_item_str(wctx, key, value);
 }
 
@@ -868,8 +917,9 @@ static void json_print_int(WriterContext *wctx, const char *key, long long int v
 {
     JSONContext *json = wctx->priv;
 
-    if (wctx->nb_item) printf(",\n");
-    JSON_INDENT();
+    if (wctx->nb_item) printf("%s", json->item_sep);
+    if (!json->compact)
+        JSON_INDENT();
     printf("\"%s\": %lld",
            json_escape_str(&json->buf, &json->buf_size, key, wctx), value);
 }
@@ -881,15 +931,23 @@ static void json_show_tags(WriterContext *wctx, AVDictionary *dict)
     int is_first = 1;
     if (!dict)
         return;
-    printf(",\n"); JSON_INDENT(); printf("\"tags\": {\n");
+    printf("%s", json->item_sep);
+    if (!json->compact)
+        JSON_INDENT();
+    printf("\"tags\": {%s", json->item_start_end);
     json->indent_level++;
     while ((tag = av_dict_get(dict, "", tag, AV_DICT_IGNORE_SUFFIX))) {
         if (is_first) is_first = 0;
-        else          printf(",\n");
+        else          printf("%s", json->item_sep);
+        if (!json->compact)
+            JSON_INDENT();
         json_print_item_str(wctx, tag->key, tag->value);
     }
     json->indent_level--;
-    printf("\n"); JSON_INDENT(); printf("}");
+    printf("%s", json->item_start_end);
+    if (!json->compact)
+        JSON_INDENT();
+    printf("}");
 }
 
 static const Writer json_writer = {
@@ -1069,7 +1127,7 @@ static void xml_print_chapter_header(WriterContext *wctx, const char *chapter)
         printf("\n");
     xml->multiple_entries = !strcmp(chapter, "packets") || !strcmp(chapter, "frames") ||
                             !strcmp(chapter, "packets_and_frames") ||
-                            !strcmp(chapter, "streams");
+                            !strcmp(chapter, "streams") || !strcmp(chapter, "library_versions");
 
     if (xml->multiple_entries) {
         XML_INDENT(); printf("<%s>\n", chapter);
@@ -1547,6 +1605,54 @@ static void show_usage(void)
     av_log(NULL, AV_LOG_INFO, "\n");
 }
 
+static void ffprobe_show_program_version(WriterContext *w)
+{
+    struct print_buf pbuf = {.s = NULL};
+
+    writer_print_chapter_header(w, "program_version");
+    print_section_header("program_version");
+    print_str("version", FFMPEG_VERSION);
+    print_fmt("copyright", "Copyright (c) %d-%d the FFmpeg developers",
+              program_birth_year, this_year);
+    print_str("build_date", __DATE__);
+    print_str("build_time", __TIME__);
+    print_str("compiler_type", CC_TYPE);
+    print_str("compiler_version", CC_VERSION);
+    print_str("configuration", FFMPEG_CONFIGURATION);
+    print_section_footer("program_version");
+    writer_print_chapter_footer(w, "program_version");
+
+    av_free(pbuf.s);
+}
+
+#define SHOW_LIB_VERSION(libname, LIBNAME)                              \
+    do {                                                                \
+        if (CONFIG_##LIBNAME) {                                         \
+            unsigned int version = libname##_version();                 \
+            print_section_header("library_version");                    \
+            print_str("name",    "lib" #libname);                       \
+            print_int("major",   LIB##LIBNAME##_VERSION_MAJOR);         \
+            print_int("minor",   LIB##LIBNAME##_VERSION_MINOR);         \
+            print_int("micro",   LIB##LIBNAME##_VERSION_MICRO);         \
+            print_int("version", version);                              \
+            print_section_footer("library_version");                    \
+        }                                                               \
+    } while (0)
+
+static void ffprobe_show_library_versions(WriterContext *w)
+{
+    writer_print_chapter_header(w, "library_versions");
+    SHOW_LIB_VERSION(avutil,     AVUTIL);
+    SHOW_LIB_VERSION(avcodec,    AVCODEC);
+    SHOW_LIB_VERSION(avformat,   AVFORMAT);
+    SHOW_LIB_VERSION(avdevice,   AVDEVICE);
+    SHOW_LIB_VERSION(avfilter,   AVFILTER);
+    SHOW_LIB_VERSION(swscale,    SWSCALE);
+    SHOW_LIB_VERSION(swresample, SWRESAMPLE);
+    SHOW_LIB_VERSION(postproc,   POSTPROC);
+    writer_print_chapter_footer(w, "library_versions");
+}
+
 static int opt_format(const char *opt, const char *arg)
 {
     iformat = av_find_input_format(arg);
@@ -1590,6 +1696,13 @@ static int opt_pretty(const char *opt, const char *arg)
     return 0;
 }
 
+static int opt_show_versions(const char *opt, const char *arg)
+{
+    do_show_program_version  = 1;
+    do_show_library_versions = 1;
+    return 0;
+}
+
 static const OptionDef options[] = {
 #include "cmdutils_common_opts.h"
     { "f", HAS_ARG, {(void*)opt_format}, "force format", "format" },
@@ -1608,6 +1721,9 @@ static const OptionDef options[] = {
     { "show_frames",  OPT_BOOL, {(void*)&do_show_frames} , "show frames info" },
     { "show_packets", OPT_BOOL, {(void*)&do_show_packets}, "show packets info" },
     { "show_streams", OPT_BOOL, {(void*)&do_show_streams}, "show streams info" },
+    { "show_program_version",  OPT_BOOL, {(void*)&do_show_program_version},  "show ffprobe version" },
+    { "show_library_versions", OPT_BOOL, {(void*)&do_show_library_versions}, "show library versions" },
+    { "show_versions",         0, {(void*)&opt_show_versions}, "show program and library versions" },
     { "show_private_data", OPT_BOOL, {(void*)&show_private_data}, "show private data" },
     { "private",           OPT_BOOL, {(void*)&show_private_data}, "same as show_private_data" },
     { "default", HAS_ARG | OPT_AUDIO | OPT_VIDEO | OPT_EXPERT, {(void*)opt_default}, "generic catch all option", "" },
@@ -1651,12 +1767,19 @@ int main(int argc, char **argv)
     if ((ret = writer_open(&wctx, w, w_args, NULL)) >= 0) {
         writer_print_header(wctx);
 
-        if (!input_filename) {
+        if (do_show_program_version)
+            ffprobe_show_program_version(wctx);
+        if (do_show_library_versions)
+            ffprobe_show_library_versions(wctx);
+
+        if (!input_filename &&
+            ((do_show_format || do_show_streams || do_show_packets || do_show_error) ||
+             (!do_show_program_version && !do_show_library_versions))) {
             show_usage();
             av_log(NULL, AV_LOG_ERROR, "You have to specify one input file.\n");
             av_log(NULL, AV_LOG_ERROR, "Use -h to get full help or, even better, run 'man %s'.\n", program_name);
             ret = AVERROR(EINVAL);
-        } else {
+        } else if (input_filename) {
             ret = probe_file(wctx, input_filename);
             if (ret < 0 && do_show_error)
                 show_error(wctx, ret);
