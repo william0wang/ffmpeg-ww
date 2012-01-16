@@ -988,7 +988,7 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
             av_free_packet(pkt);
             new_pkt.destruct = av_destruct_packet;
         } else if (a < 0) {
-            av_log(NULL, AV_LOG_ERROR, "%s failed for stream %d, codec %s",
+            av_log(NULL, AV_LOG_ERROR, "Failed to open bitstream filter %s for stream %d with codec %s",
                    bsfc->filter->name, pkt->stream_index,
                    avctx->codec ? avctx->codec->name : "copy");
             print_error("", a);
@@ -2078,7 +2078,7 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
     frame_sample_aspect= av_opt_ptr(avcodec_get_frame_class(), decoded_frame, "sample_aspect_ratio");
     for(i=0;i<nb_output_streams;i++) {
         OutputStream *ost = ost = &output_streams[i];
-        if(check_output_constraints(ist, ost)){
+        if(check_output_constraints(ist, ost) && ost->encoding_needed){
             if (!frame_sample_aspect->num)
                 *frame_sample_aspect = ist->st->sample_aspect_ratio;
             decoded_frame->pts = ist->pts;
@@ -2621,9 +2621,9 @@ static int transcode_init(OutputFile *output_files, int nb_output_files,
             }
         }
         if (codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-            /* maximum video buffer size is 6-bytes per pixel, plus DPX header size (1664)*/
+            /* maximum video buffer size is 8-bytes per pixel, plus DPX header size (1664)*/
             int size        = codec->width * codec->height;
-            bit_buffer_size = FFMAX(bit_buffer_size, 7*size + 10000);
+            bit_buffer_size = FFMAX(bit_buffer_size, 9*size + 10000);
         }
     }
 
@@ -4866,16 +4866,17 @@ static int opt_passlogfile(const char *opt, const char *arg)
 
 static int opt_old2new(OptionsContext *o, const char *opt, const char *arg)
 {
-    char *s= av_malloc(strlen(opt)+2);
-    snprintf(s, strlen(opt)+2, "%s:%c", opt+1, *opt);
-    return parse_option(o, s, arg, options);
+    char *s = av_asprintf("%s:%c", opt + 1, *opt);
+    int ret = parse_option(o, s, arg, options);
+    av_free(s);
+    return ret;
 }
 
 static int opt_bitrate(OptionsContext *o, const char *opt, const char *arg)
 {
     if(!strcmp(opt, "b")){
         av_log(0,AV_LOG_WARNING, "Please use -b:a or -b:v, -b is ambiguous\n");
-        return parse_option(o, av_strdup("b:v"), arg, options);
+        return parse_option(o, "b:v", arg, options);
     }
     return opt_default(opt, arg);
 }

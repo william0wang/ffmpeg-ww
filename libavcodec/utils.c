@@ -557,6 +557,11 @@ int avcodec_default_reget_buffer(AVCodecContext *s, AVFrame *pic){
 
     assert(s->codec_type == AVMEDIA_TYPE_VIDEO);
 
+    if (pic->data[0] && (pic->width != s->width || pic->height != s->height || pic->format != s->pix_fmt)) {
+        av_log(s, AV_LOG_WARNING, "Width/height/fmt changing with reget buffer\n");
+        s->release_buffer(s, pic);
+    }
+
     /* If no picture return a new buffer */
     if(pic->data[0] == NULL) {
         /* We will copy from buffer, so must be readable */
@@ -702,6 +707,13 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, AVCodec *codec, AVD
     }
     if ((ret = av_opt_set_dict(avctx, &tmp)) < 0)
         goto free_and_end;
+
+    if (codec->capabilities & CODEC_CAP_EXPERIMENTAL)
+        if (avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
+            av_log(avctx, AV_LOG_ERROR, "Codec is experimental but experimental codecs are not enabled, see -strict -2\n");
+            ret = -1;
+            goto free_and_end;
+        }
 
     //We only call avcodec_set_dimensions() for non h264 codecs so as not to overwrite previously setup dimensions
     if(!( avctx->coded_width && avctx->coded_height && avctx->width && avctx->height && avctx->codec_id == CODEC_ID_H264)){
@@ -982,24 +994,26 @@ static void apply_param_change(AVCodecContext *avctx, AVPacket *avpkt)
 
 int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *picture,
                          int *got_picture_ptr,
-                         AVPacket *avpkt)
+                         const AVPacket *avpkt)
 {
     int ret;
+    // copy to ensure we do not change avpkt
+    AVPacket tmp = *avpkt;
 
     *got_picture_ptr= 0;
     if((avctx->coded_width||avctx->coded_height) && av_image_check_size(avctx->coded_width, avctx->coded_height, 0, avctx))
         return -1;
 
     if((avctx->codec->capabilities & CODEC_CAP_DELAY) || avpkt->size || (avctx->active_thread_type&FF_THREAD_FRAME)){
-        av_packet_split_side_data(avpkt);
-        apply_param_change(avctx, avpkt);
-        avctx->pkt = avpkt;
+        int did_split = av_packet_split_side_data(&tmp);
+        apply_param_change(avctx, &tmp);
+        avctx->pkt = &tmp;
         if (HAVE_THREADS && avctx->active_thread_type&FF_THREAD_FRAME)
              ret = ff_thread_decode_frame(avctx, picture, got_picture_ptr,
-                                          avpkt);
+                                          &tmp);
         else {
             ret = avctx->codec->decode(avctx, picture, got_picture_ptr,
-                              avpkt);
+                              &tmp);
             picture->pkt_dts= avpkt->dts;
 
             if(!avctx->has_b_frames){
@@ -1018,6 +1032,9 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
 
         emms_c(); //needed to avoid an emms_c() call before every return;
 
+        avctx->pkt = NULL;
+        if (did_split)
+            ff_packet_free_side_data(&tmp);
 
         if (*got_picture_ptr){
             avctx->frame_number++;
@@ -1040,8 +1057,10 @@ int attribute_align_arg avcodec_decode_audio3(AVCodecContext *avctx, int16_t *sa
     int ret, got_frame = 0;
 
     if (avctx->get_buffer != avcodec_default_get_buffer) {
-        av_log(avctx, AV_LOG_ERROR, "Overriding custom get_buffer() for "
-               "avcodec_decode_audio3()\n");
+        av_log(avctx, AV_LOG_ERROR, "Custom get_buffer() for use with"
+               "avcodec_decode_audio3() detected. Overriding with avcodec_default_get_buffer\n");
+        av_log(avctx, AV_LOG_ERROR, "Please port your application to "
+               "avcodec_decode_audio4()\n");
         avctx->get_buffer = avcodec_default_get_buffer;
         avctx->release_buffer = avcodec_default_release_buffer;
     }

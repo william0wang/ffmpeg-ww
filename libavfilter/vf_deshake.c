@@ -259,8 +259,6 @@ static void find_motion(DeshakeContext *deshake, uint8_t *src1, uint8_t *src2,
 
     int pos;
     double *angles = av_malloc(sizeof(*angles) * width * height / (16 * deshake->blocksize));
-    double totalangles = 0;
-
     int center_x = 0, center_y = 0;
     double p_x, p_y;
 
@@ -298,13 +296,6 @@ static void find_motion(DeshakeContext *deshake, uint8_t *src1, uint8_t *src2,
 
     center_x /= pos;
     center_y /= pos;
-
-    for (x = 0; x < pos; x++) {
-        totalangles += angles[x];
-    }
-
-    //av_log(NULL, AV_LOG_ERROR, "Angle: %lf\n", totalangles / (pos - 1));
-    t->angle = totalangles / (pos - 1);
 
     t->angle = clean_mean(angles, pos);
     if (t->angle < 0.001)
@@ -433,11 +424,10 @@ static void end_frame(AVFilterLink *link)
     DeshakeContext *deshake = link->dst->priv;
     AVFilterBufferRef *in  = link->cur_buf;
     AVFilterBufferRef *out = link->dst->outputs[0]->out_buf;
-    Transform t;
+    Transform t = {{0},0}, orig = {{0},0};
     float matrix[9];
     float alpha = 2.0 / deshake->refcount;
     char tmp[256];
-    Transform orig;
 
     if (deshake->cx < 0 || deshake->cy < 0 || deshake->cw < 0 || deshake->ch < 0) {
         // Find the most likely global motion for the current frame

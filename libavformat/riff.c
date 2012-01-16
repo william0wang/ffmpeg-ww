@@ -135,6 +135,8 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_MPEG2VIDEO,   MKTAG('E', 'M', '2', 'V') },
     { CODEC_ID_MPEG2VIDEO,   MKTAG('M', '7', '0', '1') }, /* Matrox MPEG2 intra-only */
     { CODEC_ID_MPEG2VIDEO,   MKTAG('m', 'p', 'g', 'v') },
+    { CODEC_ID_MPEG1VIDEO,   MKTAG('B', 'W', '1', '0') },
+    { CODEC_ID_MPEG1VIDEO,   MKTAG('X', 'M', 'P', 'G') }, /* Xing MPEG intra only */
     { CODEC_ID_MJPEG,        MKTAG('M', 'J', 'P', 'G') },
     { CODEC_ID_MJPEG,        MKTAG('L', 'J', 'P', 'G') },
     { CODEC_ID_MJPEG,        MKTAG('d', 'm', 'b', '1') },
@@ -338,6 +340,8 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { CODEC_ID_AAC_LATM,        0x1602 },
     { CODEC_ID_AC3,             0x2000 },
     { CODEC_ID_DTS,             0x2001 },
+    { CODEC_ID_SONIC,           0x2048 },
+    { CODEC_ID_SONIC_LS,        0x2048 },
     { CODEC_ID_PCM_MULAW,       0x6c75 },
     { CODEC_ID_AAC,             0x706d },
     { CODEC_ID_AAC,             0x4143 },
@@ -671,7 +675,8 @@ void ff_parse_specific_params(AVCodecContext *stream, int *au_rate, int *au_ssiz
 void ff_get_guid(AVIOContext *s, ff_asf_guid *g)
 {
     assert(sizeof(*g) == 16);
-    avio_read(s, *g, sizeof(*g));
+    if (avio_read(s, *g, sizeof(*g)) < (int)sizeof(*g))
+        memset(*g, 0, sizeof(*g));
 }
 
 enum CodecID ff_codec_guid_get_id(const AVCodecGuid *guids, ff_asf_guid guid)
