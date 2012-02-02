@@ -27,9 +27,9 @@ _config="configure \
   --extra-libs="-Wl,--enable-auto-import" "
 
 _config_lite="\
+  --disable-ffmpeg \
   --disable-muxers \
   --disable-filters \
-  --disable-avfilter \
   --disable-encoders \
   --enable-encoder=mpeg1video \
   --enable-encoder=huffyuv \
@@ -43,7 +43,7 @@ _config_lite="\
   --prefix=/usr/local/ffmpeg-ww "
 
 if test $_target = full ; then
-    _config+=" --enable-avfilter --enable-libvpx --enable-libfaac --enable-libmp3lame --enable-libaacplus --extra-cflags=-I/usr/local/x264/include --extra-ldflags=-L/usr/local/x264/lib --prefix=/usr/local/ffmpeg-ww-full "
+    _config+=" --enable-libvpx --enable-libfaac --enable-libmp3lame --enable-libaacplus --extra-cflags=-I/usr/local/x264/include --extra-ldflags=-L/usr/local/x264/lib --prefix=/usr/local/ffmpeg-ww-full "
 else
     _config+=$_config_lite
 fi
