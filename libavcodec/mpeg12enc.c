@@ -135,13 +135,6 @@ static av_cold int encode_init(AVCodecContext *avctx)
     if(MPV_encode_init(avctx) < 0)
         return -1;
 
-#if FF_API_MPEGVIDEO_GLOBAL_OPTS
-    if (avctx->flags2 & CODEC_FLAG2_DROP_FRAME_TIMECODE)
-        s->drop_frame_timecode = 1;
-    if (avctx->flags & CODEC_FLAG_SVCD_SCAN_OFFSET)
-        s->scan_offset = 1;
-#endif
-
     if(find_frame_rate_index(s) < 0){
         if(s->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL){
             av_log(avctx, AV_LOG_ERROR, "MPEG1/2 does not support %d/%d fps\n", avctx->time_base.den, avctx->time_base.num);
@@ -974,7 +967,7 @@ AVCodec ff_mpeg1video_encoder = {
     .close          = MPV_encode_end,
     .supported_framerates= avpriv_frame_rate_tab+1,
     .pix_fmts= (const enum PixelFormat[]){PIX_FMT_YUV420P, PIX_FMT_NONE},
-    .capabilities= CODEC_CAP_DELAY | CODEC_CAP_SLICE_THREADS,
+    .capabilities= CODEC_CAP_DELAY,
     .long_name= NULL_IF_CONFIG_SMALL("MPEG-1 video"),
     .priv_class     = &mpeg1_class,
 };

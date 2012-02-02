@@ -35,6 +35,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
 #include "dv.h"
+#include "libavutil/avassert.h"
 
 struct DVDemuxContext {
     const DVprofile*  sys;    /* Current DV profile. E.g.: 525/60, 625/50 */
@@ -130,15 +131,20 @@ static int dv_extract_audio(uint8_t* frame, uint8_t* ppcm[4],
     /* We work with 720p frames split in half, thus even frames have
      * channels 0,1 and odd 2,3. */
     ipcm = (sys->height == 720 && !(frame[1] & 0x0C)) ? 2 : 0;
-    pcm  = ppcm[ipcm++];
 
     /* for each DIF channel */
     for (chan = 0; chan < sys->n_difchan; chan++) {
+        av_assert0(ipcm<4);
+        pcm = ppcm[ipcm++];
+        if (!pcm)
+            break;
+
         /* for each DIF segment */
         for (i = 0; i < sys->difseg_size; i++) {
             frame += 6 * 80; /* skip DIF segment header */
             if (quant == 1 && i == half_ch) {
                 /* next stereo channel (12bit mode only) */
+                av_assert0(ipcm<4);
                 pcm = ppcm[ipcm++];
                 if (!pcm)
                     break;
@@ -181,11 +187,6 @@ static int dv_extract_audio(uint8_t* frame, uint8_t* ppcm[4],
                 frame += 16 * 80; /* 15 Video DIFs + 1 Audio DIF */
             }
         }
-
-        /* next stereo channel (50Mbps and 100Mbps only) */
-        pcm = ppcm[ipcm++];
-        if (!pcm)
-            break;
     }
 
     return size;
@@ -206,6 +207,12 @@ static int dv_extract_audio_info(DVDemuxContext* c, uint8_t* frame)
     freq  = (as_pack[4] >> 3) & 0x07; /* 0 - 48kHz, 1 - 44,1kHz, 2 - 32kHz */
     stype = (as_pack[3] & 0x1f);      /* 0 - 2CH, 2 - 4CH, 3 - 8CH */
     quant =  as_pack[4] & 0x07;       /* 0 - 16bit linear, 1 - 12bit nonlinear */
+
+    if (stype > 3) {
+        av_log(c->fctx, AV_LOG_ERROR, "stype %d is invalid\n", stype);
+        c->ach = 0;
+        return 0;
+    }
 
     /* note: ach counts PAIRS of channels (i.e. stereo channels) */
     ach = ((int[4]){  1,  0,  2,  4})[stype];
@@ -378,7 +385,8 @@ int avpriv_dv_produce_packet(DVDemuxContext *c, AVPacket *pkt,
        c->audio_pkt[i].pts  = c->abytes * 30000*8 / c->ast[i]->codec->bit_rate;
        ppcm[i] = c->audio_buf[i];
     }
-    dv_extract_audio(buf, ppcm, c->sys);
+    if (c->ach)
+        dv_extract_audio(buf, ppcm, c->sys);
 
     /* We work with 720p frames split in half, thus even frames have
      * channels 0,1 and odd 2,3. */
@@ -476,8 +484,7 @@ finish:
     return ret;
 }
 
-static int dv_read_header(AVFormatContext *s,
-                          AVFormatParameters *ap)
+static int dv_read_header(AVFormatContext *s)
 {
     unsigned state, marker_pos = 0;
     RawDVContext *c = s->priv_data;

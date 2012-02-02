@@ -81,7 +81,6 @@ Configuration options:
                            and binaries will be unredistributable [no]
   --disable-doc            do not build documentation
   --disable-ffmpeg         disable ffmpeg build
-  --enable-avconv          enable  avconv build
   --disable-ffplay         disable ffplay build
   --disable-ffprobe        disable ffprobe build
   --disable-ffserver       disable ffserver build
@@ -218,12 +217,13 @@ Advanced options (experts only):
   --target-os=OS           compiler targets OS [$target_os]
   --target-exec=CMD        command to run executables on target
   --target-path=DIR        path to view of build directory on target
-  --nm=NM                  use nm tool
+  --nm=NM                  use nm tool NM [$nm_default]
   --ar=AR                  use archive tool AR [$ar_default]
   --as=AS                  use assembler AS [$as_default]
+  --yasmexe=EXE            use yasm-compatible assembler EXE [$yasmexe_default]
   --cc=CC                  use C compiler CC [$cc_default]
   --cxx=CXX                use C compiler CXX [$cxx_default]
-  --ld=LD                  use linker LD
+  --ld=LD                  use linker LD [$ld_default]
   --host-cc=HOSTCC         use host C compiler HOSTCC
   --host-cflags=HCFLAGS    use HCFLAGS when compiling for host
   --host-ldflags=HLDFLAGS  use HLDFLAGS when linking for host
@@ -261,6 +261,8 @@ Advanced options (experts only):
   --enable-sram            allow use of on-chip SRAM
   --disable-symver         disable symbol versioning
   --optflags               override optimization-related compiler flags
+  --postproc-version=V     build libpostproc version V.
+                           Where V can be '$ALT_PP_VER_MAJOR.$ALT_PP_VER_MINOR.$ALT_PP_VER_MICRO' or 'current'. [$postproc_version_default]
 
 Developer options (useful when working on FFmpeg itself):
   --enable-coverage        build with test coverage instrumentation
@@ -269,6 +271,9 @@ Developer options (useful when working on FFmpeg itself):
   --disable-optimizations  disable compiler optimizations
   --enable-extra-warnings  enable more compiler warnings
   --disable-stripping      disable stripping of executables and shared libraries
+  --valgrind=VALGRIND      run "make fate" tests through valgrind to detect memory
+                           leaks and errors, using the specified valgrind binary.
+                           Cannot be combined with --target-exec
   --samples=PATH           location of test samples for FATE, if not set use
                            \$FATE_SAMPLES at make invocation time.
 
@@ -558,7 +563,8 @@ print_config_mak(){
 }
 
 print_config_asm(){
-    enabled $1 && echo "%define $2"
+    enabled $1 && v=1 || v=0
+    echo "%define $2 $v"
 }
 
 print_config(){
@@ -991,7 +997,6 @@ PROGRAM_LIST="
 CONFIG_LIST="
     $COMPONENT_LIST
     $PROGRAM_LIST
-    avconv
     avplay
     avprobe
     avserver
@@ -1186,6 +1191,8 @@ HAVE_LIST="
     isatty
     kbhit
     ldbrx
+    libdc1394_1
+    libdc1394_2
     llrint
     llrintf
     local_aligned_16
@@ -1289,7 +1296,6 @@ CMDLINE_SET="
     arch
     as
     build_suffix
-    progs_suffix
     cc
     cpu
     cross_prefix
@@ -1308,6 +1314,8 @@ CMDLINE_SET="
     nm
     optflags
     pkg_config
+    postproc_version
+    progs_suffix
     samples
     strip
     sysinclude
@@ -1315,6 +1323,8 @@ CMDLINE_SET="
     target_exec
     target_os
     target_path
+    valgrind
+    yasmexe
 "
 
 CMDLINE_APPEND="
@@ -1653,6 +1663,7 @@ mp_filter_deps="gpl avcodec"
 mptestsrc_filter_deps="gpl"
 negate_filter_deps="lut_filter"
 ocv_filter_deps="libopencv"
+pan_filter_deps="swresample"
 scale_filter_deps="swscale"
 tinterlace_filter_deps="gpl"
 yadif_filter_deps="gpl"
@@ -1663,7 +1674,6 @@ avformat_deps="avcodec"
 postproc_deps="gpl"
 
 # programs
-avconv_deps="avcodec avformat swscale"
 ffplay_deps="avcodec avformat swscale sdl"
 ffplay_select="buffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
@@ -1782,6 +1792,7 @@ incdir_default='${prefix}/include'
 libdir_default='${prefix}/lib'
 mandir_default='${prefix}/share/man'
 shlibdir_default="$libdir_default"
+postproc_version_default="current"
 
 # toolchain
 ar_default="ar"
@@ -1796,7 +1807,7 @@ objformat="elf"
 pkg_config_default=pkg-config
 ranlib="ranlib"
 strip_default="strip"
-yasmexe="yasm"
+yasmexe_default="yasm"
 
 nm_opts='-g'
 nogas=":"
@@ -1808,6 +1819,12 @@ cpu="generic"
 # OS
 target_os_default=$(tolower $(uname -s))
 host_os=$target_os_default
+
+# alternative libpostproc version
+ALT_PP_VER_MAJOR=51
+ALT_PP_VER_MINOR=2
+ALT_PP_VER_MICRO=101
+ALT_PP_VER=$ALT_PP_VER_MAJOR.$ALT_PP_VER_MINOR.$ALT_PP_VER_MICRO
 
 # configurable options
 enable $PROGRAM_LIST
@@ -2015,7 +2032,17 @@ if enabled cross_compile; then
         die "Must specify target arch and OS when cross-compiling"
 fi
 
-set_default arch target_os
+set_default arch target_os postproc_version
+
+# Check if we should build alternative libpostproc version instead of current
+if   test "$postproc_version" = $ALT_PP_VER; then
+  LIBPOSTPROC_VERSION=$ALT_PP_VER
+  LIBPOSTPROC_VERSION_MAJOR=$ALT_PP_VER_MAJOR
+  LIBPOSTPROC_VERSION_MINOR=$ALT_PP_VER_MINOR
+  LIBPOSTPROC_VERSION_MICRO=$ALT_PP_VER_MICRO
+elif test "$postproc_version" != current; then
+  die "Invalid argument to --postproc-version. See --help output."
+fi
 
 ar_default="${cross_prefix}${ar_default}"
 cc_default="${cross_prefix}${cc_default}"
@@ -2027,7 +2054,7 @@ strip_default="${cross_prefix}${strip_default}"
 
 sysinclude_default="${sysroot}/usr/include"
 
-set_default cc cxx nm pkg_config strip sysinclude
+set_default cc cxx nm pkg_config strip sysinclude yasmexe
 enabled cross_compile || host_cc_default=$cc
 set_default host_cc
 
@@ -3102,8 +3129,9 @@ enabled frei0r     && { check_header frei0r.h || die "ERROR: frei0r.h header not
 enabled gnutls     && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
 enabled libaacplus && require  "libaacplus >= 2.0.0" aacplus.h aacplusEncOpen -laacplus
 enabled libass     && require_pkg_config libass ass/ass.h ass_library_init
-enabled libcelt    && require libcelt celt/celt.h celt_decode -lcelt0
-enabled libdc1394  && require_pkg_config libdc1394-2 dc1394/dc1394.h dc1394_new
+enabled libcelt    && require libcelt celt/celt.h celt_decode -lcelt0 &&
+                      { check_lib celt/celt.h celt_decoder_create_custom -lcelt0 ||
+                        die "ERROR: libcelt version must be >= 0.11.0."; }
 enabled libdirac   && require_pkg_config dirac                          \
     "libdirac_decoder/dirac_parser.h libdirac_encoder/dirac_encoder.h"  \
     "dirac_decoder_init dirac_encoder_init"
@@ -3150,6 +3178,15 @@ enabled openssl    && { check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto 
                         check_lib openssl/ssl.h SSL_library_init -lssl32 -leay32 ||
                         check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto -lws2_32 -lgdi32 ||
                         die "ERROR: openssl not found"; }
+
+# libdc1394 check
+if enabled libdc1394; then
+    { check_lib dc1394/dc1394.h dc1394_new -ldc1394 -lraw1394 &&
+        enable libdc1394_2; } ||
+    { check_lib libdc1394/dc1394_control.h dc1394_create_handle -ldc1394_control -lraw1394 &&
+        enable libdc1394_1; } ||
+    die "ERROR: No version of libdc1394 found "
+fi
 
 SDL_CONFIG="${cross_prefix}sdl-config"
 if check_pkg_config sdl SDL_version.h SDL_Linked_Version; then
@@ -3238,6 +3275,7 @@ fi
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 enabled coverage && add_cflags "-fprofile-arcs -ftest-coverage" && add_ldflags "-fprofile-arcs -ftest-coverage"
+test -n "$valgrind" && target_exec="$valgrind --error-exitcode=1 --malloc-fill=0x2a --track-origins=yes --leak-check=full --gen-suppressions=all --suppressions=$source_path/tests/fate-valgrind.supp"
 
 # add some useful compiler flags if supported
 check_cflags -Wdeclaration-after-statement
@@ -3580,8 +3618,11 @@ EOF
 get_version(){
     name=$1
     file=$source_path/$2
+# This condition will be removed when we stop supporting old libpostproc versions
+if ! test "$name" = LIBPOSTPROC || test "$postproc_version" = current; then
     eval $(grep "#define ${name}_VERSION_M" "$file" | awk '{ print $2"="$3 }')
     eval ${name}_VERSION=\$${name}_VERSION_MAJOR.\$${name}_VERSION_MINOR.\$${name}_VERSION_MICRO
+fi
     lcname=$(tolower $name)
     eval echo "${lcname}_VERSION=\$${name}_VERSION" >> config.mak
     eval echo "${lcname}_VERSION_MAJOR=\$${name}_VERSION_MAJOR" >> config.mak
@@ -3656,6 +3697,12 @@ cat > $TMPH <<EOF
 /* Generated by ffconf */
 #ifndef AVUTIL_AVCONFIG_H
 #define AVUTIL_AVCONFIG_H
+EOF
+
+test "$postproc_version" != current && cat >> $TMPH <<EOF
+#define LIBPOSTPROC_VERSION_MAJOR $LIBPOSTPROC_VERSION_MAJOR
+#define LIBPOSTPROC_VERSION_MINOR $LIBPOSTPROC_VERSION_MINOR
+#define LIBPOSTPROC_VERSION_MICRO $LIBPOSTPROC_VERSION_MICRO
 EOF
 
 print_config AV_HAVE_ $TMPH $HAVE_LIST_PUB

@@ -113,11 +113,14 @@ static struct fmt_map fmt_conversion_table[] = {
     { PIX_FMT_UYVY422, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_UYVY    },
     { PIX_FMT_YUV411P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV411P },
     { PIX_FMT_YUV410P, CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_YUV410  },
-    { PIX_FMT_RGB555,  CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555  },
-    { PIX_FMT_RGB565,  CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565  },
+    { PIX_FMT_RGB555LE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555  },
+    { PIX_FMT_RGB555BE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB555X },
+    { PIX_FMT_RGB565LE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565  },
+    { PIX_FMT_RGB565BE,CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB565X },
     { PIX_FMT_BGR24,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR24   },
     { PIX_FMT_RGB24,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB24   },
-    { PIX_FMT_BGRA,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR32   },
+    { PIX_FMT_BGR0,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_BGR32   },
+    { PIX_FMT_0RGB,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_RGB32   },
     { PIX_FMT_GRAY8,   CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_GREY    },
     { PIX_FMT_NV12,    CODEC_ID_RAWVIDEO, V4L2_PIX_FMT_NV12    },
     { PIX_FMT_NONE,    CODEC_ID_MJPEG,    V4L2_PIX_FMT_MJPEG   },
@@ -555,7 +558,7 @@ static void mmap_close(struct video_data *s)
     av_free(s->buf_len);
 }
 
-static int v4l2_set_parameters(AVFormatContext *s1, AVFormatParameters *ap)
+static int v4l2_set_parameters(AVFormatContext *s1)
 {
     struct video_data *s = s1->priv_data;
     struct v4l2_input input = { 0 };
@@ -683,7 +686,7 @@ static uint32_t device_try_init(AVFormatContext *s1,
     return desired_format;
 }
 
-static int v4l2_read_header(AVFormatContext *s1, AVFormatParameters *ap)
+static int v4l2_read_header(AVFormatContext *s1)
 {
     struct video_data *s = s1->priv_data;
     AVStream *st;
@@ -770,7 +773,7 @@ static int v4l2_read_header(AVFormatContext *s1, AVFormatParameters *ap)
 
     s->frame_format = desired_format;
 
-    if ((res = v4l2_set_parameters(s1, ap)) < 0)
+    if ((res = v4l2_set_parameters(s1)) < 0)
         goto out;
 
     st->codec->pix_fmt = fmt_v4l2ff(desired_format, codec_id);

@@ -77,7 +77,7 @@ void av_noreturn exit_program(int ret)
 }
 
 struct unit_value {
-    union { double d; int i; } val;
+    union { double d; long long int i; } val;
     const char *unit;
 };
 
@@ -102,33 +102,32 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
         hours = mins / 60;
         mins %= 60;
         snprintf(buf, buf_size, "%d:%02d:%09.6f", hours, mins, secs);
-    } else if (use_value_prefix) {
-        const char *prefix_string;
-        int index, l;
-
-        if (uv.unit == unit_byte_str && use_byte_value_binary_prefix) {
-            index = (int) (log(vald)/log(2)) / 10;
-            index = av_clip(index, 0, FF_ARRAY_ELEMS(binary_unit_prefixes) -1);
-            vald /= pow(2, index*10);
-            prefix_string = binary_unit_prefixes[index];
-        } else {
-            index = (int) (log10(vald)) / 3;
-            index = av_clip(index, 0, FF_ARRAY_ELEMS(decimal_unit_prefixes) -1);
-            vald /= pow(10, index*3);
-            prefix_string = decimal_unit_prefixes[index];
-        }
-
-        if (show_float || vald != (int)vald) l = snprintf(buf, buf_size, "%.3f", vald);
-        else                                 l = snprintf(buf, buf_size, "%d",   (int)vald);
-        snprintf(buf+l, buf_size-l, "%s%s%s", prefix_string || show_value_unit ? " " : "",
-                 prefix_string, show_value_unit ? uv.unit : "");
     } else {
+        const char *prefix_string = "";
         int l;
 
-        if (show_float) l = snprintf(buf, buf_size, "%.3f", vald);
-        else            l = snprintf(buf, buf_size, "%d",   (int)vald);
-        snprintf(buf+l, buf_size-l, "%s%s", show_value_unit ? " " : "",
-                 show_value_unit ? uv.unit : "");
+        if (use_value_prefix && vald > 1) {
+            long long int index;
+
+            if (uv.unit == unit_byte_str && use_byte_value_binary_prefix) {
+                index = (long long int) (log(vald)/log(2)) / 10;
+                index = av_clip(index, 0, FF_ARRAY_ELEMS(binary_unit_prefixes) - 1);
+                vald /= pow(2, index * 10);
+                prefix_string = binary_unit_prefixes[index];
+            } else {
+                index = (long long int) (log10(vald)) / 3;
+                index = av_clip(index, 0, FF_ARRAY_ELEMS(decimal_unit_prefixes) - 1);
+                vald /= pow(10, index * 3);
+                prefix_string = decimal_unit_prefixes[index];
+            }
+        }
+
+        if (show_float || (use_value_prefix && vald != (long long int)vald))
+            l = snprintf(buf, buf_size, "%f", vald);
+        else
+            l = snprintf(buf, buf_size, "%lld", (long long int)vald);
+        snprintf(buf+l, buf_size-l, "%s%s%s", *prefix_string || show_value_unit ? " " : "",
+                 prefix_string, show_value_unit ? uv.unit : "");
     }
 
     return buf;
@@ -1556,7 +1555,8 @@ static int open_input_file(AVFormatContext **fmt_ctx_ptr, const char *filename)
     AVFormatContext *fmt_ctx = NULL;
     AVDictionaryEntry *t;
 
-    if ((err = avformat_open_input(&fmt_ctx, filename, iformat, &format_opts)) < 0) {
+    if ((err = avformat_open_input(&fmt_ctx, filename,
+                                   iformat, &format_opts)) < 0) {
         print_error(filename, err);
         return err;
     }
@@ -1580,8 +1580,9 @@ static int open_input_file(AVFormatContext **fmt_ctx_ptr, const char *filename)
         AVCodec *codec;
 
         if (!(codec = avcodec_find_decoder(stream->codec->codec_id))) {
-            av_log(NULL, AV_LOG_ERROR, "Unsupported codec with id %d for input stream %d\n",
-                   stream->codec->codec_id, stream->index);
+            av_log(NULL, AV_LOG_ERROR,
+                    "Unsupported codec with id %d for input stream %d\n",
+                    stream->codec->codec_id, stream->index);
         } else if (avcodec_open2(stream->codec, codec, NULL) < 0) {
             av_log(NULL, AV_LOG_ERROR, "Error while opening codec for input stream %d\n",
                    stream->index);
@@ -1699,8 +1700,9 @@ static int opt_format(const char *opt, const char *arg)
 static void opt_input_file(void *optctx, const char *arg)
 {
     if (input_filename) {
-        av_log(NULL, AV_LOG_ERROR, "Argument '%s' provided as input filename, but '%s' was already specified.\n",
-               arg, input_filename);
+        av_log(NULL, AV_LOG_ERROR,
+                "Argument '%s' provided as input filename, but '%s' was already specified.\n",
+                arg, input_filename);
         exit(1);
     }
     if (!strcmp(arg, "-"))

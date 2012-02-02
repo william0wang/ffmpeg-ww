@@ -94,7 +94,7 @@ int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s)
                 pnm_get(s, buf1, sizeof(buf1));
                 maxval = strtol(buf1, NULL, 10);
             } else if (!strcmp(buf1, "TUPLTYPE") ||
-            // FFmpeg used to write invalid files
+                       /* libavcodec used to write invalid files */
                        !strcmp(buf1, "TUPLETYPE")) {
                 pnm_get(s, tuple_type, sizeof(tuple_type));
             } else if (!strcmp(buf1, "ENDHDR")) {
@@ -118,6 +118,9 @@ int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s)
             } else {
                 avctx->pix_fmt = PIX_FMT_GRAY16BE;
             }
+        } else if (depth == 2) {
+            if (maxval == 255)
+                avctx->pix_fmt = PIX_FMT_GRAY8A;
         } else if (depth == 3) {
             if (maxval < 256) {
             avctx->pix_fmt = PIX_FMT_RGB24;
@@ -126,10 +129,9 @@ int ff_pnm_decode_header(AVCodecContext *avctx, PNMContext * const s)
             }
         } else if (depth == 4) {
             if (maxval < 256) {
-                avctx->pix_fmt = PIX_FMT_RGB32;
+                avctx->pix_fmt = PIX_FMT_RGBA;
             } else {
-                av_log(avctx, AV_LOG_ERROR, "Unsupported bit depth\n");
-                return -1;
+                avctx->pix_fmt = PIX_FMT_RGBA64BE;
             }
         } else {
             return -1;

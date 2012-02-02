@@ -1,4 +1,7 @@
 /*
+ * PNG image format
+ * Copyright (c) 2008 Loren Merrit <lorenm@u.washington.edu>
+ *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -16,19 +19,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-/**
- * @file
- * This header is provided for compatibility only and will be removed
- * on next major bump
- */
+#ifndef AVCODEC_PNGDSP_H
+#define AVCODEC_PNGDSP_H
 
-#ifndef AVCODEC_OPT_H
-#define AVCODEC_OPT_H
+#include <stdint.h>
 
-#include "libavcodec/version.h"
+typedef struct PNGDSPContext {
+    void (*add_bytes_l2)(uint8_t *dst  /* align 16 */,
+                         uint8_t *src1 /* align 16 */,
+                         uint8_t *src2 /* align 16 */, int w);
 
-#if FF_API_OPT_H
-#include "libavutil/opt.h"
-#endif
+    /* this might write to dst[w] */
+    void (*add_paeth_prediction)(uint8_t *dst, uint8_t *src,
+                                 uint8_t *top, int w, int bpp);
+} PNGDSPContext;
 
-#endif /* AVCODEC_OPT_H */
+void ff_pngdsp_init(PNGDSPContext *dsp);
+void ff_pngdsp_init_x86(PNGDSPContext *dsp);
+
+#endif /* AVCDODEC_PNGDSP_H */

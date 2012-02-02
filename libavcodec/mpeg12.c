@@ -1694,7 +1694,7 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
     if (mb_y == 0 && s->codec_tag == AV_RL32("SLIF")) {
         skip_bits1(&s->gb);
     } else {
-        for (;;) {
+        while (get_bits_left(&s->gb) > 0) {
             int code = get_vlc2(&s->gb, mbincr_vlc.table, MBINCR_VLC_BITS, 2);
             if (code < 0) {
                 av_log(s->avctx, AV_LOG_ERROR, "first mb_incr damaged\n");
@@ -2216,6 +2216,7 @@ int ff_mpeg1_find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size, 
                 pc->frame_start_found = 4;
             }
             if (state == SEQ_END_CODE) {
+                pc->frame_start_found = 0;
                 pc->state=-1;
                 return i+1;
             }
@@ -2667,4 +2668,3 @@ AVCodec ff_mpeg1_vdpau_decoder = {
     .long_name      = NULL_IF_CONFIG_SMALL("MPEG-1 video (VDPAU acceleration)"),
 };
 #endif
-

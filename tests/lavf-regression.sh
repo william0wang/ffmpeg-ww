@@ -69,7 +69,7 @@ do_lavf mxf "-ar 48000 -bf 2 -timecode 02:56:14:13"
 fi
 
 if [ -n "$do_mxf_d10" ]; then
-do_lavf mxf_d10 "-ar 48000 -ac 2 -r 25 -s 720x576 -vf pad=720:608:0:32 -vcodec mpeg2video -g 0 -flags +ildct+low_delay -dc 10 -flags2 +ivlc+non_linear_q -qscale 1 -ps 1 -qmin 1 -rc_max_vbv_use 1 -rc_min_vbv_use 1 -pix_fmt yuv422p -minrate 30000k -maxrate 30000k -b 30000k -bufsize 1200000 -top 1 -rc_init_occupancy 1200000 -qmax 12 -f mxf_d10"
+do_lavf mxf_d10 "-ar 48000 -ac 2 -r 25 -s 720x576 -vf pad=720:608:0:32 -vcodec mpeg2video -g 0 -flags +ildct+low_delay -dc 10 -non_linear_quant 1 -intra_vlc 1 -qscale 1 -ps 1 -qmin 1 -rc_max_vbv_use 1 -rc_min_vbv_use 1 -pix_fmt yuv422p -minrate 30000k -maxrate 30000k -b 30000k -bufsize 1200000 -top 1 -rc_init_occupancy 1200000 -qmax 12 -f mxf_d10"
 fi
 
 if [ -n "$do_ts" ] ; then
@@ -155,6 +155,8 @@ fi
 
 if [ -n "$do_png" ] ; then
 do_image_formats png
+do_image_formats png "-pix_fmt gray16be"
+do_image_formats png "-pix_fmt rgb48be"
 fi
 
 if [ -n "$do_bmp" ] ; then
@@ -179,6 +181,14 @@ fi
 
 if [ -n "$do_pcx" ] ; then
 do_image_formats pcx
+fi
+
+if [ -n "$do_dpx" ] ; then
+do_image_formats dpx
+fi
+
+if [ -n "$do_xwd" ] ; then
+do_image_formats xwd
 fi
 
 # audio only

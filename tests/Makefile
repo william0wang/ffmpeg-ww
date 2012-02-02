@@ -14,20 +14,18 @@ ffservertest: ffserver$(EXESUF) tests/vsynth1/00.pgm tests/data/asynth1.sw
 	@echo
 	$(SRC_PATH)/tests/ffserver-regression.sh $(FFSERVER_REFFILE) $(SRC_PATH)/tests/ffserver.conf
 
-tests/vsynth1/00.pgm: tests/videogen$(HOSTEXESUF)
-	@mkdir -p tests/vsynth1
+OBJDIRS += tests/data tests/vsynth1 tests/vsynth2
+
+tests/vsynth1/00.pgm: tests/videogen$(HOSTEXESUF) | tests/vsynth1
 	$(M)./$< 'tests/vsynth1/'
 
-tests/vsynth2/00.pgm: tests/rotozoom$(HOSTEXESUF)
-	@mkdir -p tests/vsynth2
+tests/vsynth2/00.pgm: tests/rotozoom$(HOSTEXESUF) | tests/vsynth2
 	$(M)./$< 'tests/vsynth2/' $(SRC_PATH)/tests/lena.pnm
 
-tests/data/asynth1.sw: tests/audiogen$(HOSTEXESUF)
-	@mkdir -p tests/data
+tests/data/asynth1.sw: tests/audiogen$(HOSTEXESUF) | tests/data
 	$(M)./$< $@
 
-tests/data/asynth-16000-1.sw: tests/audiogen$(HOSTEXESUF)
-	@mkdir -p tests/data
+tests/data/asynth-16000-1.sw: tests/audiogen$(HOSTEXESUF) | tests/data
 	$(M)./$< $@ 16000 1
 
 tests/data/mapchan-6ch.sw: tests/audiogen$(HOSTEXESUF)
@@ -38,7 +36,7 @@ tests/data/mapchan-mono.sw: tests/audiogen$(HOSTEXESUF)
 	@mkdir -p tests/data
 	$(M)./$< $@ 22050 1
 
-tests/data/asynth%.sw tests/vsynth%/00.pgm: TAG = GEN
+tests/data/%.sw tests/vsynth%/00.pgm: TAG = GEN
 
 include $(SRC_PATH)/tests/fate/aac.mak
 include $(SRC_PATH)/tests/fate/ac3.mak
