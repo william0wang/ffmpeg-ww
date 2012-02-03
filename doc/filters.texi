@@ -104,16 +104,14 @@ Below is a description of the currently available audio filters.
 Convert the input audio format to the specified formats.
 
 The filter accepts a string of the form:
-"@var{sample_format}:@var{channel_layout}:@var{packing_format}".
+"@var{sample_format}:@var{channel_layout}".
 
-@var{sample_format} specifies the sample format, and can be a string or
-the corresponding numeric value defined in @file{libavutil/samplefmt.h}.
+@var{sample_format} specifies the sample format, and can be a string or the
+corresponding numeric value defined in @file{libavutil/samplefmt.h}. Use 'p'
+suffix for a planar sample format.
 
 @var{channel_layout} specifies the channel layout, and can be a string
 or the corresponding number value defined in @file{libavutil/audioconvert.h}.
-
-@var{packing_format} specifies the type of packing in output, can be one
-of "planar" or "packed", or the corresponding numeric values "0" or "1".
 
 The special parameter "auto", signifies that the filter will
 automatically select the output format depending on the output filter.
@@ -122,16 +120,15 @@ Some examples follow.
 
 @itemize
 @item
-Convert input to unsigned 8-bit, stereo, packed:
+Convert input to float, planar, stereo:
 @example
-aconvert=u8:stereo:packed
+aconvert=fltp:stereo
 @end example
 
 @item
-Convert input to unsigned 8-bit, automatically select out channel layout
-and packing format:
+Convert input to unsigned 8-bit, automatically select out channel layout:
 @example
-aconvert=u8:auto:auto
+aconvert=u8:auto
 @end example
 @end itemize
 
@@ -187,6 +184,23 @@ shortest.
 Example: merge two mono files into a stereo stream:
 @example
 amovie=left.wav [l] ; amovie=right.mp3 [r] ; [l] [r] amerge
+@end example
+
+If you need to do multiple merges (for instance multiple mono audio streams in
+a single video media), you can do:
+@example
+ffmpeg -f lavfi -i "
+amovie=input.mkv:si=0 [a0];
+amovie=input.mkv:si=1 [a1];
+amovie=input.mkv:si=2 [a2];
+amovie=input.mkv:si=3 [a3];
+amovie=input.mkv:si=4 [a4];
+amovie=input.mkv:si=5 [a5];
+[a0][a1] amerge [x0];
+[x0][a2] amerge [x1];
+[x1][a3] amerge [x2];
+[x2][a4] amerge [x3];
+[x3][a5] amerge" -c:a pcm_s16le output.mkv
 @end example
 
 @section anull
@@ -1302,8 +1316,6 @@ timestamp expressed in seconds, NAN if the input timestamp is unknown
 @item timecode
 initial timecode representation in "hh:mm:ss[:;.]ff" format. It can be used
 with or without text parameter. @var{rate} option must be specified.
-Note that timecode options are @emph{not} effective if FFmpeg is build with
-@code{--disable-avcodec}.
 
 @item r, rate
 frame rate (timecode only)

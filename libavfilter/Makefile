@@ -3,9 +3,9 @@ include $(SUBDIR)../config.mak
 NAME = avfilter
 FFLIBS = avutil
 
-FFLIBS-$(CONFIG_ACONVERT_FILTER)             += avcodec
+FFLIBS-$(CONFIG_ACONVERT_FILTER)             += swresample
 FFLIBS-$(CONFIG_AMOVIE_FILTER)               += avformat avcodec
-FFLIBS-$(CONFIG_ARESAMPLE_FILTER)            += avcodec
+FFLIBS-$(CONFIG_ARESAMPLE_FILTER)            += swresample
 FFLIBS-$(CONFIG_MOVIE_FILTER)                += avformat avcodec
 FFLIBS-$(CONFIG_PAN_FILTER)                  += swresample
 FFLIBS-$(CONFIG_SCALE_FILTER)                += swscale
