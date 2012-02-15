@@ -205,7 +205,6 @@ External library support:
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
   --enable-openal          enable OpenAL 1.1 capture support [no]
-  --enable-mlib            enable Sun medialib [no]
   --enable-openssl         enable openssl [no]
   --enable-zlib            enable zlib [autodetect]
 
@@ -276,6 +275,8 @@ Developer options (useful when working on FFmpeg itself):
                            Cannot be combined with --target-exec
   --samples=PATH           location of test samples for FATE, if not set use
                            \$FATE_SAMPLES at make invocation time.
+  --enable-xmm-clobber-test check XMM registers for clobbering (Win64-only;
+                           should be used only for debugging purposes)
 
 NOTE: Object files are built at the place where configure is launched.
 EOF
@@ -866,6 +867,7 @@ static void sighandler(int sig){
 int func(void){
     $code
 }
+int (*func_ptr)(void) = func;
 int main(void){
     signal(SIGILL, sighandler);
     signal(SIGFPE, sighandler);
@@ -873,7 +875,7 @@ int main(void){
 #ifdef SIGBUS
     signal(SIGBUS, sighandler);
 #endif
-    return func();
+    return func_ptr();
 }
 EOF
 }
@@ -1060,7 +1062,6 @@ CONFIG_LIST="
     lsp
     mdct
     memalign_hack
-    mlib
     mpegaudiodsp
     network
     nonfree
@@ -1085,6 +1086,7 @@ CONFIG_LIST="
     vda
     vdpau
     version3
+    xmm_clobber_test
     x11grab
     zlib
 "
@@ -1638,8 +1640,14 @@ httpproxy_protocol_select="tcp_protocol"
 http_protocol_deps="network"
 http_protocol_select="tcp_protocol"
 https_protocol_select="tls_protocol"
+librtmp_protocol_deps="librtmp"
+librtmpe_protocol_deps="librtmp"
+librtmps_protocol_deps="librtmp"
+librtmpt_protocol_deps="librtmp"
+librtmpte_protocol_deps="librtmp"
 mmsh_protocol_select="http_protocol"
 mmst_protocol_deps="network"
+rtmp_protocol_deps="!librtmp_protocol"
 rtmp_protocol_select="tcp_protocol"
 rtp_protocol_select="udp_protocol"
 tcp_protocol_deps="network"
@@ -1661,7 +1669,7 @@ frei0r_filter_deps="frei0r dlopen"
 frei0r_src_filter_deps="frei0r dlopen"
 hqdn3d_filter_deps="gpl"
 movie_filter_deps="avcodec avformat"
-mp_filter_deps="gpl avcodec"
+mp_filter_deps="gpl avcodec swscale"
 mptestsrc_filter_deps="gpl"
 negate_filter_deps="lut_filter"
 ocv_filter_deps="libopencv"
@@ -1676,7 +1684,7 @@ avformat_deps="avcodec"
 postproc_deps="gpl"
 
 # programs
-ffplay_deps="avcodec avformat swscale sdl"
+ffplay_deps="avcodec avformat swscale swresample sdl"
 ffplay_select="buffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
@@ -1779,7 +1787,7 @@ test_deps _muxer _demuxer                                               \
     wav                                                                 \
     yuv4mpegpipe=yuv4mpeg                                               \
 
-ac3_fixed_test_deps="ac3_fixed_encoder ac3_decoder rm_muxer rm_demuxer"
+ac3_fixed_test_deps="ac3_fixed_encoder ac3_decoder"
 mpg_test_deps="mpeg1system_muxer mpegps_demuxer"
 
 # default parameters
@@ -3175,7 +3183,6 @@ enabled openal     && { { for al_libs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32
                         die "ERROR: openal not found"; } &&
                       { check_cpp_condition "AL/al.h" "defined(AL_VERSION_1_1)" ||
                         die "ERROR: openal version must be 1.1 or compatible"; }
-enabled mlib       && require  mediaLib mlib_types.h mlib_VectorSub_S16_U8_Mod -lmlib
 enabled openssl    && { check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto ||
                         check_lib openssl/ssl.h SSL_library_init -lssl32 -leay32 ||
                         check_lib openssl/ssl.h SSL_library_init -lssl -lcrypto -lws2_32 -lgdi32 ||
@@ -3302,6 +3309,17 @@ enabled extra_warnings && check_cflags -Winline
 check_ldflags -Wl,--warn-common
 check_ldflags -Wl,-rpath-link=libpostproc:libswresample:libswscale:libavfilter:libavdevice:libavformat:libavcodec:libavutil
 test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
+
+enabled xmm_clobber_test &&                             \
+    check_ldflags -Wl,--wrap,avcodec_open2              \
+                  -Wl,--wrap,avcodec_decode_audio4      \
+                  -Wl,--wrap,avcodec_decode_video2      \
+                  -Wl,--wrap,avcodec_decode_subtitle2   \
+                  -Wl,--wrap,avcodec_encode_audio2      \
+                  -Wl,--wrap,avcodec_encode_video       \
+                  -Wl,--wrap,avcodec_encode_subtitle    \
+                  -Wl,--wrap,sws_scale ||               \
+    disable xmm_clobber_test
 
 echo "X{};" > $TMPV
 if test_ldflags -Wl,--version-script,$TMPV; then
@@ -3463,7 +3481,6 @@ echo "network support           ${network-no}"
 echo "threading support         ${thread_type-no}"
 echo "safe bitstream reader     ${safe_bitstream_reader-no}"
 echo "SDL support               ${sdl-no}"
-echo "Sun medialib support      ${mlib-no}"
 echo "libdxva2 enabled          ${dxva2-no}"
 echo "libva enabled             ${vaapi-no}"
 echo "libvdpau enabled          ${vdpau-no}"

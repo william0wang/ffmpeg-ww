@@ -1063,7 +1063,7 @@ emu_edge mmx
 ; %4 = CLIPD function takes min/max as float instead of int (CLIPD_SSE2)
 ; %5 = suffix
 %macro VECTOR_CLIP_INT32 4-5
-cglobal vector_clip_int32%5, 5,5,%2, dst, src, min, max, len
+cglobal vector_clip_int32%5, 5,5,%1, dst, src, min, max, len
 %if %4
     cvtsi2ss  m4, minm
     cvtsi2ss  m5, maxm
@@ -1177,7 +1177,7 @@ cglobal butterflies_float_interleave, 4,4,3, dst, src0, src1, len
 
 INIT_XMM sse
 BUTTERFLIES_FLOAT_INTERLEAVE
-%ifdef HAVE_AVX
+%if HAVE_AVX
 INIT_YMM avx
 BUTTERFLIES_FLOAT_INTERLEAVE
 %endif

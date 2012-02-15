@@ -294,7 +294,7 @@ do_video_decoding "" "-pix_fmt yuv420p -sws_flags area+accurate_rnd+bitexact"
 fi
 
 if [ -n "$do_flashsv2" ] ; then
-do_video_encoding flashsv2.flv "-an -vcodec flashsv2 -sws_flags neighbor+full_chroma_int+accurate_rnd+bitexact -strict experimental"
+do_video_encoding flashsv2.flv "-an -vcodec flashsv2 -sws_flags neighbor+full_chroma_int+accurate_rnd+bitexact -strict experimental -compression_level 0"
 do_video_encoding flashsv2I.flv "-an -vcodec flashsv2 -sws_flags neighbor+full_chroma_int+accurate_rnd+bitexact -strict experimental -g 1"
 do_video_decoding "" "-pix_fmt yuv420p -sws_flags area+accurate_rnd+bitexact"
 fi
@@ -368,7 +368,7 @@ $tiny_psnr $pcm_dst $pcm_ref 2 1924
 fi
 
 if [ -n "$do_ac3_fixed" ] ; then
-do_audio_encoding ac3.rm "-vn -acodec ac3_fixed"
+do_audio_encoding ac3.ac3 "-vn -acodec ac3_fixed"
 # binaries configured with --disable-sse decode ac3 differently
 #do_audio_decoding
 #$tiny_psnr $pcm_dst $pcm_ref 2 1024

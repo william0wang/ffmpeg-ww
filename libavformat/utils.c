@@ -2246,6 +2246,13 @@ static int tb_unreliable(AVCodecContext *c){
     return 0;
 }
 
+#if FF_API_FORMAT_PARAMETERS
+int av_find_stream_info(AVFormatContext *ic)
+{
+    return avformat_find_stream_info(ic, NULL);
+}
+#endif
+
 int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 {
     int i, count, ret, read_size, j;
@@ -2744,6 +2751,16 @@ void avformat_close_input(AVFormatContext **ps)
         avio_close(pb);
 }
 
+#if FF_API_NEW_STREAM
+AVStream *av_new_stream(AVFormatContext *s, int id)
+{
+    AVStream *st = avformat_new_stream(s, NULL);
+    if (st)
+        st->id = id;
+    return st;
+}
+#endif
+
 AVStream *avformat_new_stream(AVFormatContext *s, AVCodec *c)
 {
     AVStream *st;
@@ -2989,8 +3006,8 @@ int avformat_write_header(AVFormatContext *s, AVDictionary **options)
             if(av_cmp_q(st->sample_aspect_ratio, st->codec->sample_aspect_ratio)
                && FFABS(av_q2d(st->sample_aspect_ratio) - av_q2d(st->codec->sample_aspect_ratio)) > 0.004*av_q2d(st->sample_aspect_ratio)
             ){
-                av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between encoder "
-                       "(%d/%d) and muxer layer (%d/%d)\n",
+                av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between muxer "
+                       "(%d/%d) and encoder layer (%d/%d)\n",
                        st->sample_aspect_ratio.num, st->sample_aspect_ratio.den,
                        st->codec->sample_aspect_ratio.num,
                        st->codec->sample_aspect_ratio.den);
@@ -3466,11 +3483,19 @@ static void dump_metadata(void *ctx, AVDictionary *m, const char *indent)
         av_log(ctx, AV_LOG_INFO, "%sMetadata:\n", indent);
         while((tag=av_dict_get(m, "", tag, AV_DICT_IGNORE_SUFFIX))) {
             if(strcmp("language", tag->key)){
-                char tmp[256];
-                int i;
-                av_strlcpy(tmp, tag->value, sizeof(tmp));
-                for(i=0; i<strlen(tmp); i++) if(tmp[i]==0xd) tmp[i]=' ';
-                av_log(ctx, AV_LOG_INFO, "%s  %-16s: %s\n", indent, tag->key, tmp);
+                const char *p = tag->value;
+                av_log(ctx, AV_LOG_INFO, "%s  %-16s: ", indent, tag->key);
+                while(*p) {
+                    char tmp[256];
+                    size_t len = strcspn(p, "\xd\xa");
+                    av_strlcpy(tmp, p, FFMIN(sizeof(tmp), len+1));
+                    av_log(ctx, AV_LOG_INFO, "%s", tmp);
+                    p += len;
+                    if (*p == 0xd) av_log(ctx, AV_LOG_INFO, " ");
+                    if (*p == 0xa) av_log(ctx, AV_LOG_INFO, "\n%s  %-16s: ", indent, "");
+                    if (*p) p++;
+                }
+                av_log(ctx, AV_LOG_INFO, "\n");
             }
         }
     }

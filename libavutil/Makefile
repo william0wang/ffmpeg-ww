@@ -38,6 +38,7 @@ HEADERS = adler32.h                                                     \
           samplefmt.h                                                   \
           sha.h                                                         \
           timecode.h                                                    \
+          timestamp.h                                                   \
 
 BUILT_HEADERS = avconfig.h
 
@@ -87,7 +88,7 @@ TESTPROGS-$(HAVE_LZO1X_999_COMPRESS) += lzo
 
 TOOLS = ffeval
 
-DIRS = arm bfin sh4 x86
+DIRS = arm avr32 bfin mips ppc sh4 tomi x86
 
 ARCH_HEADERS = bswap.h intmath.h intreadwrite.h timer.h
 

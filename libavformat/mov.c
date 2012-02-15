@@ -602,7 +602,7 @@ static int mov_read_chan(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     label_mask = 0;
     for (i = 0; i < num_descr; i++) {
-        uint32_t label, cflags;
+        uint32_t av_unused label, cflags;
         label     = avio_rb32(pb);          // mChannelLabel
         cflags    = avio_rb32(pb);          // mChannelFlags
         avio_rl32(pb);                      // mCoordinates[0]
@@ -1009,6 +1009,32 @@ static int mov_read_glbl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return AVERROR(ENOMEM);
     st->codec->extradata_size = atom.size;
     avio_read(pb, st->codec->extradata, atom.size);
+    return 0;
+}
+
+static int mov_read_dvc1(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    AVStream *st;
+    uint8_t profile_level;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+
+    if (atom.size >= (1<<28) || atom.size < 7)
+        return AVERROR_INVALIDDATA;
+
+    profile_level = avio_r8(pb);
+    if (profile_level & 0xf0 != 0xc0)
+        return 0;
+
+    av_free(st->codec->extradata);
+    st->codec->extradata = av_mallocz(atom.size - 7 + FF_INPUT_BUFFER_PADDING_SIZE);
+    if (!st->codec->extradata)
+        return AVERROR(ENOMEM);
+    st->codec->extradata_size = atom.size - 7;
+    avio_seek(pb, 6, SEEK_CUR);
+    avio_read(pb, st->codec->extradata, st->codec->extradata_size);
     return 0;
 }
 
@@ -1567,6 +1593,8 @@ static int mov_read_stss(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     av_dlog(c->fc, "keyframe_count = %d\n", entries);
 
+    if (!entries)
+        return 0;
     if (entries >= UINT_MAX / sizeof(int))
         return AVERROR_INVALIDDATA;
     sc->keyframes = av_malloc(entries * sizeof(int));
@@ -1706,6 +1734,7 @@ static int mov_read_stts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     st->nb_frames= total_sample_count;
     if (duration)
         st->duration= duration;
+    sc->track_end = duration;
     return 0;
 }
 
@@ -2326,7 +2355,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     if (flags & 0x001) data_offset        = avio_rb32(pb);
     if (flags & 0x004) first_sample_flags = avio_rb32(pb);
-    dts = st->duration - sc->time_offset;
+    dts    = sc->track_end - sc->time_offset;
     offset = frag->base_data_offset + data_offset;
     distance = 0;
     av_dlog(c->fc, "first sample flags 0x%x\n", first_sample_flags);
@@ -2356,7 +2385,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         sc->data_size += sample_size;
     }
     frag->moof_offset = offset;
-    st->duration = dts + sc->time_offset;
+    st->duration = sc->track_end = dts + sc->time_offset;
     return 0;
 }
 
@@ -2538,6 +2567,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('w','f','e','x'), mov_read_wfex },
 { MKTAG('c','m','o','v'), mov_read_cmov },
 { MKTAG('c','h','a','n'), mov_read_chan }, /* channel layout */
+{ MKTAG('d','v','c','1'), mov_read_dvc1 },
 { 0, NULL }
 };
 

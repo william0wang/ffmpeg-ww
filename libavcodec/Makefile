@@ -95,6 +95,8 @@ OBJS-$(CONFIG_AURA2_DECODER)           += aura.o
 OBJS-$(CONFIG_AVRP_DECODER)            += r210dec.o
 OBJS-$(CONFIG_AVRP_ENCODER)            += r210enc.o
 OBJS-$(CONFIG_AVS_DECODER)             += avs.o
+OBJS-$(CONFIG_AYUV_DECODER)            += v408dec.o
+OBJS-$(CONFIG_AYUV_ENCODER)            += v408enc.o
 OBJS-$(CONFIG_BETHSOFTVID_DECODER)     += bethsoftvideo.o
 OBJS-$(CONFIG_BFI_DECODER)             += bfi.o
 OBJS-$(CONFIG_BINK_DECODER)            += bink.o binkdsp.o
@@ -109,6 +111,7 @@ OBJS-$(CONFIG_C93_DECODER)             += c93.o
 OBJS-$(CONFIG_CAVS_DECODER)            += cavs.o cavsdec.o cavsdsp.o \
                                           mpeg12data.o mpegvideo.o
 OBJS-$(CONFIG_CDGRAPHICS_DECODER)      += cdgraphics.o
+OBJS-$(CONFIG_CDXL_DECODER)            += cdxl.o
 OBJS-$(CONFIG_CINEPAK_DECODER)         += cinepak.o
 OBJS-$(CONFIG_CLJR_DECODER)            += cljr.o
 OBJS-$(CONFIG_CLJR_ENCODER)            += cljr.o
@@ -422,6 +425,8 @@ OBJS-$(CONFIG_V210_DECODER)            += v210dec.o
 OBJS-$(CONFIG_V210_ENCODER)            += v210enc.o
 OBJS-$(CONFIG_V308_DECODER)            += v308dec.o
 OBJS-$(CONFIG_V308_ENCODER)            += v308enc.o
+OBJS-$(CONFIG_V408_DECODER)            += v408dec.o
+OBJS-$(CONFIG_V408_ENCODER)            += v408enc.o
 OBJS-$(CONFIG_V410_DECODER)            += v410dec.o
 OBJS-$(CONFIG_V410_ENCODER)            += v410enc.o
 OBJS-$(CONFIG_V210X_DECODER)           += v210x.o
@@ -714,8 +719,6 @@ OBJS-$(HAVE_PTHREADS)                  += pthread.o
 OBJS-$(HAVE_W32THREADS)                += pthread.o
 OBJS-$(HAVE_OS2THREADS)                += pthread.o
 
-OBJS-$(CONFIG_MLIB)                    += mlib/dsputil_mlib.o           \
-
 # inverse.o contains the ff_inverse table definition, which is used by
 # the FASTDIV macro (from libavutil); since referencing the external
 # table has a negative effect on performance, copy it in libavcodec as
@@ -745,7 +748,7 @@ HOSTPROGS = aac_tablegen aacps_tablegen cbrt_tablegen cos_tablegen      \
             dv_tablegen motionpixels_tablegen mpegaudio_tablegen        \
             pcm_tablegen qdm2_tablegen sinewin_tablegen
 
-DIRS = alpha arm bfin mlib ppc ps2 sh4 sparc x86
+DIRS = alpha arm avr32 bfin mips ppc sh4 sparc x86
 
 CLEANFILES = *_tables.c *_tables.h *_tablegen$(HOSTEXESUF)
 
