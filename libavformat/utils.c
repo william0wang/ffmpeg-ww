@@ -942,11 +942,10 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         compute_frame_duration(&num, &den, st, pc, pkt);
         if (den && num) {
             pkt->duration = av_rescale_rnd(1, num * (int64_t)st->time_base.den, den * (int64_t)st->time_base.num, AV_ROUND_DOWN);
-
-            if(pkt->duration != 0 && s->packet_buffer)
-                update_initial_durations(s, st, pkt);
         }
     }
+    if(pkt->duration != 0 && s->packet_buffer)
+        update_initial_durations(s, st, pkt);
 
     /* correct timestamps with byte offset if demuxers only have timestamps
        on packet boundaries */
@@ -1099,6 +1098,20 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                 if (pkt->size) {
                 got_packet:
                     pkt->duration = 0;
+                    if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+                        if (st->codec->sample_rate > 0) {
+                            pkt->duration = av_rescale_q_rnd(st->parser->duration,
+                                                             (AVRational){ 1, st->codec->sample_rate },
+                                                             st->time_base,
+                                                             AV_ROUND_DOWN);
+                        }
+                    } else if (st->codec->time_base.num != 0 &&
+                               st->codec->time_base.den != 0) {
+                        pkt->duration = av_rescale_q_rnd(st->parser->duration,
+                                                         st->codec->time_base,
+                                                         st->time_base,
+                                                         AV_ROUND_DOWN);
+                    }
                     pkt->stream_index = st->index;
                     pkt->pts = st->parser->pts;
                     pkt->dts = st->parser->dts;
@@ -1806,8 +1819,16 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
     //Fallback to old API if new is not implemented but old is
     //Note the old has somewat different sematics
     AV_NOWARN_DEPRECATED(
-    if(s->iformat->read_seek || 1)
-        return av_seek_frame(s, stream_index, ts, flags | (ts - min_ts > (uint64_t)(max_ts - ts) ? AVSEEK_FLAG_BACKWARD : 0));
+    if (s->iformat->read_seek || 1) {
+        int dir = (ts - min_ts > (uint64_t)(max_ts - ts) ? AVSEEK_FLAG_BACKWARD : 0);
+        int ret = av_seek_frame(s, stream_index, ts, flags | dir);
+        if (ret<0 && ts != min_ts && max_ts != ts) {
+            ret = av_seek_frame(s, stream_index, dir ? max_ts : min_ts, flags | dir);
+            if (ret >= 0)
+                ret = av_seek_frame(s, stream_index, ts, flags | (dir^AVSEEK_FLAG_BACKWARD));
+        }
+        return ret;
+    }
     )
 
     // try some generic seek like seek_frame_generic() but with new ts semantics

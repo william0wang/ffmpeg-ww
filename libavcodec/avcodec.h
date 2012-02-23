@@ -4055,6 +4055,14 @@ void avcodec_default_free_buffers(AVCodecContext *s);
  */
 int av_get_bits_per_sample(enum CodecID codec_id);
 
+/**
+ * Return the PCM codec associated with a sample format.
+ * @param be  endianness, 0 for little, 1 for big,
+ *            -1 (or anything else) for native
+ * @return  CODEC_ID_PCM_* or CODEC_ID_NONE
+ */
+enum CodecID av_get_pcm_codec(enum AVSampleFormat fmt, int be);
+
 /* frame parsing */
 typedef struct AVCodecParserContext {
     void *priv_data;
@@ -4182,6 +4190,13 @@ typedef struct AVCodecParserContext {
      * Previous frame byte position.
      */
     int64_t last_pos;
+
+    /**
+     * Duration of the current frame.
+     * For audio, this is in units of 1 / AVCodecContext.sample_rate.
+     * For all other types, this is in units of AVCodecContext.time_base.
+     */
+    int duration;
 } AVCodecParserContext;
 
 typedef struct AVCodecParser {

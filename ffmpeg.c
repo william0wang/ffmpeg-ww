@@ -502,7 +502,7 @@ static int alloc_buffer(AVCodecContext *s, InputStream *ist, FrameBuffer **pbuf)
     /* XXX this shouldn't be needed, but some tests break without this line
      * those decoders are buggy and need to be fixed.
      * the following tests fail:
-     * bethsoft-vid, cdgraphics, ansi, aasc, fraps-v1, qtrle-1bit
+     * cdgraphics, ansi, aasc, fraps-v1, qtrle-1bit
      */
     memset(buf->base[0], 128, ret);
 
@@ -1633,6 +1633,7 @@ static void do_video_out(AVFormatContext *s, OutputStream *ost,
                 write_frame(s, &pkt, ost);
                 frame_size = pkt.size;
                 video_size += pkt.size;
+                av_free_packet(&pkt);
 
                 /* if two pass, output log */
                 if (ost->logfile && enc->stats_out) {
@@ -4400,6 +4401,18 @@ static void opt_output_file(void *optctx, const char *filename)
                                            map->sync_stream_index];
             ist->discard = 0;
         }
+    }
+
+
+    for (i = nb_output_streams - oc->nb_streams; i < nb_output_streams; i++) { //for all streams of this output file
+        AVDictionaryEntry *e;
+        ost = &output_streams[i];
+
+        if (   ost->stream_copy
+            && (e = av_dict_get(codec_opts, "flags", NULL, AV_DICT_IGNORE_SUFFIX))
+            && (!e->key[5] || check_stream_specifier(oc, ost->st, e->key+6)))
+            if (av_opt_set(ost->st->codec, "flags", e->value, 0) < 0)
+                exit_program(1);
     }
 
     /* handle attached files */
