@@ -112,7 +112,7 @@ static int rtp_write_header(AVFormatContext *s1)
 
     if (s->max_packet_size) {
         if (s1->pb->max_packet_size)
-            s->max_packet_size = FFMIN(s->max_payload_size,
+            s->max_packet_size = FFMIN(s->max_packet_size,
                                        s1->pb->max_packet_size);
     } else
         s->max_packet_size = s1->pb->max_packet_size;
@@ -453,7 +453,11 @@ static int rtp_write_packet(AVFormatContext *s1, AVPacket *pkt)
         break;
     case CODEC_ID_H263:
         if (s->flags & FF_RTP_FLAG_RFC2190) {
-            ff_rtp_send_h263_rfc2190(s1, pkt->data, size);
+            int mb_info_size = 0;
+            const uint8_t *mb_info =
+                av_packet_get_side_data(pkt, AV_PKT_DATA_H263_MB_INFO,
+                                        &mb_info_size);
+            ff_rtp_send_h263_rfc2190(s1, pkt->data, size, mb_info, mb_info_size);
             break;
         }
         /* Fallthrough */

@@ -414,7 +414,7 @@ static int video_get_buffer(AVCodecContext *s, AVFrame *pic)
         return -1;
     }
 
-    if(av_image_check_size(w, h, 0, s))
+    if(av_image_check_size(w, h, 0, s) || s->pix_fmt<0)
         return -1;
 
     if (!avci->buffer) {
@@ -602,6 +602,8 @@ int avcodec_default_reget_buffer(AVCodecContext *s, AVFrame *pic){
         pic->buffer_hints |= FF_BUFFER_HINTS_READABLE;
         return s->get_buffer(s, pic);
     }
+
+    assert(s->pix_fmt == pic->format);
 
     /* If internal buffer type return the same buffer */
     if(pic->type == FF_BUFFER_TYPE_INTERNAL) {
@@ -967,6 +969,8 @@ int attribute_align_arg avcodec_encode_audio2(AVCodecContext *avctx,
     int user_packet = !!avpkt->data;
     int nb_samples;
 
+    *got_packet_ptr = 0;
+
     if (!(avctx->codec->capabilities & CODEC_CAP_DELAY) && !frame) {
         av_init_packet(avpkt);
         avpkt->size = 0;
@@ -988,7 +992,6 @@ int attribute_align_arg avcodec_encode_audio2(AVCodecContext *avctx,
     }
 
     if (avctx->codec->encode2) {
-        *got_packet_ptr = 0;
         ret = avctx->codec->encode2(avctx, avpkt, frame, got_packet_ptr);
         if (!ret && *got_packet_ptr) {
             if (!(avctx->codec->capabilities & CODEC_CAP_DELAY)) {
@@ -1195,11 +1198,13 @@ int attribute_align_arg avcodec_encode_video2(AVCodecContext *avctx,
 {
     int ret;
     int user_packet = !!avpkt->data;
+    void *new_data;
+
+    *got_packet_ptr = 0;
 
     if (!(avctx->codec->capabilities & CODEC_CAP_DELAY) && !frame) {
         av_init_packet(avpkt);
         avpkt->size     = 0;
-        *got_packet_ptr = 0;
         return 0;
     }
 
@@ -1208,17 +1213,21 @@ int attribute_align_arg avcodec_encode_video2(AVCodecContext *avctx,
 
     av_assert0(avctx->codec->encode2);
 
-    *got_packet_ptr = 0;
     ret = avctx->codec->encode2(avctx, avpkt, frame, got_packet_ptr);
     if (!ret) {
         if (!*got_packet_ptr)
             avpkt->size = 0;
         else if (!(avctx->codec->capabilities & CODEC_CAP_DELAY))
             avpkt->pts = avpkt->dts = frame->pts;
-    }
+        if (avpkt->data && avpkt->destruct == av_destruct_packet) {
+            new_data = av_realloc(avpkt->data,
+                                  avpkt->size + FF_INPUT_BUFFER_PADDING_SIZE);
+            if (new_data)
+                avpkt->data = new_data;
+        }
 
-    if (!ret)
         avctx->frame_number++;
+    }
 
     emms_c();
     return ret;
