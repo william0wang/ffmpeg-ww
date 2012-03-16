@@ -903,9 +903,14 @@ testing purposes.
 
 @section crop
 
-Crop the input video to @var{out_w}:@var{out_h}:@var{x}:@var{y}.
+Crop the input video to @var{out_w}:@var{out_h}:@var{x}:@var{y}:@var{keep_aspect}
 
-The parameters are expressions containing the following constants:
+The @var{keep_aspect} parameter is optional, if specified and set to a
+non-zero value will force the output display aspect ratio to be the
+same of the input, by changing the output sample aspect ratio.
+
+The @var{out_w}, @var{out_h}, @var{x}, @var{y} parameters are
+expressions containing the following constants:
 
 @table @option
 @item x, y
@@ -1851,7 +1856,6 @@ The list of the currently supported filters follows:
 @item softpulldown
 @item softskip
 @item spp
-@item swapuv
 @item telecine
 @item tile
 @item tinterlace
@@ -2630,6 +2634,9 @@ For example:
 
 will create two separate outputs from the same input, one cropped and
 one padded.
+
+@section swapuv
+Swap U & V plane.
 
 @section thumbnail
 Select the most representative frame in a given sequence of consecutive frames.

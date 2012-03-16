@@ -1130,7 +1130,7 @@ static int parse_MP4SLDescrTag(MP4DescrParseContext *d, int64_t off, int len)
         descr->sl.au_seq_num_len     = (lengths >> 7) & 0x1f;
         descr->sl.packet_seq_num_len = (lengths >> 2) & 0x1f;
     } else {
-        av_log_missing_feature(d->s, "Predefined SLConfigDescriptor\n", 0);
+        av_log_missing_feature(d->s, "Predefined SLConfigDescriptor", 0);
     }
     return 0;
 }
@@ -1385,8 +1385,7 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
     case 0x05: /* registration descriptor */
         st->codec->codec_tag = bytestream_get_le32(pp);
         av_dlog(fc, "reg_desc=%.4s\n", (char*)&st->codec->codec_tag);
-        if (st->codec->codec_id == CODEC_ID_NONE &&
-            stream_type == STREAM_TYPE_PRIVATE_DATA)
+        if (st->codec->codec_id == CODEC_ID_NONE)
             mpegts_find_stream_type(st, st->codec->codec_tag, REGD_types);
         break;
     case 0x52: /* stream identifier descriptor */

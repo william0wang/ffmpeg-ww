@@ -1921,7 +1921,7 @@ static void add_bytes_c(uint8_t *dst, uint8_t *src, int w){
         dst[i+0] += src[i+0];
 }
 
-static void diff_bytes_c(uint8_t *dst, uint8_t *src1, uint8_t *src2, int w){
+static void diff_bytes_c(uint8_t *dst, const uint8_t *src1, const uint8_t *src2, int w){
     long i;
 #if !HAVE_FAST_UNALIGNED
     if((long)src2 & (sizeof(long)-1)){
@@ -2605,12 +2605,12 @@ static void vector_clipf_c(float *dst, const float *src, float min, float max, i
     }
 }
 
-static int32_t scalarproduct_int16_c(const int16_t * v1, const int16_t * v2, int order, int shift)
+static int32_t scalarproduct_int16_c(const int16_t * v1, const int16_t * v2, int order)
 {
     int res = 0;
 
     while (order--)
-        res += (*v1++ * *v2++) >> shift;
+        res += *v1++ * *v2++;
 
     return res;
 }
