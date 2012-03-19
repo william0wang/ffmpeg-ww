@@ -1527,6 +1527,7 @@ wmv3_dxva2_hwaccel_select="vc1_dxva2_hwaccel"
 wmv3_vaapi_hwaccel_select="vc1_vaapi_hwaccel"
 wmv3_vdpau_decoder_select="vc1_vdpau_decoder"
 wmv3image_decoder_select="wmv3_decoder"
+zerocodec_decoder_select="zlib"
 zlib_decoder_select="zlib"
 zlib_encoder_select="zlib"
 zmbv_decoder_select="zlib"
@@ -1788,7 +1789,17 @@ test_deps _muxer _demuxer                                               \
     yuv4mpegpipe=yuv4mpeg                                               \
 
 ac3_fixed_test_deps="ac3_fixed_encoder ac3_decoder"
+flashsv2_test_deps="zlib"
 mpg_test_deps="mpeg1system_muxer mpegps_demuxer"
+mpng_test_deps="zlib"
+pp_test_deps="mp_filter"
+pp2_test_deps="mp_filter"
+pp3_test_deps="mp_filter"
+pp4_test_deps="mp_filter"
+pp5_test_deps="mp_filter"
+pp6_test_deps="mp_filter"
+zlib_test_deps="zlib"
+zmbv_test_deps="zlib"
 
 # default parameters
 

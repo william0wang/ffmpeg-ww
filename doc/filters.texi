@@ -761,6 +761,16 @@ video, use the command:
 ass=sub.ass
 @end example
 
+@section bbox
+
+Compute the bounding box for the non-black pixels in the input frame
+luminance plane.
+
+This filter computes the bounding box containing all the pixels with a
+luminance value greater than the minimum allowed value.
+The parameters describing the bounding box are printed on the filter
+log.
+
 @section blackdetect
 
 Detect video intervals that are (almost) completely black. Can be
@@ -2202,6 +2212,9 @@ can be used to test the monowhite pixel format descriptor definition.
 
 Scale the input video to @var{width}:@var{height}[:@var{interl}=@{1|-1@}] and/or convert the image format.
 
+The scale filter forces the output display aspect ratio to be the same
+of the input, by changing the output sample aspect ratio.
+
 The parameters @var{width} and @var{height} are expressions containing
 the following constants:
 
@@ -3091,6 +3104,13 @@ Specifies the index of the video stream to read. If the value is -1,
 the best suited video stream will be automatically selected. Default
 value is "-1".
 
+@item loop
+Specifies how many times to read the video stream in sequence.
+If the value is less than 1, the stream will be read again and again.
+Default value is "1".
+
+Note that when the movie is looped the source timestamps are not
+changed, so it will generate non monotonically increasing timestamps.
 @end table
 
 This filter allows to overlay a second video on top of main input of

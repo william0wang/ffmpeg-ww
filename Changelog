@@ -14,6 +14,9 @@ version next:
 - blackdetect filter
 - libutvideo encoder wrapper (--enable-libutvideo)
 - swapuv filter
+- bbox filter
+- XBM encoder
+- ZeroCodec decoder
 
 
 version 0.10:
