@@ -32,12 +32,10 @@ static int pnm_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int i, h, h1, c, n, linesize, ret;
     uint8_t *ptr, *ptr1, *ptr2;
 
-    if ((ret = ff_alloc_packet(pkt, avpicture_get_size(avctx->pix_fmt,
+    if ((ret = ff_alloc_packet2(avctx, pkt, avpicture_get_size(avctx->pix_fmt,
                                                        avctx->width,
-                                                       avctx->height) + 200)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "encoded frame too large\n");
+                                                       avctx->height) + 200)) < 0)
         return ret;
-    }
 
     *p           = *pict;
     p->pict_type = AV_PICTURE_TYPE_I;

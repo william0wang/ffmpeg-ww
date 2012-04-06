@@ -3,8 +3,6 @@
  *
  * Copyright (c) 2012, Derek Buitenhuis
  *
- * This file is part of FFMpeg.
- *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -19,6 +17,7 @@
  */
 
 #include <zlib.h>
+
 #include "avcodec.h"
 
 typedef struct {
@@ -63,47 +62,29 @@ static int zerocodec_decode_frame(AVCodecContext *avctx, void *data,
      */
 
     if (avpkt->flags & AV_PKT_FLAG_KEY) {
-
         pic->key_frame = 1;
         pic->pict_type = AV_PICTURE_TYPE_I;
-
-        for (i = 0; i < avctx->height; i++) {
-
-            zstream->next_out  = dst;
-            zstream->avail_out = avctx->width << 1;
-
-            zret = inflate(zstream, Z_SYNC_FLUSH);
-
-            if (zret != Z_OK && zret != Z_STREAM_END) {
-                av_log(avctx, AV_LOG_ERROR, "Inflate failed with return code: %d\n", zret);
-                return AVERROR(EINVAL);
-            }
-
-            dst += pic->linesize[0];
-        }
     } else {
-
         pic->key_frame = 0;
         pic->pict_type = AV_PICTURE_TYPE_P;
+    }
 
-        for (i = 0; i < avctx->height; i++) {
+    for (i = 0; i < avctx->height; i++) {
+        zstream->next_out  = dst;
+        zstream->avail_out = avctx->width << 1;
+        zret = inflate(zstream, Z_SYNC_FLUSH);
+        if (zret != Z_OK && zret != Z_STREAM_END) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Inflate failed with return code: %d\n", zret);
+            return AVERROR(EINVAL);
+        }
 
-            zstream->next_out  = dst;
-            zstream->avail_out = avctx->width << 1;
-
-            zret = inflate(zstream, Z_SYNC_FLUSH);
-
-            if (zret != Z_OK && zret != Z_STREAM_END) {
-                av_log(avctx, AV_LOG_ERROR, "Inflate failed with return code: %d\n", zret);
-                return AVERROR(EINVAL);
-            }
-
+        if (!(avpkt->flags & AV_PKT_FLAG_KEY))
             for (j = 0; j < avctx->width << 1; j++)
                 dst[j] += prev[j] & -!dst[j];
 
-            prev += prev_pic->linesize[0];
-            dst  += pic->linesize[0];
-        }
+        prev += prev_pic->linesize[0];
+        dst  += pic->linesize[0];
     }
 
     /* Release the previous buffer if need be */

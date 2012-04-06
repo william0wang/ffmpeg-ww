@@ -753,7 +753,19 @@ using the libass library.
 To enable compilation of this filter you need to configure FFmpeg with
 @code{--enable-libass}.
 
-This filter accepts in input the name of the ass file to render.
+This filter accepts the syntax: @var{ass_filename}[:@var{options}],
+where @var{ass_filename} is the filename of the ASS file to read, and
+@var{options} is an optional sequence of @var{key}=@var{value} pairs,
+separated by ":".
+
+A description of the accepted options follows.
+
+@table @option
+@item original_size
+Specifies the size of the original video, the video for which the ASS file
+was composed. Due to a misdesign in ASS aspect ratio arithmetic, this is
+necessary to correctly scale the fonts if the aspect ratio has been changed.
+@end table
 
 For example, to render the file @file{sub.ass} on top of the input
 video, use the command:
@@ -905,6 +917,18 @@ boxblur=min(h\,w)/10:1:min(cw\,ch)/10:1
 @end example
 
 @end itemize
+
+@section colormatrix
+
+The colormatrix filter allows conversion between any of the following color
+space: BT.709 (@var{bt709}), BT.601 (@var{bt601}), SMPTE-240M (@var{smpte240m})
+and FCC (@var{fcc}).
+
+The syntax of the parameters is @var{source}:@var{destination}:
+
+@example
+colormatrix=bt601:smpte240m
+@end example
 
 @section copy
 
@@ -1683,6 +1707,11 @@ a float number which specifies chroma temporal strength, defaults to
 @var{luma_tmp}*@var{chroma_spatial}/@var{luma_spatial}
 @end table
 
+@section idet
+
+Interlaceing detect filter. This filter tries to detect if the input is
+interlaced or progressive. Top or bottom field first.
+
 @section lut, lutrgb, lutyuv
 
 Compute a look-up table for binding each pixel component input value
@@ -2269,6 +2298,8 @@ select interlaced aware scaling depending on whether the source frames
 are flagged as interlaced or not
 @end table
 
+Unless @var{interl} is set to one of the above options, interlaced scaling will not be used.
+
 Some examples follow:
 @example
 # scale the input video to a size of 200x100.
@@ -2278,6 +2309,9 @@ scale=200:100
 scale=2*iw:2*ih
 # the above is the same as
 scale=2*in_w:2*in_h
+
+# scale the input to 2x with forced interlaced scaling
+scale=2*iw:2*ih:interl=1
 
 # scale the input to half size
 scale=iw/2:ih/2
@@ -2670,6 +2704,22 @@ Complete example of a thumbnail creation with @command{ffmpeg}:
 @example
 ffmpeg -i in.avi -vf thumbnail,scale=300:200 -frames:v 1 out.png
 @end example
+
+@section tile
+
+Tile several successive frames together.
+
+It accepts as argument the tile size (i.e. the number of lines and columns)
+in the form "@var{w}x@var{h}".
+
+For example, produce 8×8 PNG tiles of all keyframes (@option{-skip_frame
+nokey}) in a movie:
+@example
+ffmpeg -skip_frame nokey -i file.avi -vf 'scale=128:72,tile=8x8' -an -vsync 0 keyframes%03d.png
+@end example
+The @option{-vsync 0} is necessary to prevent @command{ffmpeg} from
+duplicating each output frame to accomodate the originally detected frame
+rate.
 
 @section tinterlace
 

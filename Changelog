@@ -15,9 +15,12 @@ version next:
 - libutvideo encoder wrapper (--enable-libutvideo)
 - swapuv filter
 - bbox filter
-- XBM encoder
+- XBM encoder and decoder
+- RealAudio Lossless decoder
 - ZeroCodec decoder
-
+- tile video filter
+- Metal Gear Solid: The Twin Snakes demuxer
+- OpenEXR image decoder
 
 version 0.10:
 - Fixes: CVE-2011-3929, CVE-2011-3934, CVE-2011-3935, CVE-2011-3936,

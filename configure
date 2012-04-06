@@ -59,8 +59,21 @@ cat <<EOF
 Usage: configure [options]
 Options: [defaults in brackets after descriptions]
 
-Standard options:
+Help options:
   --help                   print this message
+  --list-decoders          show all available decoders
+  --list-encoders          show all available encoders
+  --list-hwaccels          show all available hardware accelerators
+  --list-demuxers          show all available demuxers
+  --list-muxers            show all available muxers
+  --list-parsers           show all available parsers
+  --list-protocols         show all available protocols
+  --list-bsfs              show all available bitstream filters
+  --list-indevs            show all available input devices
+  --list-outdevs           show all available output devices
+  --list-filters           show all available filters
+
+Standard options:
   --logfile=FILE           log tests and output to FILE [config.log]
   --disable-logging        do not log configure debug information
   --prefix=PREFIX          install in PREFIX [$prefix]
@@ -71,14 +84,22 @@ Standard options:
   --incdir=DIR             install includes in DIR [PREFIX/include]
   --mandir=DIR             install man page in DIR [PREFIX/share/man]
 
-Configuration options:
-  --disable-static         do not build static libraries [no]
-  --enable-shared          build shared libraries [no]
+Licensing options:
   --enable-gpl             allow use of GPL code, the resulting libs
                            and binaries will be under GPL [no]
   --enable-version3        upgrade (L)GPL to version 3 [no]
   --enable-nonfree         allow use of nonfree code, the resulting libs
                            and binaries will be unredistributable [no]
+
+Configuration options:
+  --disable-static         do not build static libraries [no]
+  --enable-shared          build shared libraries [no]
+  --enable-small           optimize for size instead of speed
+  --enable-runtime-cpudetect detect cpu capabilities at runtime (bigger binary)
+  --enable-gray            enable full grayscale support (slower color)
+  --disable-swscale-alpha  disable alpha channel support in swscale
+
+Component options:
   --disable-doc            do not build documentation
   --disable-ffmpeg         disable ffmpeg build
   --disable-ffplay         disable ffplay build
@@ -96,29 +117,16 @@ Configuration options:
   --disable-os2threads     disable OS/2 threads [auto]
   --enable-x11grab         enable X11 grabbing [no]
   --disable-network        disable network support [no]
-  --enable-gray            enable full grayscale support (slower color)
-  --disable-swscale-alpha  disable alpha channel support in swscale
-  --disable-fastdiv        disable table-based division
-  --enable-small           optimize for size instead of speed
-  --disable-aandct         disable AAN DCT code
   --disable-dct            disable DCT code
-  --disable-fft            disable FFT code
-  --disable-golomb         disable Golomb code
-  --disable-huffman        disable Huffman code
-  --disable-lpc            disable LPC code
   --disable-mdct           disable MDCT code
   --disable-rdft           disable RDFT code
+  --disable-fft            disable FFT code
+  --enable-dxva2           enable DXVA2 code
   --enable-vaapi           enable VAAPI code [autodetect]
-  --enable-vda             enable VDA code [autodetect]
+  --enable-vda             enable VDA code   [autodetect]
   --enable-vdpau           enable VDPAU code [autodetect]
-  --disable-dxva2          disable DXVA2 code
-  --disable-vda            disable VDA code
-  --enable-runtime-cpudetect detect cpu capabilities at runtime (bigger binary)
-  --enable-hardcoded-tables use hardcoded tables instead of runtime generation
-  --disable-safe-bitstream-reader
-                           disable buffer boundary checking in bitreaders
-                           (faster, but may crash)
-  --enable-memalign-hack   emulate memalign, interferes with memory debuggers
+
+Individual component options:
   --disable-everything     disable all components listed below
   --disable-encoder=NAME   disable encoder NAME
   --enable-encoder=NAME    enable encoder NAME
@@ -144,25 +152,16 @@ Configuration options:
   --enable-protocol=NAME   enable protocol NAME
   --disable-protocol=NAME  disable protocol NAME
   --disable-protocols      disable all protocols
+  --enable-indev=NAME      enable input device NAME
   --disable-indev=NAME     disable input device NAME
-  --disable-outdev=NAME    disable output device NAME
   --disable-indevs         disable input devices
+  --enable-outdev=NAME     enable output device NAME
+  --disable-outdev=NAME    disable output device NAME
   --disable-outdevs        disable output devices
   --disable-devices        disable all devices
   --enable-filter=NAME     enable filter NAME
   --disable-filter=NAME    disable filter NAME
   --disable-filters        disable all filters
-  --list-decoders          show all available decoders
-  --list-encoders          show all available encoders
-  --list-hwaccels          show all available hardware accelerators
-  --list-muxers            show all available muxers
-  --list-demuxers          show all available demuxers
-  --list-parsers           show all available parsers
-  --list-protocols         show all available protocols
-  --list-bsfs              show all available bitstream filters
-  --list-indevs            show all available input devices
-  --list-outdevs           show all available output devices
-  --list-filters           show all available filters
 
 External library support:
   --enable-avisynth        enable reading of AVISynth script files [no]
@@ -233,11 +232,24 @@ Advanced options (experts only):
   --extra-ldflags=ELDFLAGS add ELDFLAGS to LDFLAGS [$LDFLAGS]
   --extra-libs=ELIBS       add ELIBS [$ELIBS]
   --extra-version=STRING   version string suffix []
+  --optflags               override optimization-related compiler flags
   --build-suffix=SUFFIX    library name suffix []
+  --malloc-prefix=PREFIX   prefix malloc and related names with PREFIX
   --progs-suffix=SUFFIX    program name suffix []
   --arch=ARCH              select architecture [$arch]
   --cpu=CPU                select the minimum required CPU (affects
                            instruction selection, may crash on older CPUs)
+  --enable-pic             build position-independent code
+  --enable-sram            allow use of on-chip SRAM
+  --disable-symver         disable symbol versioning
+  --disable-fastdiv        disable table-based division
+  --enable-hardcoded-tables use hardcoded tables instead of runtime generation
+  --disable-safe-bitstream-reader
+                           disable buffer boundary checking in bitreaders
+                           (faster, but may crash)
+  --enable-memalign-hack   emulate memalign, interferes with memory debuggers
+
+Optimization options (experts only):
   --disable-asm            disable all assembler optimizations
   --disable-altivec        disable AltiVec optimizations
   --disable-amd3dnow       disable 3DNow! optimizations
@@ -255,11 +267,6 @@ Advanced options (experts only):
   --disable-neon           disable NEON optimizations
   --disable-vis            disable VIS optimizations
   --disable-yasm           disable use of yasm assembler
-  --enable-pic             build position-independent code
-  --malloc-prefix=PFX      prefix malloc and related names with PFX
-  --enable-sram            allow use of on-chip SRAM
-  --disable-symver         disable symbol versioning
-  --optflags               override optimization-related compiler flags
   --postproc-version=V     build libpostproc version V.
                            Where V can be '$ALT_PP_VER_MAJOR.$ALT_PP_VER_MINOR.$ALT_PP_VER_MICRO' or 'current'. [$postproc_version_default]
 
@@ -999,10 +1006,6 @@ PROGRAM_LIST="
 CONFIG_LIST="
     $COMPONENT_LIST
     $PROGRAM_LIST
-    avplay
-    avprobe
-    avserver
-    aandct
     ac3dsp
     avcodec
     avdevice
@@ -1019,14 +1022,9 @@ CONFIG_LIST="
     fft
     frei0r
     gnutls
-    golomb
     gpl
     gray
-    h264chroma
-    h264dsp
-    h264pred
     hardcoded_tables
-    huffman
     libaacplus
     libass
     libbluray
@@ -1059,7 +1057,6 @@ CONFIG_LIST="
     libx264
     libxavs
     libxvid
-    lpc
     lsp
     mdct
     memalign_hack
@@ -1160,6 +1157,7 @@ HAVE_LIST="
     attribute_may_alias
     attribute_packed
     cbrtf
+    clock_gettime
     closesocket
     cmov
     dcbzl
@@ -1186,6 +1184,7 @@ HAVE_LIST="
     GetProcessMemoryInfo
     GetProcessTimes
     getrusage
+    glob
     gnu_as
     ibm_asm
     inet_aton
@@ -1261,9 +1260,17 @@ HAVE_LIST="
 
 # options emitted with CONFIG_ prefix but not available on command line
 CONFIG_EXTRA="
+    aandct
     avutil
+    golomb
     gplv3
+    h264chroma
+    h264dsp
+    h264pred
+    h264qpel
+    huffman
     lgplv3
+    lpc
 "
 
 CMDLINE_SELECT="
@@ -1419,7 +1426,7 @@ h263_vaapi_hwaccel_select="vaapi h263_decoder"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_crystalhd_decoder_select="crystalhd h264_mp4toannexb_bsf h264_parser"
-h264_decoder_select="golomb h264chroma h264dsp h264pred"
+h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel"
 h264_dxva2_hwaccel_deps="dxva2api_h"
 h264_dxva2_hwaccel_select="dxva2 h264_decoder"
 h264_vaapi_hwaccel_select="vaapi h264_decoder"
@@ -1476,12 +1483,13 @@ png_encoder_select="zlib"
 qcelp_decoder_select="lsp"
 qdm2_decoder_select="mdct rdft mpegaudiodsp"
 ra_144_encoder_select="lpc"
+ralf_decoder_select="golomb"
 rv10_decoder_select="h263_decoder"
 rv10_encoder_select="h263_encoder"
 rv20_decoder_select="h263_decoder"
 rv20_encoder_select="h263_encoder"
-rv30_decoder_select="golomb h264chroma h264pred"
-rv40_decoder_select="golomb h264chroma h264pred"
+rv30_decoder_select="golomb h264chroma h264pred h264qpel"
+rv40_decoder_select="golomb h264chroma h264pred h264qpel"
 shorten_decoder_select="golomb"
 sipr_decoder_select="lsp"
 snow_decoder_select="dwt"
@@ -1490,7 +1498,7 @@ sonic_decoder_select="golomb"
 sonic_encoder_select="golomb"
 sonic_ls_encoder_select="golomb"
 svq1_encoder_select="aandct"
-svq3_decoder_select="golomb h264chroma h264dsp h264pred"
+svq3_decoder_select="golomb h264chroma h264dsp h264pred h264qpel"
 svq3_decoder_suggest="zlib"
 theora_decoder_select="vp3_decoder"
 tiff_decoder_suggest="zlib"
@@ -1499,7 +1507,7 @@ truehd_decoder_select="mlp_decoder"
 tscc_decoder_select="zlib"
 twinvq_decoder_select="mdct lsp sinewin"
 vc1_crystalhd_decoder_select="crystalhd"
-vc1_decoder_select="h263_decoder h264chroma"
+vc1_decoder_select="h263_decoder h264chroma h264qpel"
 vc1_dxva2_hwaccel_deps="dxva2api_h"
 vc1_dxva2_hwaccel_select="dxva2 vc1_decoder"
 vc1_vaapi_hwaccel_select="vaapi vc1_decoder"
@@ -1510,7 +1518,7 @@ vorbis_encoder_select="mdct"
 vp6_decoder_select="huffman"
 vp6a_decoder_select="vp6_decoder"
 vp6f_decoder_select="vp6_decoder"
-vp8_decoder_select="h264pred"
+vp8_decoder_select="h264pred h264qpel"
 wmapro_decoder_select="mdct sinewin"
 wmav1_decoder_select="mdct sinewin"
 wmav1_encoder_select="mdct sinewin"
@@ -1539,7 +1547,7 @@ vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 
 # parsers
-h264_parser_select="golomb h264chroma h264dsp h264pred"
+h264_parser_select="golomb h264dsp h264pred"
 
 # external libraries
 libaacplus_encoder_deps="libaacplus"
@@ -1631,7 +1639,6 @@ v4l2_indev_deps_any="linux_videodev2_h sys_videoio_h"
 vfwcap_indev_deps="capCreateCaptureWindow vfwcap_defines"
 vfwcap_indev_extralibs="-lavicap32"
 x11_grab_device_indev_deps="x11grab XShmCreateImage"
-x11_grab_device_indev_extralibs="-lX11 -lXext -lXfixes"
 
 # protocols
 bluray_protocol_deps="libbluray"
@@ -1663,11 +1670,14 @@ aresample_filter_deps="swresample"
 ass_filter_deps="libass"
 blackframe_filter_deps="gpl"
 boxblur_filter_deps="gpl"
+colormatrix_filter_deps="gpl"
 cropdetect_filter_deps="gpl"
 delogo_filter_deps="gpl"
 drawtext_filter_deps="libfreetype"
 frei0r_filter_deps="frei0r dlopen"
+frei0r_filter_extralibs='$ldl'
 frei0r_src_filter_deps="frei0r dlopen"
+frei0r_src_filter_extralibs='$ldl'
 hqdn3d_filter_deps="gpl"
 movie_filter_deps="avcodec avformat"
 mp_filter_deps="gpl avcodec swscale postproc"
@@ -3041,6 +3051,7 @@ fi
 # Solaris has nanosleep in -lrt, OpenSolaris no longer needs that
 check_func nanosleep || { check_func nanosleep -lrt && add_extralibs -lrt; }
 
+check_func  clock_gettime || { check_func clock_gettime -lrt && add_extralibs -lrt; }
 check_func  fcntl
 check_func  fork
 check_func  getaddrinfo $network_extralibs
@@ -3069,6 +3080,7 @@ check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h VirtualAlloc
+check_func_headers glob.h glob
 
 check_header dlfcn.h
 check_header dxva2api.h -D_WIN32_WINNT=0x0600
@@ -3211,7 +3223,7 @@ if enabled libdc1394; then
 fi
 
 SDL_CONFIG="${cross_prefix}sdl-config"
-if check_pkg_config sdl SDL_version.h SDL_Linked_Version; then
+if check_pkg_config sdl SDL_events.h SDL_PollEvent; then
     check_cpp_condition SDL.h "(SDL_MAJOR_VERSION<<16 | SDL_MINOR_VERSION<<8 | SDL_PATCHLEVEL) >= 0x010201" $sdl_cflags &&
     enable sdl &&
     check_struct SDL.h SDL_VideoInfo current_w $sdl_cflags && enable sdl_video_size
@@ -3273,13 +3285,10 @@ enabled_any sndio_indev sndio_outdev && check_lib2 sndio.h sio_open -lsndio
 enabled libcdio &&
     check_lib2 "cdio/cdda.h cdio/paranoia.h" cdio_cddap_open "-lcdio_paranoia -lcdio_cdda -lcdio"
 
-enabled x11grab                         &&
-check_header X11/Xlib.h                 &&
-check_header X11/extensions/XShm.h      &&
-check_header X11/extensions/Xfixes.h    &&
-check_func XOpenDisplay -lX11           &&
-check_func XShmCreateImage -lX11 -lXext &&
-check_func XFixesGetCursorImage -lX11 -lXext -lXfixes
+enabled x11grab                                           &&
+require X11 X11/Xlib.h XOpenDisplay -lX11                 &&
+require Xext X11/extensions/XShm.h XShmCreateImage -lXext &&
+require Xfixes X11/extensions/Xfixes.h XFixesGetCursorImage -lXfixes
 
 if ! disabled vaapi; then
     check_lib va/va.h vaInitialize -lva && {
