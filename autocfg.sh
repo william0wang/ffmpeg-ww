@@ -29,7 +29,6 @@ _config="configure \
 _config_lite="\
   --disable-ffmpeg \
   --disable-muxers \
-  --disable-filters \
   --disable-encoders \
   --enable-encoder=mpeg1video \
   --enable-encoder=huffyuv \
