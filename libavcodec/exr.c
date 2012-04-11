@@ -77,15 +77,13 @@ static inline uint16_t exr_flt2uint(uint32_t v)
  */
 static inline uint16_t exr_halflt2uint(uint16_t v)
 {
-    int exp = v >> 10;
-    if (v & 0x8000)
-        return 0;
-    if (!exp)
-        return (v >> 9) & 1;
-    if (exp >= 15)
-        return 0xffff;
+    unsigned exp = 14 - (v >> 10);
+    if (exp >= 14) {
+        if (exp == 14) return (v >> 9) & 1;
+        else           return (v & 0x8000) ? 0 : 0xffff;
+    }
     v <<= 6;
-    return (v + (1 << 16)) >> (15 - exp);
+    return (v + (1 << 16)) >> (exp + 1);
 }
 
 /**
@@ -158,7 +156,7 @@ static int decode_frame(AVCodecContext *avctx,
     AVFrame *const p = &s->picture;
     uint8_t *ptr;
 
-    int x, y, stride, magic_number, version_flag;
+    int i, x, y, stride, magic_number, version_flag;
     int w = 0;
     int h = 0;
     unsigned int xmin   = ~0;
@@ -329,7 +327,7 @@ static int decode_frame(AVCodecContext *avctx,
         }
 
         // Process unknown variables
-        for (int i = 0; i < 2; i++) {
+        for (i = 0; i < 2; i++) {
             // Skip variable name/type
             while (++buf < buf_end)
                 if (buf[0] == 0x0)

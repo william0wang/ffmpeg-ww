@@ -3,6 +3,9 @@
  *
  * Copyright (c) 2012 Konstantin Shishkov
  *
+ * This encoder appears to be based on Anatoliy Wassermans considering
+ * similarities in the bugs.
+ *
  * This file is part of Libav.
  *
  * Libav is free software; you can redistribute it and/or
@@ -289,8 +292,7 @@ static inline void encode_vlc_codeword(PutBitContext *pb, unsigned codebook, int
         exponent = av_log2(val);
 
         put_bits(pb, exponent - exp_order + switch_bits, 0);
-        put_bits(pb, 1, 1);
-        put_bits(pb, exponent, val);
+        put_bits(pb, exponent + 1, val);
     } else {
         exponent = val >> rice_order;
 
