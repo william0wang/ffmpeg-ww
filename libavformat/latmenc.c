@@ -51,15 +51,17 @@ static const AVClass latm_muxer_class = {
 
 static int latm_decode_extradata(LATMContext *ctx, uint8_t *buf, int size)
 {
-    GetBitContext gb;
     MPEG4AudioConfig m4ac;
 
-    init_get_bits(&gb, buf, size * 8);
     ctx->off = avpriv_mpeg4audio_get_config(&m4ac, buf, size * 8, 1);
     if (ctx->off < 0)
         return ctx->off;
-    skip_bits_long(&gb, ctx->off);
 
+    if (ctx->object_type == AOT_ALS && (ctx->off & 7)) {
+        // as long as avpriv_mpeg4audio_get_config works correctly this is impossible
+        av_log(ctx, AV_LOG_ERROR, "BUG: ALS offset is not byte-aligned\n");
+        return AVERROR_INVALIDDATA;
+    }
     /* FIXME: are any formats not allowed in LATM? */
 
     if (m4ac.object_type > AOT_SBR && m4ac.object_type != AOT_ALS) {
@@ -87,7 +89,7 @@ static int latm_write_header(AVFormatContext *s)
     return 0;
 }
 
-static int latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
+static void latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
 {
     LATMContext *ctx = s->priv_data;
     AVCodecContext *avctx = s->streams[0]->codec;
@@ -109,8 +111,8 @@ static int latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
 
         /* AudioSpecificConfig */
         if (ctx->object_type == AOT_ALS) {
-            header_size = avctx->extradata_size-(ctx->off + 7) >> 3;
-            avpriv_copy_bits(bs, &avctx->extradata[ctx->off], header_size);
+            header_size = avctx->extradata_size-(ctx->off >> 3);
+            avpriv_copy_bits(bs, &avctx->extradata[ctx->off >> 3], header_size);
         } else {
             avpriv_copy_bits(bs, avctx->extradata, ctx->off + 3);
 
@@ -128,8 +130,6 @@ static int latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
 
     ctx->counter++;
     ctx->counter %= ctx->mod;
-
-    return 0;
 }
 
 static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
@@ -138,7 +138,7 @@ static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
     PutBitContext bs;
     int i, len;
     uint8_t loas_header[] = "\x56\xe0\x00";
-    uint8_t *buf;
+    uint8_t *buf = NULL;
 
     if (s->streams[0]->codec->codec_id == CODEC_ID_AAC_LATM)
         return ff_raw_write_packet(s, pkt);
@@ -147,6 +147,8 @@ static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
         av_log(s, AV_LOG_ERROR, "ADTS header detected - ADTS will not be incorrectly muxed into LATM\n");
         return AVERROR_INVALIDDATA;
     }
+    if (pkt->size > 0x1fff)
+        goto too_large;
 
     buf = av_malloc(pkt->size+1024);
     if (!buf)
@@ -173,6 +175,9 @@ static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     len = put_bits_count(&bs) >> 3;
 
+    if (len > 0x1fff)
+        goto too_large;
+
     loas_header[1] |= (len >> 8) & 0x1f;
     loas_header[2] |= len & 0xff;
 
@@ -182,6 +187,11 @@ static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
     av_free(buf);
 
     return 0;
+
+too_large:
+    av_log(s, AV_LOG_ERROR, "LATM packet size larger than maximum size 0x1fff\n");
+    av_free(buf);
+    return AVERROR_INVALIDDATA;
 }
 
 AVOutputFormat ff_latm_muxer = {

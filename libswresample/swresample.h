@@ -49,10 +49,19 @@ enum SwrDitherType {
     SWR_DITHER_NONE = 0,
     SWR_DITHER_RECTANGULAR,
     SWR_DITHER_TRIANGULAR,
+    SWR_DITHER_TRIANGULAR_HIGHPASS,
     SWR_DITHER_NB,              ///< not part of API/ABI
 };
 
 typedef struct SwrContext SwrContext;
+
+/**
+ * Get the AVClass for swrContext. It can be used in combination with
+ * AV_OPT_SEARCH_FAKE_OBJ for examining options.
+ *
+ * @see av_opt_find().
+ */
+const AVClass *swr_get_class(void);
 
 /**
  * Allocate SwrContext.
