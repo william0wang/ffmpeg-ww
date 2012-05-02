@@ -27,6 +27,8 @@
 #include "avformat.h"
 #include "rawenc.h"
 
+#define MAX_EXTRADATA_SIZE 1024
+
 typedef struct {
     AVClass *av_class;
     int off;
@@ -34,6 +36,7 @@ typedef struct {
     int object_type;
     int counter;
     int mod;
+    uint8_t buffer[0x1fff + MAX_EXTRADATA_SIZE + 1024];
 } LATMContext;
 
 static const AVOption options[] = {
@@ -53,6 +56,10 @@ static int latm_decode_extradata(LATMContext *ctx, uint8_t *buf, int size)
 {
     MPEG4AudioConfig m4ac;
 
+    if (size > MAX_EXTRADATA_SIZE) {
+        av_log(ctx, AV_LOG_ERROR, "Extradata is larger than currently supported.\n");
+        return AVERROR_INVALIDDATA;
+    }
     ctx->off = avpriv_mpeg4audio_get_config(&m4ac, buf, size * 8, 1);
     if (ctx->off < 0)
         return ctx->off;
@@ -93,15 +100,12 @@ static void latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
 {
     LATMContext *ctx = s->priv_data;
     AVCodecContext *avctx = s->streams[0]->codec;
-    GetBitContext gb;
     int header_size;
 
     /* AudioMuxElement */
     put_bits(bs, 1, !!ctx->counter);
 
     if (!ctx->counter) {
-        init_get_bits(&gb, avctx->extradata, avctx->extradata_size * 8);
-
         /* StreamMuxConfig */
         put_bits(bs, 1, 0); /* audioMuxVersion */
         put_bits(bs, 1, 1); /* allStreamsSameTimeFraming */
@@ -114,9 +118,14 @@ static void latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
             header_size = avctx->extradata_size-(ctx->off >> 3);
             avpriv_copy_bits(bs, &avctx->extradata[ctx->off >> 3], header_size);
         } else {
+            // + 3 assumes not scalable and dependsOnCoreCoder == 0,
+            // see decode_ga_specific_config in libavcodec/aacdec.c
             avpriv_copy_bits(bs, avctx->extradata, ctx->off + 3);
 
             if (!ctx->channel_conf) {
+                GetBitContext gb;
+                init_get_bits(&gb, avctx->extradata, avctx->extradata_size * 8);
+                skip_bits_long(&gb, ctx->off + 3);
                 avpriv_copy_pce_data(bs, &gb);
             }
         }
@@ -134,11 +143,11 @@ static void latm_write_frame_header(AVFormatContext *s, PutBitContext *bs)
 
 static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
 {
+    LATMContext *ctx = s->priv_data;
     AVIOContext *pb = s->pb;
     PutBitContext bs;
     int i, len;
     uint8_t loas_header[] = "\x56\xe0\x00";
-    uint8_t *buf = NULL;
 
     if (s->streams[0]->codec->codec_id == CODEC_ID_AAC_LATM)
         return ff_raw_write_packet(s, pkt);
@@ -150,11 +159,7 @@ static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
     if (pkt->size > 0x1fff)
         goto too_large;
 
-    buf = av_malloc(pkt->size+1024);
-    if (!buf)
-        return AVERROR(ENOMEM);
-
-    init_put_bits(&bs, buf, pkt->size+1024);
+    init_put_bits(&bs, ctx->buffer, pkt->size+1024+MAX_EXTRADATA_SIZE);
 
     latm_write_frame_header(s, &bs);
 
@@ -167,8 +172,19 @@ static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
     /* The LATM payload is written unaligned */
 
     /* PayloadMux() */
-    for (i = 0; i < pkt->size; i++)
-        put_bits(&bs, 8, pkt->data[i]);
+    if (pkt->size && (pkt->data[0] & 0xe1) == 0x81) {
+        // Convert byte-aligned DSE to non-aligned.
+        // Due to the input format encoding we know that
+        // it is naturally byte-aligned in the input stream,
+        // so there are no padding bits to account for.
+        // To avoid having to add padding bits and rearrange
+        // the whole stream we just remove the byte-align flag.
+        // This allows us to remux our FATE AAC samples into latm
+        // files that are still playable with minimal effort.
+        put_bits(&bs, 8, pkt->data[0] & 0xfe);
+        avpriv_copy_bits(&bs, pkt->data + 1, 8*pkt->size - 8);
+    } else
+        avpriv_copy_bits(&bs, pkt->data, 8*pkt->size);
 
     avpriv_align_put_bits(&bs);
     flush_put_bits(&bs);
@@ -182,15 +198,12 @@ static int latm_write_packet(AVFormatContext *s, AVPacket *pkt)
     loas_header[2] |= len & 0xff;
 
     avio_write(pb, loas_header, 3);
-    avio_write(pb, buf, len);
-
-    av_free(buf);
+    avio_write(pb, ctx->buffer, len);
 
     return 0;
 
 too_large:
     av_log(s, AV_LOG_ERROR, "LATM packet size larger than maximum size 0x1fff\n");
-    av_free(buf);
     return AVERROR_INVALIDDATA;
 }
 

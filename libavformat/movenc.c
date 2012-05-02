@@ -661,7 +661,8 @@ static int mov_write_audio_tag(AVIOContext *pb, MOVTrack *track)
         }
 
         avio_wb16(pb, 0); /* packet size (= 0) */
-        avio_wb16(pb, track->enc->sample_rate);
+        avio_wb16(pb, track->enc->sample_rate <= UINT16_MAX ?
+                      track->enc->sample_rate : 0);
         avio_wb16(pb, 0); /* Reserved */
     }
 
@@ -939,7 +940,7 @@ static const AVCodecTag codec_3gp_tags[] = {
 
 static int mov_find_codec_tag(AVFormatContext *s, MOVTrack *track)
 {
-    int tag = track->enc->codec_tag;
+    int tag;
 
     if (track->mode == MODE_MP4 || track->mode == MODE_PSP)
         tag = mp4_get_codec_tag(s, track);
@@ -3199,17 +3200,11 @@ static int mov_write_header(AVFormatContext *s)
             }else{
                 track->sample_size = (av_get_bits_per_sample(st->codec->codec_id) >> 3) * st->codec->channels;
             }
-            if (track->mode != MODE_MOV) {
-                if (track->timescale > UINT16_MAX) {
-                    av_log(s, AV_LOG_ERROR, "track %d: output format does not support "
-                           "sample rate %dhz\n", i, track->timescale);
-                    goto error;
-                }
-                if (track->enc->codec_id == CODEC_ID_MP3 && track->timescale < 16000) {
-                    av_log(s, AV_LOG_ERROR, "track %d: muxing mp3 at %dhz is not supported\n",
-                           i, track->enc->sample_rate);
-                    goto error;
-                }
+            if (track->mode != MODE_MOV &&
+                track->enc->codec_id == CODEC_ID_MP3 && track->timescale < 16000) {
+                av_log(s, AV_LOG_ERROR, "track %d: muxing mp3 at %dhz is not supported\n",
+                       i, track->enc->sample_rate);
+                goto error;
             }
         }else if(st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE){
             track->timescale = st->codec->time_base.den;

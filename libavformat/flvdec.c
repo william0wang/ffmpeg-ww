@@ -112,7 +112,7 @@ static int flv_set_video_codec(AVFormatContext *s, AVStream *vstream, int flv_co
                 vcodec->codec_id = CODEC_ID_VP6A;
             if(vcodec->extradata_size != 1) {
                 vcodec->extradata_size = 1;
-                vcodec->extradata = av_malloc(1);
+                vcodec->extradata = av_malloc(1 + FF_INPUT_BUFFER_PADDING_SIZE);
             }
             vcodec->extradata[0] = avio_r8(s->pb);
             return 1; // 1 byte body size adjustment for flv_read_packet()
@@ -653,12 +653,8 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     ret= av_get_packet(s->pb, pkt, size);
-    if (ret < 0) {
-        return AVERROR(EIO);
-    }
-    /* note: we need to modify the packet size here to handle the last
-       packet */
-    pkt->size = ret;
+    if (ret < 0)
+        return ret;
     pkt->dts = dts;
     pkt->pts = pts == AV_NOPTS_VALUE ? dts : pts;
     pkt->stream_index = st->index;

@@ -14,11 +14,13 @@ number of input and output pads of the filter.
 A filter with no input pads is called a "source", a filter with no
 output pads is called a "sink".
 
+@anchor{Filtergraph syntax}
 @section Filtergraph syntax
 
-A filtergraph can be represented using a textual representation, which
-is recognized by the @code{-vf} option of the ff*
-tools, and by the @code{avfilter_graph_parse()} function defined in
+A filtergraph can be represented using a textual representation, which is
+recognized by the @option{-filter}/@option{-vf} and @option{-filter_complex}
+options in @command{ffmpeg} and @option{-vf} in @command{ffplay}, and by the
+@code{avfilter_graph_parse()}/@code{avfilter_graph_parse2()} function defined in
 @file{libavfilter/avfiltergraph.h}.
 
 A filterchain consists of a sequence of connected filters, each one
@@ -76,6 +78,12 @@ In a complete filterchain all the unlabelled filter input and output
 pads must be connected. A filtergraph is considered valid if all the
 filter input and output pads of all the filterchains are connected.
 
+Libavfilter will automatically insert scale filters where format
+conversion is required. It is possible to specify swscale flags
+for those automatically inserted scalers by prepending
+@code{sws_flags=@var{flags};}
+to the filtergraph description.
+
 Follows a BNF description for the filtergraph syntax:
 @example
 @var{NAME}             ::= sequence of alphanumeric characters and '_'
@@ -84,7 +92,7 @@ Follows a BNF description for the filtergraph syntax:
 @var{FILTER_ARGUMENTS} ::= sequence of chars (eventually quoted)
 @var{FILTER}           ::= [@var{LINKNAMES}] @var{NAME} ["=" @var{ARGUMENTS}] [@var{LINKNAMES}]
 @var{FILTERCHAIN}      ::= @var{FILTER} [,@var{FILTERCHAIN}]
-@var{FILTERGRAPH}      ::= @var{FILTERCHAIN} [;@var{FILTERGRAPH}]
+@var{FILTERGRAPH}      ::= [sws_flags=@var{flags};] @var{FILTERCHAIN} [;@var{FILTERGRAPH}]
 @end example
 
 @c man end FILTERGRAPH DESCRIPTION
@@ -1254,43 +1262,10 @@ The description of the accepted parameters follows.
 
 @table @option
 
-@item fontfile
-The font file to be used for drawing text. Path must be included.
-This parameter is mandatory.
-
-@item text
-The text string to be drawn. The text must be a sequence of UTF-8
-encoded characters.
-This parameter is mandatory if no file is specified with the parameter
-@var{textfile}.
-
-@item textfile
-A text file containing text to be drawn. The text must be a sequence
-of UTF-8 encoded characters.
-
-This parameter is mandatory if no text string is specified with the
-parameter @var{text}.
-
-If both text and textfile are specified, an error is thrown.
-
-@item x, y
-The expressions which specify the offsets where text will be drawn
-within the video frame. They are relative to the top/left border of the
-output image.
-
-The default value of @var{x} and @var{y} is "0".
-
-See below for the list of accepted constants.
-
-@item fontsize
-The font size to be used for drawing text.
-The default value of @var{fontsize} is 16.
-
-@item fontcolor
-The color to be used for drawing fonts.
-Either a string (e.g. "red") or in 0xRRGGBB[AA] format
-(e.g. "0xff000033"), possibly followed by an alpha specifier.
-The default value of @var{fontcolor} is "black".
+@item box
+Used to draw a box around text using background color.
+Value should be either 1 (enable) or 0 (disable).
+The default value of @var{box} is 0.
 
 @item boxcolor
 The color to be used for drawing box around text.
@@ -1298,21 +1273,22 @@ Either a string (e.g. "yellow") or in 0xRRGGBB[AA] format
 (e.g. "0xff00ff"), possibly followed by an alpha specifier.
 The default value of @var{boxcolor} is "white".
 
-@item box
-Used to draw a box around text using background color.
-Value should be either 1 (enable) or 0 (disable).
-The default value of @var{box} is 0.
+@item fix_bounds
+If true, check and fix text coords to avoid clipping.
 
-@item shadowx, shadowy
-The x and y offsets for the text shadow position with respect to the
-position of the text. They can be either positive or negative
-values. Default value for both is "0".
+@item fontcolor
+The color to be used for drawing fonts.
+Either a string (e.g. "red") or in 0xRRGGBB[AA] format
+(e.g. "0xff000033"), possibly followed by an alpha specifier.
+The default value of @var{fontcolor} is "black".
 
-@item shadowcolor
-The color to be used for drawing a shadow behind the drawn text.  It
-can be a color name (e.g. "yellow") or a string in the 0xRRGGBB[AA]
-form (e.g. "0xff00ff"), possibly followed by an alpha specifier.
-The default value of @var{shadowcolor} is "black".
+@item fontfile
+The font file to be used for drawing text. Path must be included.
+This parameter is mandatory.
+
+@item fontsize
+The font size to be used for drawing text.
+The default value of @var{fontsize} is 16.
 
 @item ft_load_flags
 Flags to be used for loading the fonts.
@@ -1343,12 +1319,44 @@ Default value is "render".
 For more information consult the documentation for the FT_LOAD_*
 libfreetype flags.
 
+@item shadowcolor
+The color to be used for drawing a shadow behind the drawn text.  It
+can be a color name (e.g. "yellow") or a string in the 0xRRGGBB[AA]
+form (e.g. "0xff00ff"), possibly followed by an alpha specifier.
+The default value of @var{shadowcolor} is "black".
+
+@item shadowx, shadowy
+The x and y offsets for the text shadow position with respect to the
+position of the text. They can be either positive or negative
+values. Default value for both is "0".
+
 @item tabsize
 The size in number of spaces to use for rendering the tab.
 Default value is 4.
 
-@item fix_bounds
-If true, check and fix text coords to avoid clipping.
+@item text
+The text string to be drawn. The text must be a sequence of UTF-8
+encoded characters.
+This parameter is mandatory if no file is specified with the parameter
+@var{textfile}.
+
+@item textfile
+A text file containing text to be drawn. The text must be a sequence
+of UTF-8 encoded characters.
+
+This parameter is mandatory if no text string is specified with the
+parameter @var{text}.
+
+If both @var{text} and @var{textfile} are specified, an error is thrown.
+
+@item x, y
+The expressions which specify the offsets where text will be drawn
+within the video frame. They are relative to the top/left border of the
+output image.
+
+The default value of @var{x} and @var{y} is "0".
+
+See below for the list of accepted constants.
 @end table
 
 The parameters for @var{x} and @var{y} are expressions containing the
@@ -1865,7 +1873,6 @@ the named filter.
 
 The list of the currently supported filters follows:
 @table @var
-@item 2xsai
 @item decimate
 @item denoise3d
 @item detc
@@ -1889,7 +1896,6 @@ The list of the currently supported filters follows:
 @item ivtc
 @item kerndeint
 @item mcdeint
-@item mirror
 @item noise
 @item ow
 @item palette
@@ -2108,15 +2114,12 @@ Follow some examples:
 overlay=main_w-overlay_w-10:main_h-overlay_h-10
 
 # insert a transparent PNG logo in the bottom left corner of the input
-movie=logo.png [logo];
-[in][logo] overlay=10:main_h-overlay_h-10 [out]
+ffmpeg -i input -i logo -filter_complex 'overlay=10:main_h-overlay_h-10' output
 
 # insert 2 different transparent PNG logos (second logo on bottom
 # right corner):
-movie=logo1.png [logo1];
-movie=logo2.png [logo2];
-[in][logo1]       overlay=10:H-h-10 [in+logo1];
-[in+logo1][logo2] overlay=W-w-10:H-h-10 [out]
+ffmpeg -i input -i logo1 -i logo2 -filter_complex
+'overlay=10:H-h-10,overlay=W-w-10:H-h-10' output
 
 # add a transparent color layer on top of the main video,
 # WxH specifies the size of the main input to the overlay filter
@@ -2531,19 +2534,21 @@ Force field for the output video frame.
 The @code{setfield} filter marks the interlace type field for the
 output frames. It does not change the input frame, but only sets the
 corresponding property, which affects how the frame is treated by
-followig filters (e.g. @code{fieldorder} or @code{yadif}).
+following filters (e.g. @code{fieldorder} or @code{yadif}).
 
-It accepts a parameter representing an integer or a string, which can
-assume the following values:
+It accepts a string parameter, which can assume the following values:
 @table @samp
-@item -1, auto
+@item auto
 Keep the same field property.
 
-@item 0, bff
+@item bff
 Mark the frame as bottom-field-first.
 
-@item 1, tff
+@item tff
 Mark the frame as top-field-first.
+
+@item prog
+Mark the frame as progressive.
 @end table
 
 @section setpts
@@ -2716,6 +2721,13 @@ For example:
 will create two separate outputs from the same input, one cropped and
 one padded.
 
+@section super2xsai
+
+Scale the input by 2x and smooth using the Super2xSaI (Scale and
+Interpolate) pixel art scaling algorithm.
+
+Useful for enlarging pixel art images without reducing sharpness.
+
 @section swapuv
 Swap U & V plane.
 
@@ -2766,32 +2778,42 @@ This filter accepts a single parameter specifying the mode. Available
 modes are:
 
 @table @samp
-@item 0
+@item merge, 0
 Move odd frames into the upper field, even into the lower field,
 generating a double height frame at half framerate.
 
-@item 1
+@item drop_odd, 1
 Only output even frames, odd frames are dropped, generating a frame with
 unchanged height at half framerate.
 
-@item 2
+@item drop_even, 2
 Only output odd frames, even frames are dropped, generating a frame with
 unchanged height at half framerate.
 
-@item 3
+@item pad, 3
 Expand each frame to full height, but pad alternate lines with black,
 generating a frame with double height at the same input framerate.
 
-@item 4
+@item interleave_top, 4
 Interleave the upper field from odd frames with the lower field from
 even frames, generating a frame with unchanged height at half framerate.
 
-@item 5
+@item interleave_bottom, 5
 Interleave the lower field from odd frames with the upper field from
 even frames, generating a frame with unchanged height at half framerate.
+
+@item interlacex2, 6
+Double frame rate with unchanged height. Frames are inserted each
+containing the second temporal field from the previous input frame and
+the first temporal field from the next input frame. This mode relies on
+the top_field_first flag. Useful for interlaced video displays with no
+field synchronisation.
 @end table
 
-Default mode is 0.
+Numeric values are deprecated but are accepted for backward
+compatibility reasons.
+
+Default mode is @code{merge}.
 
 @section transpose
 
@@ -3242,7 +3264,7 @@ number or a valid video frame rate abbreviation. The default value is
 @item duration, d
 Set the video duration of the sourced video. The accepted syntax is:
 @example
-[-]HH[:MM[:SS[.m...]]]
+[-]HH:MM:SS[.m...]
 [-]S+[.m...]
 @end example
 See also the function @code{av_parse_time()}.

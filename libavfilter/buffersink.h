@@ -16,8 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFILTER_VSINK_BUFFER_H
-#define AVFILTER_VSINK_BUFFER_H
+#ifndef AVFILTER_BUFFERSINK_H
+#define AVFILTER_BUFFERSINK_H
 
 /**
  * @file
@@ -64,6 +64,13 @@ AVABufferSinkParams *av_abuffersink_params_alloc(void);
 #define AV_BUFFERSINK_FLAG_PEEK 1
 
 /**
+ * Tell av_buffersink_get_buffer_ref() not to request a frame fom its input.
+ * If a frame is already buffered, it is read (and removed from the buffer),
+ * but if no frame is present, return AVERROR(EAGAIN).
+ */
+#define AV_BUFFERSINK_FLAG_NO_REQUEST 2
+
+/**
  * Get an audio/video buffer data from buffer_sink and put it in bufref.
  *
  * This function works with both audio and video buffer sinks.
@@ -91,4 +98,4 @@ int av_vsink_buffer_get_video_buffer_ref(AVFilterContext *buffer_sink,
                                          AVFilterBufferRef **picref, int flags);
 #endif
 
-#endif /* AVFILTER_VSINK_BUFFER_H */
+#endif /* AVFILTER_BUFFERSINK_H */

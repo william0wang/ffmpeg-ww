@@ -486,51 +486,52 @@ enum Motion_Est_ID {
 enum AVDiscard{
     /* We leave some space between them for extensions (drop some
      * keyframes for intra-only or drop just some bidir frames). */
-    AVDISCARD_NONE   =-16, ///< discard nothing
-    AVDISCARD_DEFAULT=  0, ///< discard useless packets like 0 size packets in avi
-    AVDISCARD_NONREF =  8, ///< discard all non reference
-    AVDISCARD_BIDIR  = 16, ///< discard all bidirectional frames
-    AVDISCARD_NONKEY = 32, ///< discard all frames except keyframes
-    AVDISCARD_ALL    = 48, ///< discard all
+    AVDISCARD_NONE    =-16, ///< discard nothing
+    AVDISCARD_DEFAULT =  0, ///< discard useless packets like 0 size packets in avi
+    AVDISCARD_NONREF  =  8, ///< discard all non reference
+    AVDISCARD_BIDIR   = 16, ///< discard all bidirectional frames
+    AVDISCARD_NONKEY  = 32, ///< discard all frames except keyframes
+    AVDISCARD_ALL     = 48, ///< discard all
 };
 
 enum AVColorPrimaries{
-    AVCOL_PRI_BT709      =1, ///< also ITU-R BT1361 / IEC 61966-2-4 / SMPTE RP177 Annex B
-    AVCOL_PRI_UNSPECIFIED=2,
-    AVCOL_PRI_BT470M     =4,
-    AVCOL_PRI_BT470BG    =5, ///< also ITU-R BT601-6 625 / ITU-R BT1358 625 / ITU-R BT1700 625 PAL & SECAM
-    AVCOL_PRI_SMPTE170M  =6, ///< also ITU-R BT601-6 525 / ITU-R BT1358 525 / ITU-R BT1700 NTSC
-    AVCOL_PRI_SMPTE240M  =7, ///< functionally identical to above
-    AVCOL_PRI_FILM       =8,
-    AVCOL_PRI_NB           , ///< Not part of ABI
+    AVCOL_PRI_BT709       = 1, ///< also ITU-R BT1361 / IEC 61966-2-4 / SMPTE RP177 Annex B
+    AVCOL_PRI_UNSPECIFIED = 2,
+    AVCOL_PRI_BT470M      = 4,
+    AVCOL_PRI_BT470BG     = 5, ///< also ITU-R BT601-6 625 / ITU-R BT1358 625 / ITU-R BT1700 625 PAL & SECAM
+    AVCOL_PRI_SMPTE170M   = 6, ///< also ITU-R BT601-6 525 / ITU-R BT1358 525 / ITU-R BT1700 NTSC
+    AVCOL_PRI_SMPTE240M   = 7, ///< functionally identical to above
+    AVCOL_PRI_FILM        = 8,
+    AVCOL_PRI_NB             , ///< Not part of ABI
 };
 
 enum AVColorTransferCharacteristic{
-    AVCOL_TRC_BT709      =1, ///< also ITU-R BT1361
-    AVCOL_TRC_UNSPECIFIED=2,
-    AVCOL_TRC_GAMMA22    =4, ///< also ITU-R BT470M / ITU-R BT1700 625 PAL & SECAM
-    AVCOL_TRC_GAMMA28    =5, ///< also ITU-R BT470BG
-    AVCOL_TRC_SMPTE240M  =7,
-    AVCOL_TRC_NB           , ///< Not part of ABI
+    AVCOL_TRC_BT709       = 1, ///< also ITU-R BT1361
+    AVCOL_TRC_UNSPECIFIED = 2,
+    AVCOL_TRC_GAMMA22     = 4, ///< also ITU-R BT470M / ITU-R BT1700 625 PAL & SECAM
+    AVCOL_TRC_GAMMA28     = 5, ///< also ITU-R BT470BG
+    AVCOL_TRC_SMPTE240M   = 7,
+    AVCOL_TRC_NB             , ///< Not part of ABI
 };
 
 enum AVColorSpace{
-    AVCOL_SPC_RGB        =0,
-    AVCOL_SPC_BT709      =1, ///< also ITU-R BT1361 / IEC 61966-2-4 xvYCC709 / SMPTE RP177 Annex B
-    AVCOL_SPC_UNSPECIFIED=2,
-    AVCOL_SPC_FCC        =4,
-    AVCOL_SPC_BT470BG    =5, ///< also ITU-R BT601-6 625 / ITU-R BT1358 625 / ITU-R BT1700 625 PAL & SECAM / IEC 61966-2-4 xvYCC601
-    AVCOL_SPC_SMPTE170M  =6, ///< also ITU-R BT601-6 525 / ITU-R BT1358 525 / ITU-R BT1700 NTSC / functionally identical to above
-    AVCOL_SPC_SMPTE240M  =7,
-    AVCOL_SPC_YCGCO      =8,
-    AVCOL_SPC_NB           , ///< Not part of ABI
+    AVCOL_SPC_RGB         = 0,
+    AVCOL_SPC_BT709       = 1, ///< also ITU-R BT1361 / IEC 61966-2-4 xvYCC709 / SMPTE RP177 Annex B
+    AVCOL_SPC_UNSPECIFIED = 2,
+    AVCOL_SPC_FCC         = 4,
+    AVCOL_SPC_BT470BG     = 5, ///< also ITU-R BT601-6 625 / ITU-R BT1358 625 / ITU-R BT1700 625 PAL & SECAM / IEC 61966-2-4 xvYCC601
+    AVCOL_SPC_SMPTE170M   = 6, ///< also ITU-R BT601-6 525 / ITU-R BT1358 525 / ITU-R BT1700 NTSC / functionally identical to above
+    AVCOL_SPC_SMPTE240M   = 7,
+    AVCOL_SPC_YCOCG       = 8, ///< Used by Dirac / VC-2 and H.264 FRext, see ITU-T SG16
+    AVCOL_SPC_NB             , ///< Not part of ABI
 };
+#define AVCOL_SPC_YCGCO AVCOL_SPC_YCOCG
 
 enum AVColorRange{
-    AVCOL_RANGE_UNSPECIFIED=0,
-    AVCOL_RANGE_MPEG       =1, ///< the normal 219*2^(n-8) "MPEG" YUV ranges
-    AVCOL_RANGE_JPEG       =2, ///< the normal     2^n-1   "JPEG" YUV ranges
-    AVCOL_RANGE_NB           , ///< Not part of ABI
+    AVCOL_RANGE_UNSPECIFIED = 0,
+    AVCOL_RANGE_MPEG        = 1, ///< the normal 219*2^(n-8) "MPEG" YUV ranges
+    AVCOL_RANGE_JPEG        = 2, ///< the normal     2^n-1   "JPEG" YUV ranges
+    AVCOL_RANGE_NB             , ///< Not part of ABI
 };
 
 /**
@@ -539,14 +540,14 @@ enum AVColorRange{
  *  X   X      5 6 X      0 is undefined/unknown position
  */
 enum AVChromaLocation{
-    AVCHROMA_LOC_UNSPECIFIED=0,
-    AVCHROMA_LOC_LEFT       =1, ///< mpeg2/4, h264 default
-    AVCHROMA_LOC_CENTER     =2, ///< mpeg1, jpeg, h263
-    AVCHROMA_LOC_TOPLEFT    =3, ///< DV
-    AVCHROMA_LOC_TOP        =4,
-    AVCHROMA_LOC_BOTTOMLEFT =5,
-    AVCHROMA_LOC_BOTTOM     =6,
-    AVCHROMA_LOC_NB           , ///< Not part of ABI
+    AVCHROMA_LOC_UNSPECIFIED = 0,
+    AVCHROMA_LOC_LEFT        = 1, ///< mpeg2/4, h264 default
+    AVCHROMA_LOC_CENTER      = 2, ///< mpeg1, jpeg, h263
+    AVCHROMA_LOC_TOPLEFT     = 3, ///< DV
+    AVCHROMA_LOC_TOP         = 4,
+    AVCHROMA_LOC_BOTTOMLEFT  = 5,
+    AVCHROMA_LOC_BOTTOM      = 6,
+    AVCHROMA_LOC_NB             , ///< Not part of ABI
 };
 
 enum AVAudioServiceType {
@@ -1257,6 +1258,25 @@ typedef struct AVFrame {
      * - decoding: Read by user.
      */
     int64_t pkt_pos;
+
+    /**
+     * channel layout of the audio frame
+     * - encoding: unused
+     * - decoding: read by user.
+     * Code outside libavcodec should access this field using:
+     * av_opt_ptr(avcodec_get_frame_class(), frame, "channel_layout")
+     */
+    int64_t channel_layout;
+
+    /**
+     * sample rate of the audio frame
+     * - encoding: unused
+     * - decoding: read by user.
+     * Code outside libavcodec should access this field using:
+     * av_opt_ptr(avcodec_get_frame_class(), frame, "sample_rate")
+     */
+    int sample_rate;
+
 } AVFrame;
 
 struct AVCodecInternal;
@@ -2622,15 +2642,13 @@ typedef struct AVCodecContext {
 #define FF_IDCT_SIMPLEALPHA   23
 #define FF_IDCT_BINK          24
 
+#if FF_API_DSP_MASK
     /**
-     * dsp_mask could be add used to disable unwanted CPU features
-     * CPU features (i.e. MMX, SSE. ...)
-     *
-     * With the FORCE flag you may instead enable given CPU features.
-     * (Dangerous: Usable in case of misdetection, improper usage however will
-     * result into program crash.)
+     * Unused.
+     * @deprecated use av_set_cpu_flags_mask() instead.
      */
-    unsigned dsp_mask;
+    attribute_deprecated unsigned dsp_mask;
+#endif
 
     /**
      * bits per sample/pixel from the demuxer (needed for huffyuv).
@@ -3141,6 +3159,12 @@ typedef struct AVSubtitleRect {
      * struct.
      */
     char *ass;
+
+    /**
+     * 1 indicates this subtitle is a forced subtitle.
+     * A forced subtitle should be displayed even when subtitles are hidden.
+     */
+    int forced;
 } AVSubtitleRect;
 
 typedef struct AVSubtitle {
@@ -3273,6 +3297,14 @@ const AVClass *avcodec_get_class(void);
  * @see av_opt_find().
  */
 const AVClass *avcodec_get_frame_class(void);
+
+/**
+ * Get the AVClass for AVSubtitleRect. It can be used in combination with
+ * AV_OPT_SEARCH_FAKE_OBJ for examining options.
+ *
+ * @see av_opt_find().
+ */
+const AVClass *avcodec_get_subtitle_rect_class(void);
 
 /**
  * Copy the settings of the source AVCodecContext into the destination

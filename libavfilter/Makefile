@@ -12,7 +12,7 @@ FFLIBS-$(CONFIG_REMOVELOGO_FILTER)           += swscale avformat avcodec
 FFLIBS-$(CONFIG_SCALE_FILTER)                += swscale
 FFLIBS-$(CONFIG_MP_FILTER)                   += avcodec postproc
 
-HEADERS = avcodec.h avfilter.h avfiltergraph.h buffersink.h version.h vsrc_buffer.h
+HEADERS = asrc_abuffer.h avcodec.h avfilter.h avfiltergraph.h buffersink.h version.h vsrc_buffer.h
 
 OBJS = allfilters.o                                                     \
        avfilter.o                                                       \
@@ -22,8 +22,8 @@ OBJS = allfilters.o                                                     \
        formats.o                                                        \
        graphdump.o                                                      \
        graphparser.o                                                    \
+       src_buffer.o                                                     \
        transform.o                                                      \
-       vsrc_buffer.o
 
 OBJS-$(CONFIG_AVCODEC)                       += avcodec.o
 OBJS-$(CONFIG_AVFORMAT)                      += lavfutils.o
@@ -42,7 +42,6 @@ OBJS-$(CONFIG_PAN_FILTER)                    += af_pan.o
 OBJS-$(CONFIG_SILENCEDETECT_FILTER)          += af_silencedetect.o
 OBJS-$(CONFIG_VOLUME_FILTER)                 += af_volume.o
 
-OBJS-$(CONFIG_ABUFFER_FILTER)                += asrc_abuffer.o
 OBJS-$(CONFIG_AEVALSRC_FILTER)               += asrc_aevalsrc.o
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
@@ -94,6 +93,7 @@ OBJS-$(CONFIG_SETTB_FILTER)                  += vf_settb.o
 OBJS-$(CONFIG_SHOWINFO_FILTER)               += vf_showinfo.o
 OBJS-$(CONFIG_SLICIFY_FILTER)                += vf_slicify.o
 OBJS-$(CONFIG_SPLIT_FILTER)                  += vf_split.o
+OBJS-$(CONFIG_SUPER2XSAI_FILTER)             += vf_super2xsai.o
 OBJS-$(CONFIG_SWAPUV_FILTER)                 += vf_swapuv.o
 OBJS-$(CONFIG_THUMBNAIL_FILTER)              += vf_thumbnail.o
 OBJS-$(CONFIG_TILE_FILTER)                   += vf_tile.o
@@ -119,7 +119,6 @@ OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
 
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/mp_image.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/img_format.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_2xsai.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_decimate.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_denoise3d.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_detc.o
@@ -144,7 +143,6 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ilpack.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ivtc.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_kerndeint.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_mcdeint.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_mirror.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_noise.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ow.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_palette.o

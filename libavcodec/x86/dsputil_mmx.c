@@ -3043,7 +3043,7 @@ static void dsputil_init_sse2(DSPContext *c, AVCodecContext *avctx,
     const int bit_depth      = avctx->bits_per_raw_sample;
     const int high_bit_depth = bit_depth > 8;
 
-    if (mm_flags & AV_CPU_FLAG_3DNOW) {
+    if (!(mm_flags & AV_CPU_FLAG_SSE2SLOW)) {
         // these functions are slower than mmx on AMD, but faster on Intel
         if (!high_bit_depth) {
             c->put_pixels_tab[0][0]        = put_pixels16_sse2;
@@ -3184,13 +3184,6 @@ static void dsputil_init_avx(DSPContext *c, AVCodecContext *avctx, int mm_flags)
 void ff_dsputil_init_mmx(DSPContext *c, AVCodecContext *avctx)
 {
     int mm_flags = av_get_cpu_flags();
-
-    if (avctx->dsp_mask) {
-        if (avctx->dsp_mask & AV_CPU_FLAG_FORCE)
-            mm_flags |=   avctx->dsp_mask & 0xffff;
-        else
-            mm_flags &= ~(avctx->dsp_mask & 0xffff);
-    }
 
 #if 0
     av_log(avctx, AV_LOG_INFO, "libavcodec: CPU flags:");
