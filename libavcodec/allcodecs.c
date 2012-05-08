@@ -397,6 +397,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (ASS, ass);
     REGISTER_ENCDEC  (DVBSUB, dvbsub);
     REGISTER_ENCDEC  (DVDSUB, dvdsub);
+    REGISTER_DECODER (JACOSUB, jacosub);
     REGISTER_DECODER (MICRODVD, microdvd);
     REGISTER_DECODER (PGSSUB, pgssub);
     REGISTER_ENCDEC  (SRT, srt);
@@ -453,6 +454,7 @@ void avcodec_register_all(void)
     REGISTER_PARSER  (MPEG4VIDEO, mpeg4video);
     REGISTER_PARSER  (MPEGAUDIO, mpegaudio);
     REGISTER_PARSER  (MPEGVIDEO, mpegvideo);
+    REGISTER_PARSER  (PNG, png);
     REGISTER_PARSER  (PNM, pnm);
     REGISTER_PARSER  (RV30, rv30);
     REGISTER_PARSER  (RV40, rv40);

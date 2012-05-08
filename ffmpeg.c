@@ -59,7 +59,6 @@
 # include "libavfilter/avfiltergraph.h"
 # include "libavfilter/buffersink.h"
 # include "libavfilter/buffersrc.h"
-# include "libavfilter/vsrc_buffer.h"
 
 #if HAVE_SYS_RESOURCE_H
 #include <sys/types.h>
@@ -569,7 +568,7 @@ static int alloc_buffer(InputStream *ist, AVCodecContext *s, FrameBuffer **pbuf)
     for (i = 0; i < FF_ARRAY_ELEMS(buf->data); i++) {
         const int h_shift = i==0 ? 0 : h_chroma_shift;
         const int v_shift = i==0 ? 0 : v_chroma_shift;
-        if ((s->flags & CODEC_FLAG_EMU_EDGE) || !buf->linesize[1])
+        if ((s->flags & CODEC_FLAG_EMU_EDGE) || !buf->linesize[1] || !buf->base[i])
             buf->data[i] = buf->base[i];
         else
             buf->data[i] = buf->base[i] +
@@ -729,7 +728,6 @@ static int configure_video_filters(FilterGraph *fg)
     InputStream  *ist = fg->inputs[0]->ist;
     OutputStream *ost = fg->outputs[0]->ost;
     AVFilterContext *last_filter, *filter;
-    /** filter graph containing all filters including input & output */
     AVCodecContext *codec = ost->st->codec;
     enum PixelFormat *pix_fmts = choose_pixel_fmts(ost);
     AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
@@ -1073,25 +1071,25 @@ static void term_init(void)
 {
 #if HAVE_TERMIOS_H
     if(!run_as_daemon){
-    struct termios tty;
+        struct termios tty;
 
-    if (tcgetattr (0, &tty) == 0) {
-    oldtty = tty;
-    restore_tty = 1;
-    atexit(term_exit);
+        if (tcgetattr (0, &tty) == 0) {
+            oldtty = tty;
+            restore_tty = 1;
+            atexit(term_exit);
 
-    tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP
-                          |INLCR|IGNCR|ICRNL|IXON);
-    tty.c_oflag |= OPOST;
-    tty.c_lflag &= ~(ECHO|ECHONL|ICANON|IEXTEN);
-    tty.c_cflag &= ~(CSIZE|PARENB);
-    tty.c_cflag |= CS8;
-    tty.c_cc[VMIN] = 1;
-    tty.c_cc[VTIME] = 0;
+            tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP
+                             |INLCR|IGNCR|ICRNL|IXON);
+            tty.c_oflag |= OPOST;
+            tty.c_lflag &= ~(ECHO|ECHONL|ICANON|IEXTEN);
+            tty.c_cflag &= ~(CSIZE|PARENB);
+            tty.c_cflag |= CS8;
+            tty.c_cc[VMIN] = 1;
+            tty.c_cc[VTIME] = 0;
 
-    tcsetattr (0, TCSANOW, &tty);
-    }
-    signal(SIGQUIT, sigterm_handler); /* Quit (POSIX).  */
+            tcsetattr (0, TCSANOW, &tty);
+        }
+        signal(SIGQUIT, sigterm_handler); /* Quit (POSIX).  */
     }
 #endif
     avformat_network_deinit();
@@ -2066,58 +2064,57 @@ static int poll_filters(void)
 
     while (1) {
         /* Reap all buffers present in the buffer sinks */
-        /* TODO reindent */
-    for (i = 0; i < nb_output_streams; i++) {
-        OutputStream *ost = output_streams[i];
-        OutputFile    *of = output_files[ost->file_index];
+        for (i = 0; i < nb_output_streams; i++) {
+            OutputStream *ost = output_streams[i];
+            OutputFile    *of = output_files[ost->file_index];
 
-        if (!ost->filter || ost->is_past_recording_time)
-            continue;
+            if (!ost->filter || ost->is_past_recording_time)
+                continue;
 
-        if (!ost->filtered_frame && !(ost->filtered_frame = avcodec_alloc_frame())) {
-            return AVERROR(ENOMEM);
-        } else
-            avcodec_get_frame_defaults(ost->filtered_frame);
-        filtered_frame = ost->filtered_frame;
+            if (!ost->filtered_frame && !(ost->filtered_frame = avcodec_alloc_frame())) {
+                return AVERROR(ENOMEM);
+            } else
+                avcodec_get_frame_defaults(ost->filtered_frame);
+            filtered_frame = ost->filtered_frame;
 
-        while (1) {
-            AVRational ist_pts_tb = ost->filter->filter->inputs[0]->time_base;
-            ret = av_buffersink_get_buffer_ref(ost->filter->filter, &picref,
-                                               AV_BUFFERSINK_FLAG_NO_REQUEST);
-            if (ret < 0) {
-                if (ret != AVERROR(EAGAIN)) {
-                    char buf[256];
-                    av_strerror(ret, buf, sizeof(buf));
-                    av_log(NULL, AV_LOG_WARNING,
-                           "Error in av_buffersink_get_buffer_ref(): %s\n", buf);
+            while (1) {
+                AVRational ist_pts_tb = ost->filter->filter->inputs[0]->time_base;
+                ret = av_buffersink_get_buffer_ref(ost->filter->filter, &picref,
+                                                   AV_BUFFERSINK_FLAG_NO_REQUEST);
+                if (ret < 0) {
+                    if (ret != AVERROR(EAGAIN)) {
+                        char buf[256];
+                        av_strerror(ret, buf, sizeof(buf));
+                        av_log(NULL, AV_LOG_WARNING,
+                               "Error in av_buffersink_get_buffer_ref(): %s\n", buf);
+                    }
+                    break;
                 }
-                break;
+                filtered_frame->pts = av_rescale_q(picref->pts, ist_pts_tb, AV_TIME_BASE_Q);
+                //if (ost->source_index >= 0)
+                //    *filtered_frame= *input_streams[ost->source_index]->decoded_frame; //for me_threshold
+
+                if (of->start_time && filtered_frame->pts < of->start_time)
+                    return 0;
+
+                switch (ost->filter->filter->inputs[0]->type) {
+                case AVMEDIA_TYPE_VIDEO:
+                    avfilter_fill_frame_from_video_buffer_ref(filtered_frame, picref);
+                    if (!ost->frame_aspect_ratio)
+                        ost->st->codec->sample_aspect_ratio = picref->video->sample_aspect_ratio;
+
+                    do_video_out(of->ctx, ost, filtered_frame,
+                                 same_quant ? ost->last_quality :
+                                              ost->st->codec->global_quality);
+                    break;
+                default:
+                    // TODO support audio/subtitle filters
+                    av_assert0(0);
+                }
+
+                avfilter_unref_buffer(picref);
             }
-            filtered_frame->pts = av_rescale_q(picref->pts, ist_pts_tb, AV_TIME_BASE_Q);
-//             if (ost->source_index >= 0)
-//                 *filtered_frame= *input_streams[ost->source_index]->decoded_frame; //for me_threshold
-
-            if (of->start_time && filtered_frame->pts < of->start_time)
-                return 0;
-
-            switch (ost->filter->filter->inputs[0]->type) {
-            case AVMEDIA_TYPE_VIDEO:
-                avfilter_fill_frame_from_video_buffer_ref(filtered_frame, picref);
-                if (!ost->frame_aspect_ratio)
-                    ost->st->codec->sample_aspect_ratio = picref->video->sample_aspect_ratio;
-
-                do_video_out(of->ctx, ost, filtered_frame,
-                             same_quant ? ost->last_quality :
-                                          ost->st->codec->global_quality);
-                break;
-            default:
-                // TODO support audio/subtitle filters
-                av_assert0(0);
-            }
-
-            avfilter_unref_buffer(picref);
         }
-    }
         /* Request frames through all the graphs */
         ret_all = nb_success = nb_eof = 0;
         for (i = 0; i < nb_filtergraphs; i++) {
@@ -2570,7 +2567,7 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
     AVFrame *decoded_frame;
     void *buffer_to_free = NULL;
     int i, ret = 0, resample_changed;
-    int64_t *best_effort_timestamp;
+    int64_t best_effort_timestamp;
     AVRational *frame_sample_aspect;
     float quality;
 
@@ -2595,13 +2592,13 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
         /* no picture yet */
         if (!pkt->size)
             for (i = 0; i < ist->nb_filters; i++)
-                av_buffersrc_buffer(ist->filters[i]->filter, NULL);
+                av_buffersrc_add_ref(ist->filters[i]->filter, NULL, 0);
         return ret;
     }
 
-    best_effort_timestamp= av_opt_ptr(avcodec_get_frame_class(), decoded_frame, "best_effort_timestamp");
-    if(*best_effort_timestamp != AV_NOPTS_VALUE)
-        ist->next_pts = ist->pts = decoded_frame->pts = *best_effort_timestamp;
+    best_effort_timestamp= av_frame_get_best_effort_timestamp(decoded_frame);
+    if(best_effort_timestamp != AV_NOPTS_VALUE)
+        ist->next_pts = ist->pts = decoded_frame->pts = best_effort_timestamp;
 
     pkt->size = 0;
 
@@ -2659,9 +2656,11 @@ static int transcode_video(InputStream *ist, AVPacket *pkt, int *got_output, int
 
             av_assert0(buf->refcount>0);
             buf->refcount++;
-            av_buffersrc_buffer(ist->filters[i]->filter, fb);
+            av_buffersrc_add_ref(ist->filters[i]->filter, fb,
+                                 AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
+                                 AV_BUFFERSRC_FLAG_NO_COPY);
         } else
-        if(av_vsrc_buffer_add_frame(ist->filters[i]->filter, decoded_frame,AV_VSRC_BUF_FLAG_OVERWRITE)<0) {
+        if(av_buffersrc_add_frame(ist->filters[i]->filter, decoded_frame, 0)<0) {
             av_log(NULL, AV_LOG_FATAL, "Failed to inject frame into filter network\n");
             exit_program(1);
         }
@@ -3605,8 +3604,9 @@ static int transcode(void)
 
         if (debug_ts) {
             av_log(NULL, AV_LOG_INFO, "demuxer -> ist_index:%d type:%s "
-                    "next_pts:%s next_pts_time:%s pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s off:%"PRId64"\n",
+                    "next_dts:%s next_dts_time:%s next_pts:%s next_pts_time:%s  pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s off:%"PRId64"\n",
                     ist_index, av_get_media_type_string(ist->st->codec->codec_type),
+                    av_ts2str(ist->next_dts), av_ts2timestr(ist->next_dts, &ist->st->time_base),
                     av_ts2str(ist->next_pts), av_ts2timestr(ist->next_pts, &ist->st->time_base),
                     av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &ist->st->time_base),
                     av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ist->st->time_base),
@@ -5529,7 +5529,7 @@ static int opt_data_frames(OptionsContext *o, const char *opt, const char *arg)
 static int opt_preset(OptionsContext *o, const char *opt, const char *arg)
 {
     FILE *f=NULL;
-    char filename[1000], tmp[1000], tmp2[1000], line[1000];
+    char filename[1000], line[1000], tmp_line[1000];
     const char *codec_name = *opt == 'v' ? video_codec_name :
                              *opt == 'a' ? audio_codec_name :
                                            subtitle_codec_name;
@@ -5542,25 +5542,26 @@ static int opt_preset(OptionsContext *o, const char *opt, const char *arg)
         exit_program(1);
     }
 
-    while(!feof(f)){
-        int e= fscanf(f, "%999[^\n]\n", line) - 1;
-        if(line[0] == '#' && !e)
+    while (fgets(line, sizeof(line), f)) {
+        char *key = tmp_line, *value, *endptr;
+
+        if (strcspn(line, "#\n\r") == 0)
             continue;
-        e|= sscanf(line, "%999[^=]=%999[^\n]\n", tmp, tmp2) - 2;
-        if(e){
+        strcpy(tmp_line, line);
+        if (!av_strtok(key,   "=",    &value) ||
+            !av_strtok(value, "\r\n", &endptr)) {
             av_log(NULL, AV_LOG_FATAL, "%s: Invalid syntax: '%s'\n", filename, line);
             exit_program(1);
         }
-        if(!strcmp(tmp, "acodec")){
-            opt_audio_codec(o, tmp, tmp2);
-        }else if(!strcmp(tmp, "vcodec")){
-            opt_video_codec(o, tmp, tmp2);
-        }else if(!strcmp(tmp, "scodec")){
-            opt_subtitle_codec(o, tmp, tmp2);
-        }else if(!strcmp(tmp, "dcodec")){
-            opt_data_codec(o, tmp, tmp2);
-        }else if(opt_default(tmp, tmp2) < 0){
-            av_log(NULL, AV_LOG_FATAL, "%s: Invalid option or argument: '%s', parsed as '%s' = '%s'\n", filename, line, tmp, tmp2);
+        av_log(NULL, AV_LOG_DEBUG, "ffpreset[%s]: set '%s' = '%s'\n", filename, key, value);
+
+        if      (!strcmp(key, "acodec")) opt_audio_codec   (o, key, value);
+        else if (!strcmp(key, "vcodec")) opt_video_codec   (o, key, value);
+        else if (!strcmp(key, "scodec")) opt_subtitle_codec(o, key, value);
+        else if (!strcmp(key, "dcodec")) opt_data_codec    (o, key, value);
+        else if (opt_default(key, value) < 0) {
+            av_log(NULL, AV_LOG_FATAL, "%s: Invalid option or argument: '%s', parsed as '%s' = '%s'\n",
+                   filename, line, key, value);
             exit_program(1);
         }
     }

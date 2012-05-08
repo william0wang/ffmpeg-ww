@@ -390,6 +390,10 @@ static int audio_get_buffer(AVCodecContext *avctx, AVFrame *frame)
 
     frame->reordered_opaque = avctx->reordered_opaque;
 
+    frame->sample_rate    = avctx->sample_rate;
+    frame->format         = avctx->sample_fmt;
+    frame->channel_layout = avctx->channel_layout;
+
     if (avctx->debug & FF_DEBUG_BUFFERS)
         av_log(avctx, AV_LOG_DEBUG, "default_get_buffer called on frame %p, "
                "internal audio buffer used\n", frame);
@@ -550,7 +554,7 @@ void avcodec_default_release_buffer(AVCodecContext *s, AVFrame *pic){
     InternalBuffer *buf, *last;
     AVCodecInternal *avci = s->internal;
 
-    assert(s->codec_type == AVMEDIA_TYPE_VIDEO);
+    av_assert0(s->codec_type == AVMEDIA_TYPE_VIDEO);
 
     assert(pic->type==FF_BUFFER_TYPE_INTERNAL);
     assert(avci->buffer_count);
@@ -562,7 +566,7 @@ void avcodec_default_release_buffer(AVCodecContext *s, AVFrame *pic){
             if (buf->data[0] == pic->data[0])
                 break;
         }
-        assert(i < avci->buffer_count);
+        av_assert0(i < avci->buffer_count);
         avci->buffer_count--;
         last = &avci->buffer[avci->buffer_count];
 
@@ -585,7 +589,7 @@ int avcodec_default_reget_buffer(AVCodecContext *s, AVFrame *pic){
     AVFrame temp_pic;
     int i;
 
-    assert(s->codec_type == AVMEDIA_TYPE_VIDEO);
+    av_assert0(s->codec_type == AVMEDIA_TYPE_VIDEO);
 
     if (pic->data[0] && (pic->width != s->width || pic->height != s->height || pic->format != s->pix_fmt)) {
         av_log(s, AV_LOG_WARNING, "Picture changed from size:%dx%d fmt:%s to size:%dx%d fmt:%s in reget buffer()\n",
@@ -671,6 +675,15 @@ AVFrame *avcodec_alloc_frame(void){
 
     return pic;
 }
+
+#define MAKE_ACCESSORS(str, name, type, field) \
+    type av_##name##_get_##field(const str *s) { return s->field; } \
+    void av_##name##_set_##field(str *s, type v) { s->field = v; }
+
+MAKE_ACCESSORS(AVFrame, frame, int64_t, best_effort_timestamp)
+MAKE_ACCESSORS(AVFrame, frame, int64_t, pkt_pos)
+MAKE_ACCESSORS(AVFrame, frame, int64_t, channel_layout)
+MAKE_ACCESSORS(AVFrame, frame, int,     sample_rate)
 
 static void avcodec_get_subtitle_defaults(AVSubtitle *sub)
 {

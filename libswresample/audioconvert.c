@@ -107,8 +107,17 @@ static conv_func_type * const fmt_pair_to_conv_functions[AV_SAMPLE_FMT_NB*AV_SAM
     FMT_PAIR_FUNC(AV_SAMPLE_FMT_DBL, AV_SAMPLE_FMT_DBL),
 };
 
-static void cpy(uint8_t **dst, const uint8_t **src, int len){
+static void cpy1(uint8_t **dst, const uint8_t **src, int len){
     memcpy(*dst, *src, len);
+}
+static void cpy2(uint8_t **dst, const uint8_t **src, int len){
+    memcpy(*dst, *src, 2*len);
+}
+static void cpy4(uint8_t **dst, const uint8_t **src, int len){
+    memcpy(*dst, *src, 4*len);
+}
+static void cpy8(uint8_t **dst, const uint8_t **src, int len){
+    memcpy(*dst, *src, 8*len);
 }
 
 AudioConvert *swri_audio_convert_alloc(enum AVSampleFormat out_fmt,
@@ -124,14 +133,26 @@ AudioConvert *swri_audio_convert_alloc(enum AVSampleFormat out_fmt,
     ctx = av_mallocz(sizeof(*ctx));
     if (!ctx)
         return NULL;
+
+    if(channels == 1){
+         in_fmt = av_get_planar_sample_fmt( in_fmt);
+        out_fmt = av_get_planar_sample_fmt(out_fmt);
+    }
+
     ctx->channels = channels;
     ctx->conv_f   = f;
     ctx->ch_map   = ch_map;
-    if (in_fmt == AV_SAMPLE_FMT_U8)
+    if (in_fmt == AV_SAMPLE_FMT_U8 || in_fmt == AV_SAMPLE_FMT_U8P)
         memset(ctx->silence, 0x80, sizeof(ctx->silence));
 
-    if(out_fmt == in_fmt && !ch_map)
-        ctx->simd_f = cpy;
+    if(out_fmt == in_fmt && !ch_map) {
+        switch(av_get_bytes_per_sample(in_fmt)){
+            case 1:ctx->simd_f = cpy1; break;
+            case 2:ctx->simd_f = cpy2; break;
+            case 4:ctx->simd_f = cpy4; break;
+            case 8:ctx->simd_f = cpy8; break;
+        }
+    }
 
     if(HAVE_YASM && HAVE_MMX) swri_audio_convert_init_x86(ctx, out_fmt, in_fmt, channels);
 
@@ -154,15 +175,19 @@ int swri_audio_convert(AudioConvert *ctx, AudioData *out, AudioData *in, int len
     //FIXME optimize common cases
 
     if(ctx->simd_f && !ctx->ch_map){
-        int planes = out->planar ? out->ch_count : 1;
         off = len/16 * 16;
-        av_assert1(out->planar == in->planar);
         av_assert1(off>=0);
-        if(off>0)
-            for(ch=0; ch<planes; ch++){
-                ctx->simd_f(out->ch+ch, in->ch+ch, off*os);
-            }
         av_assert1(off<=len);
+        if(off>0){
+            if(out->planar == in->planar){
+                int planes = out->planar ? out->ch_count : 1;
+                for(ch=0; ch<planes; ch++){
+                    ctx->simd_f(out->ch+ch, in->ch+ch, off * (out->planar ? 1 :out->ch_count));
+                }
+            }else{
+                ctx->simd_f(out->ch, in->ch, off);
+            }
+        }
         if(off == len)
             return 0;
     }

@@ -22,6 +22,7 @@
  */
 
 #include "avcodec.h"
+#include "libavutil/opt.h"
 
 int avfilter_copy_frame_props(AVFilterBufferRef *dst, const AVFrame *src)
 {
@@ -38,6 +39,13 @@ int avfilter_copy_frame_props(AVFilterBufferRef *dst, const AVFrame *src)
         dst->video->top_field_first     = src->top_field_first;
         dst->video->key_frame           = src->key_frame;
         dst->video->pict_type           = src->pict_type;
+        break;
+    case AVMEDIA_TYPE_AUDIO:
+        dst->audio->sample_rate         = src->sample_rate;
+        dst->audio->channel_layout      = src->channel_layout;
+        break;
+    default:
+        return AVERROR(EINVAL);
     }
 
     return 0;
@@ -50,6 +58,20 @@ AVFilterBufferRef *avfilter_get_video_buffer_ref_from_frame(const AVFrame *frame
         avfilter_get_video_buffer_ref_from_arrays(frame->data, frame->linesize, perms,
                                                   frame->width, frame->height,
                                                   frame->format);
+    if (!picref)
+        return NULL;
+    avfilter_copy_frame_props(picref, frame);
+    return picref;
+}
+
+AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_frame(const AVFrame *frame,
+                                                            int perms)
+{
+    AVFilterBufferRef *picref =
+        avfilter_get_audio_buffer_ref_from_arrays((uint8_t **)frame->data, (int *)frame->linesize, perms,
+                                                  frame->nb_samples, frame->format,
+                                                  av_frame_get_channel_layout(frame),
+                                                  av_sample_fmt_is_planar(frame->format));
     if (!picref)
         return NULL;
     avfilter_copy_frame_props(picref, frame);

@@ -423,6 +423,7 @@ enum CodecID {
     CODEC_ID_SRT,
     CODEC_ID_MICRODVD   = MKBETAG('m','D','V','D'),
     CODEC_ID_EIA_608    = MKBETAG('c','6','0','8'),
+    CODEC_ID_JACOSUB    = MKBETAG('J','S','U','B'),
 
     /* other specific kind of codecs (generally used for attachments) */
     CODEC_ID_FIRST_UNKNOWN = 0x18000,           ///< A dummy ID pointing at the start of various fake codecs.
@@ -1242,9 +1243,25 @@ typedef struct AVFrame {
     uint8_t motion_subsample_log2;
 
     /**
+     * Sample rate of the audio data.
+     *
+     * - encoding: unused
+     * - decoding: read by user
+     */
+    int sample_rate;
+
+    /**
+     * Channel layout of the audio data.
+     *
+     * - encoding: unused
+     * - decoding: read by user.
+     */
+    uint64_t channel_layout;
+
+    /**
      * frame timestamp estimated using various heuristics, in stream time base
      * Code outside libavcodec should access this field using:
-     *  av_opt_ptr(avcodec_get_frame_class(), frame, "best_effort_timestamp");
+     * av_frame_get_best_effort_timestamp(frame)
      * - encoding: unused
      * - decoding: set by libavcodec, read by user.
      */
@@ -1253,31 +1270,27 @@ typedef struct AVFrame {
     /**
      * reordered pos from the last AVPacket that has been input into the decoder
      * Code outside libavcodec should access this field using:
-     *  av_opt_ptr(avcodec_get_frame_class(), frame, "pkt_pos");
+     * av_frame_get_pkt_pos(frame)
      * - encoding: unused
      * - decoding: Read by user.
      */
     int64_t pkt_pos;
 
-    /**
-     * channel layout of the audio frame
-     * - encoding: unused
-     * - decoding: read by user.
-     * Code outside libavcodec should access this field using:
-     * av_opt_ptr(avcodec_get_frame_class(), frame, "channel_layout")
-     */
-    int64_t channel_layout;
-
-    /**
-     * sample rate of the audio frame
-     * - encoding: unused
-     * - decoding: read by user.
-     * Code outside libavcodec should access this field using:
-     * av_opt_ptr(avcodec_get_frame_class(), frame, "sample_rate")
-     */
-    int sample_rate;
-
 } AVFrame;
+
+/**
+ * Accessors for some AVFrame fields.
+ * The position of these field in the structure is not part of the ABI,
+ * they should not be accessed directly outside libavcodec.
+ */
+int64_t av_frame_get_best_effort_timestamp(const AVFrame *frame);
+int64_t av_frame_get_pkt_pos              (const AVFrame *frame);
+int64_t av_frame_get_channel_layout       (const AVFrame *frame);
+int     av_frame_get_sample_rate          (const AVFrame *frame);
+void    av_frame_set_best_effort_timestamp(AVFrame *frame, int64_t val);
+void    av_frame_set_pkt_pos              (AVFrame *frame, int64_t val);
+void    av_frame_set_channel_layout       (AVFrame *frame, int64_t val);
+void    av_frame_set_sample_rate          (AVFrame *frame, int     val);
 
 struct AVCodecInternal;
 
@@ -2707,7 +2720,7 @@ typedef struct AVCodecContext {
 
     /**
      * Set by the client if its custom get_buffer() callback can be called
-     * from another thread, which allows faster multithreaded decoding.
+     * synchronously from another thread, which allows faster multithreaded decoding.
      * draw_horiz_band() will be called from other threads regardless of this setting.
      * Ignored if the default get_buffer() is used.
      * - encoding: Set by user.
