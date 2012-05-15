@@ -46,6 +46,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (PAN,         pan,         af);
     REGISTER_FILTER (SILENCEDETECT, silencedetect, af);
     REGISTER_FILTER (VOLUME,      volume,      af);
+    REGISTER_FILTER (RESAMPLE,    resample,    af);
 
     REGISTER_FILTER (ABUFFER,     abuffer,     asrc);
     REGISTER_FILTER (AEVALSRC,    aevalsrc,    asrc);
@@ -127,6 +128,10 @@ void avfilter_register_all(void)
     {
         extern AVFilter avfilter_vsrc_buffer;
         avfilter_register(&avfilter_vsrc_buffer);
+    }
+    {
+        extern AVFilter avfilter_vsink_buffer;
+        avfilter_register(&avfilter_vsink_buffer);
     }
     {
         extern AVFilter avfilter_vf_scale;

@@ -31,6 +31,7 @@
 #include "libavutil/avstring.h"
 #include "libavutil/opt.h"
 #include "libswresample/swresample.h"
+#include "audio.h"
 #include "avfilter.h"
 
 #define MAX_CHANNELS 63
@@ -340,7 +341,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 {
     int n = insamples->audio->nb_samples;
     AVFilterLink *const outlink = inlink->dst->outputs[0];
-    AVFilterBufferRef *outsamples = avfilter_get_audio_buffer(outlink, AV_PERM_WRITE, n);
+    AVFilterBufferRef *outsamples = ff_get_audio_buffer(outlink, AV_PERM_WRITE, n);
     PanContext *pan = inlink->dst->priv;
 
     swr_convert(pan->swr, outsamples->data, n, (void *)insamples->data, n);
@@ -348,7 +349,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     outsamples->audio->channel_layout = outlink->channel_layout;
     outsamples->audio->planar         = outlink->planar;
 
-    avfilter_filter_samples(outlink, outsamples);
+    ff_filter_samples(outlink, outsamples);
     avfilter_unref_buffer(insamples);
 }
 

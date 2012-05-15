@@ -26,6 +26,7 @@
 
 #include "libavutil/audioconvert.h"
 #include "libavutil/eval.h"
+#include "audio.h"
 #include "avfilter.h"
 
 typedef struct {
@@ -167,7 +168,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
         }
         }
     }
-    avfilter_filter_samples(outlink, insamples);
+    ff_filter_samples(outlink, insamples);
 }
 
 AVFilter avfilter_af_volume = {

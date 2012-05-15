@@ -26,6 +26,7 @@
 
 #include "libswresample/swresample.h"
 #include "avfilter.h"
+#include "audio.h"
 #include "internal.h"
 
 typedef struct {
@@ -92,7 +93,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamplesref
     const int n_in  = insamplesref->audio->nb_samples;
     int n_out       = n_in * aresample->ratio;
     AVFilterLink *const outlink = inlink->dst->outputs[0];
-    AVFilterBufferRef *outsamplesref = avfilter_get_audio_buffer(outlink, AV_PERM_WRITE, n_out);
+    AVFilterBufferRef *outsamplesref = ff_get_audio_buffer(outlink, AV_PERM_WRITE, n_out);
 
     n_out = swr_convert(aresample->swr, outsamplesref->data, n_out,
                                  (void *)insamplesref->data, n_in);
@@ -103,7 +104,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamplesref
     outsamplesref->pts = insamplesref->pts == AV_NOPTS_VALUE ? AV_NOPTS_VALUE :
         av_rescale(outlink->sample_rate, insamplesref->pts, inlink ->sample_rate);
 
-    avfilter_filter_samples(outlink, outsamplesref);
+    ff_filter_samples(outlink, outsamplesref);
     avfilter_unref_buffer(insamplesref);
 }
 

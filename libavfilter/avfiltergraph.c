@@ -95,6 +95,11 @@ fail:
     return ret;
 }
 
+void avfilter_graph_set_auto_convert(AVFilterGraph *graph, unsigned flags)
+{
+    graph->disable_auto_convert = flags;
+}
+
 int ff_avfilter_graph_check_validity(AVFilterGraph *graph, AVClass *log_ctx)
 {
     AVFilterContext *filt;
@@ -159,6 +164,14 @@ static int insert_conv_filter(AVFilterGraph *graph, AVFilterLink *link,
     static int auto_count = 0, ret;
     char inst_name[32];
     AVFilterContext *filt_ctx;
+
+    if (graph->disable_auto_convert) {
+        av_log(NULL, AV_LOG_ERROR,
+               "The filters '%s' and '%s' do not have a common format "
+               "and automatic conversion is disabled.\n",
+               link->src->name, link->dst->name);
+        return AVERROR(EINVAL);
+    }
 
     snprintf(inst_name, sizeof(inst_name), "auto-inserted %s %d",
             filt_name, auto_count++);
@@ -337,19 +350,42 @@ static void reduce_formats(AVFilterGraph *graph)
 static void pick_formats(AVFilterGraph *graph)
 {
     int i, j;
+    int change;
+
+    do{
+        change = 0;
+        for (i = 0; i < graph->filter_count; i++) {
+            AVFilterContext *filter = graph->filters[i];
+            if (filter->input_count){
+                for (j = 0; j < filter->input_count; j++){
+                    if(filter->inputs[j]->in_formats && filter->inputs[j]->in_formats->format_count == 1) {
+                        pick_format(filter->inputs[j], NULL);
+                        change = 1;
+                    }
+                }
+            }
+            if (filter->output_count){
+                for (j = 0; j < filter->output_count; j++){
+                    if(filter->outputs[j]->in_formats && filter->outputs[j]->in_formats->format_count == 1) {
+                        pick_format(filter->outputs[j], NULL);
+                        change = 1;
+                    }
+                }
+            }
+            if (filter->input_count && filter->output_count && filter->inputs[0]->format>=0) {
+                for (j = 0; j < filter->output_count; j++) {
+                    if(filter->outputs[j]->format<0) {
+                        pick_format(filter->outputs[j], filter->inputs[0]);
+                        change = 1;
+                    }
+                }
+            }
+        }
+    }while(change);
 
     for (i = 0; i < graph->filter_count; i++) {
         AVFilterContext *filter = graph->filters[i];
-        if (filter->input_count && filter->output_count) {
-            for (j = 0; j < filter->input_count; j++)
-                pick_format(filter->inputs[j], NULL);
-            for (j = 0; j < filter->output_count; j++)
-                pick_format(filter->outputs[j], filter->inputs[0]);
-        }
-    }
-    for (i = 0; i < graph->filter_count; i++) {
-        AVFilterContext *filter = graph->filters[i];
-        if (!(filter->input_count && filter->output_count)) {
+        if (1) {
             for (j = 0; j < filter->input_count; j++)
                 pick_format(filter->inputs[j], NULL);
             for (j = 0; j < filter->output_count; j++)

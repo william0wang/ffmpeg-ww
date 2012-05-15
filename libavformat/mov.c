@@ -1006,6 +1006,11 @@ static int mov_read_jp2h(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return mov_read_extradata(c, pb, atom, CODEC_ID_JPEG2000);
 }
 
+static int mov_read_aprg(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    return mov_read_extradata(c, pb, atom, CODEC_ID_AVUI);
+}
+
 static int mov_read_wave(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
     AVStream *st;
@@ -1051,7 +1056,7 @@ static int mov_read_glbl(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return AVERROR_INVALIDDATA;
 
     if (atom.size >= 10) {
-        // Broken files created by legacy versions of Libav and FFmpeg will
+        // Broken files created by legacy versions of libavformat will
         // wrap a whole fiel atom inside of a glbl atom.
         unsigned size = avio_rb32(pb);
         unsigned type = avio_rl32(pb);
@@ -2585,6 +2590,7 @@ static int mov_read_chan2(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 }
 
 static const MOVParseTableEntry mov_default_parse_table[] = {
+{ MKTAG('A','P','R','G'), mov_read_aprg },
 { MKTAG('a','v','s','s'), mov_read_avss },
 { MKTAG('c','h','p','l'), mov_read_chpl },
 { MKTAG('c','o','6','4'), mov_read_stco },

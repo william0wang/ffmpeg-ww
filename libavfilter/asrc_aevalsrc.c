@@ -30,6 +30,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "avfilter.h"
+#include "audio.h"
 #include "internal.h"
 
 static const char * const var_names[] = {
@@ -205,7 +206,7 @@ static int request_frame(AVFilterLink *outlink)
     if (eval->duration >= 0 && t > eval->duration)
         return AVERROR_EOF;
 
-    samplesref = avfilter_get_audio_buffer(outlink, AV_PERM_WRITE, eval->nb_samples);
+    samplesref = ff_get_audio_buffer(outlink, AV_PERM_WRITE, eval->nb_samples);
 
     /* evaluate expression for each single sample and for each channel */
     for (i = 0; i < eval->nb_samples; i++, eval->n++) {
@@ -223,7 +224,7 @@ static int request_frame(AVFilterLink *outlink)
     samplesref->audio->sample_rate = eval->sample_rate;
     eval->pts += eval->nb_samples;
 
-    avfilter_filter_samples(outlink, samplesref);
+    ff_filter_samples(outlink, samplesref);
 
     return 0;
 }

@@ -13,6 +13,12 @@ fate-binkaudio-rdft: FUZZ = 2
 FATE_AUDIO += $(FATE_BINKAUDIO)
 fate-binkaudio: $(FATE_BINKAUDIO)
 
+FATE_AUDIO += fate-bmv-audio
+fate-bmv-audio: CMD = framecrc -i $(SAMPLES)/bmv/SURFING-partial.BMV -vn
+
+FATE_AUDIO += fate-delphine-cin-audio
+fate-delphine-cin-audio: CMD = framecrc -i $(SAMPLES)/delphine-cin/LOGO-partial.CIN -vn
+
 FATE_AUDIO += fate-dts
 fate-dts: CMD = pcm -i $(SAMPLES)/dts/dts.ts
 fate-dts: CMP = oneoff
@@ -40,5 +46,5 @@ fate-nellymoser-aref-encode: SIZE_TOLERANCE = 268
 FATE_AUDIO += fate-ws_snd
 fate-ws_snd: CMD = md5 -i $(SAMPLES)/vqa/ws_snd.vqa -f s16le
 
-FATE_TESTS += $(FATE_AUDIO)
+FATE_FFMPEG += $(FATE_AUDIO)
 fate-audio: $(FATE_AUDIO)

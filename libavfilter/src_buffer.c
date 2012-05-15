@@ -27,6 +27,7 @@
 
 #include "avfilter.h"
 #include "internal.h"
+#include "audio.h"
 #include "avcodec.h"
 #include "buffersrc.h"
 #include "vsrc_buffer.h"
@@ -297,7 +298,7 @@ static AVFilterBufferRef *copy_buffer_ref(AVFilterContext *ctx,
         break;
 
     case AVMEDIA_TYPE_AUDIO:
-        buf = avfilter_get_audio_buffer(outlink, AV_PERM_WRITE,
+        buf = ff_get_audio_buffer(outlink, AV_PERM_WRITE,
                                         ref->audio->nb_samples);
         channels = av_get_channel_layout_nb_channels(ref->audio->channel_layout);
         data_size = av_samples_get_buffer_size(NULL, channels,
@@ -562,7 +563,7 @@ static int request_frame(AVFilterLink *link)
         avfilter_unref_buffer(buf);
         break;
     case AVMEDIA_TYPE_AUDIO:
-        avfilter_filter_samples(link, avfilter_ref_buffer(buf, ~0));
+        ff_filter_samples(link, avfilter_ref_buffer(buf, ~0));
         avfilter_unref_buffer(buf);
         break;
     default:
@@ -652,7 +653,7 @@ AVFilter avfilter_vsrc_buffer = {
                                   { .name = NULL}},
 };
 
-#ifdef CONFIG_ABUFFER_FILTER
+#if CONFIG_ABUFFER_FILTER
 
 AVFilter avfilter_asrc_abuffer = {
     .name        = "abuffer",

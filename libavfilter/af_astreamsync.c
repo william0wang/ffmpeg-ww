@@ -25,6 +25,7 @@
 
 #include "libavutil/eval.h"
 #include "avfilter.h"
+#include "audio.h"
 #include "internal.h"
 
 #define QUEUE_SIZE 16
@@ -119,7 +120,7 @@ static void send_out(AVFilterContext *ctx, int out_id)
             av_q2d(ctx->outputs[out_id]->time_base) * buf->pts;
     as->var_values[VAR_T1 + out_id] += buf->audio->nb_samples /
                                    (double)ctx->inputs[out_id]->sample_rate;
-    avfilter_filter_samples(ctx->outputs[out_id], buf);
+    ff_filter_samples(ctx->outputs[out_id], buf);
     queue->nb--;
     queue->tail = (queue->tail + 1) % QUEUE_SIZE;
     if (as->req[out_id])

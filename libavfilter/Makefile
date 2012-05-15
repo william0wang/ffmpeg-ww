@@ -2,6 +2,7 @@ include $(SUBDIR)../config.mak
 
 NAME = avfilter
 FFLIBS = avutil swscale
+FFLIBS-$(CONFIG_RESAMPLE_FILTER) += avresample
 
 FFLIBS-$(CONFIG_ACONVERT_FILTER)             += swresample
 FFLIBS-$(CONFIG_AMOVIE_FILTER)               += avformat avcodec
@@ -21,8 +22,10 @@ HEADERS = asrc_abuffer.h                                                \
           vsrc_buffer.h                                                 \
 
 OBJS = allfilters.o                                                     \
+       audio.o                                                          \
        avfilter.o                                                       \
        avfiltergraph.o                                                  \
+       buffersink.o                                                     \
        defaults.o                                                       \
        drawutils.o                                                      \
        formats.o                                                        \
@@ -46,6 +49,7 @@ OBJS-$(CONFIG_ASPLIT_FILTER)                 += af_asplit.o
 OBJS-$(CONFIG_ASTREAMSYNC_FILTER)            += af_astreamsync.o
 OBJS-$(CONFIG_EARWAX_FILTER)                 += af_earwax.o
 OBJS-$(CONFIG_PAN_FILTER)                    += af_pan.o
+OBJS-$(CONFIG_RESAMPLE_FILTER)               += af_resample.o
 OBJS-$(CONFIG_SILENCEDETECT_FILTER)          += af_silencedetect.o
 OBJS-$(CONFIG_VOLUME_FILTER)                 += af_volume.o
 

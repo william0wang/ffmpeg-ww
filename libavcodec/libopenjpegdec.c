@@ -35,6 +35,8 @@
 #define JP2_SIG_TYPE    0x6A502020
 #define JP2_SIG_VALUE   0x0D0A870A
 
+// pix_fmts with lower bpp have to be listed before
+// similar pix_fmts with higher bpp.
 #define RGB_PIXEL_FORMATS   PIX_FMT_RGB24,PIX_FMT_RGBA,PIX_FMT_RGB48,PIX_FMT_RGBA64
 #define GRAY_PIXEL_FORMATS  PIX_FMT_GRAY8,PIX_FMT_GRAY8A,PIX_FMT_GRAY16
 #define YUV_PIXEL_FORMATS   PIX_FMT_YUV420P,PIX_FMT_YUV422P,PIX_FMT_YUVA420P, \
@@ -62,16 +64,16 @@ static inline int libopenjpeg_matches_pix_fmt(const opj_image_t *image, enum Pix
     }
 
     switch (descriptor.nb_components) {
-    case 4: match = match && descriptor.comp[3].depth_minus1 + 1 == image->comps[3].prec &&
+    case 4: match = match && descriptor.comp[3].depth_minus1 + 1 >= image->comps[3].prec &&
                              1 << descriptor.log2_chroma_w == image->comps[3].dx &&
                              1 << descriptor.log2_chroma_h == image->comps[3].dy;
-    case 3: match = match && descriptor.comp[2].depth_minus1 + 1 == image->comps[2].prec &&
+    case 3: match = match && descriptor.comp[2].depth_minus1 + 1 >= image->comps[2].prec &&
                              1 << descriptor.log2_chroma_w == image->comps[2].dx &&
                              1 << descriptor.log2_chroma_h == image->comps[2].dy;
-    case 2: match = match && descriptor.comp[1].depth_minus1 + 1 == image->comps[1].prec &&
+    case 2: match = match && descriptor.comp[1].depth_minus1 + 1 >= image->comps[1].prec &&
                              1 << descriptor.log2_chroma_w == image->comps[1].dx &&
                              1 << descriptor.log2_chroma_h == image->comps[1].dy;
-    case 1: match = match && descriptor.comp[0].depth_minus1 + 1 == image->comps[0].prec &&
+    case 1: match = match && descriptor.comp[0].depth_minus1 + 1 >= image->comps[0].prec &&
                              1 == image->comps[0].dx &&
                              1 == image->comps[0].dy;
     default:
@@ -227,6 +229,7 @@ static int libopenjpeg_decode_frame(AVCodecContext *avctx,
     int width, height, ret = -1;
     int pixel_size = 0;
     int ispacked = 0;
+    int i;
 
     *data_size = 0;
 
@@ -289,6 +292,9 @@ static int libopenjpeg_decode_frame(AVCodecContext *avctx,
         av_log(avctx, AV_LOG_ERROR, "Unable to determine pixel format\n");
         goto done;
     }
+    for (i = 0; i < image->numcomps; i++)
+        if (image->comps[i].prec > avctx->bits_per_raw_sample)
+            avctx->bits_per_raw_sample = image->comps[i].prec;
 
     if(picture->data[0])
         ff_thread_release_buffer(avctx, picture);

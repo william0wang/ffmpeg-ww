@@ -26,6 +26,7 @@
 #include "libavutil/audioconvert.h"
 #include "libavutil/avstring.h"
 #include "avfilter.h"
+#include "audio.h"
 #include "internal.h"
 
 typedef struct {
@@ -89,7 +90,7 @@ static int query_formats(AVFilterContext *ctx)
 
 static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamplesref)
 {
-    avfilter_filter_samples(inlink->dst->outputs[0], insamplesref);
+    ff_filter_samples(inlink->dst->outputs[0], insamplesref);
 }
 
 AVFilter avfilter_af_aformat = {

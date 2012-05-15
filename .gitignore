@@ -42,6 +42,11 @@ avconv_g
 doc/avoptions_codec.texi
 doc/avoptions_format.texi
 doc/print_options
+doc/examples/decoding_encoding
+doc/examples/filtering_audio
+doc/examples/filtering_video
+doc/examples/metadata
+doc/examples/muxing
 libavcodec/*_tablegen
 libavcodec/*_tables.c
 libavcodec/*_tables.h
@@ -57,6 +62,7 @@ tests/vsynth1
 tests/vsynth2
 tools/aviocat
 tools/cws2fws
+tools/ffeval
 tools/graph2dot
 tools/ismindex
 tools/lavfi-showfiltfmts
