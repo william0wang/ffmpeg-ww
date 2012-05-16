@@ -5,7 +5,6 @@ test "$1" && _target="$1"
 _config="configure \
   --enable-gpl \
   --enable-nonfree \
-  --enable-libvorbis \
   --enable-libtheora \
   --enable-version3 \
   --enable-shared \
