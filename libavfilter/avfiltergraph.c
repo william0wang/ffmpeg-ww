@@ -200,14 +200,12 @@ static int insert_conv_filter(AVFilterGraph *graph, AVFilterLink *link,
 
     if (link->type == AVMEDIA_TYPE_AUDIO &&
          (((link = filt_ctx-> inputs[0]) &&
-           (!ff_merge_channel_layouts(link->in_channel_layouts, link->out_channel_layouts) ||
-            !avfilter_merge_formats(link->in_packing,   link->out_packing))) ||
+           !ff_merge_channel_layouts(link->in_channel_layouts, link->out_channel_layouts)) ||
          ((link = filt_ctx->outputs[0]) &&
-           (!ff_merge_channel_layouts(link->in_channel_layouts, link->out_channel_layouts) ||
-            !avfilter_merge_formats(link->in_packing,   link->out_packing))))
+           !ff_merge_channel_layouts(link->in_channel_layouts, link->out_channel_layouts)))
        ) {
         av_log(NULL, AV_LOG_ERROR,
-               "Impossible to convert between the channel layouts/packing formats supported by the filter "
+               "Impossible to convert between the channel layouts formats supported by the filter "
                "'%s' and the filter '%s'\n", link->src->name, link->dst->name);
         return AVERROR(EINVAL);
     }
@@ -219,7 +217,7 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 {
     int i, j, ret;
     char filt_args[128];
-    AVFilterFormats *formats, *packing;
+    AVFilterFormats *formats;
     AVFilterChannelLayouts *chlayouts;
     AVFilterFormats *samplerates;
     int scaler_count = 0, resampler_count = 0;
@@ -254,8 +252,7 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                     return ret;
             }
             else if (link->type == AVMEDIA_TYPE_AUDIO) {
-                if (!link->in_channel_layouts || !link->out_channel_layouts ||
-                    !link->in_packing   || !link->out_packing)
+                if (!link->in_channel_layouts || !link->out_channel_layouts)
                     return AVERROR(EINVAL);
 
                 /* Merge all three list before checking: that way, in all
@@ -264,9 +261,8 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                 formats   = avfilter_merge_formats(link->in_formats,   link->out_formats);
                 chlayouts   = ff_merge_channel_layouts(link->in_channel_layouts  , link->out_channel_layouts);
                 samplerates = ff_merge_samplerates    (link->in_samplerates, link->out_samplerates);
-                packing   = avfilter_merge_formats(link->in_packing,   link->out_packing);
 
-                if (!formats || !chlayouts || !packing || !samplerates)
+                if (!formats || !chlayouts || !samplerates)
                     if (ret = insert_conv_filter(graph, link, "aconvert", NULL))
                        return ret;
 #else
@@ -310,7 +306,7 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                         return ret;
                     break;
                 case AVMEDIA_TYPE_AUDIO:
-                    if (!(filter = avfilter_get_by_name("resample"))) {
+                    if (!(filter = avfilter_get_by_name("aresample"))) {
                         av_log(log_ctx, AV_LOG_ERROR, "'resample' filter "
                                "not present, cannot convert audio formats.\n");
                         return AVERROR(EINVAL);
@@ -319,7 +315,7 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                     snprintf(inst_name, sizeof(inst_name), "auto-inserted resampler %d",
                              resampler_count++);
                     if ((ret = avfilter_graph_create_filter(&convert,
-                                                            avfilter_get_by_name("resample"),
+                                                            avfilter_get_by_name("aresample"),
                                                             inst_name, NULL, NULL, graph)) < 0)
                         return ret;
                     break;
