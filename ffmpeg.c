@@ -870,6 +870,27 @@ static int configure_audio_filters(FilterGraph *fg, AVFilterContext **in_filter,
         *out_filter = format;
     }
 
+    if (audio_volume != 256) {
+        AVFilterContext *volume;
+        char args[256];
+
+        snprintf(args, sizeof(args), "%lf", audio_volume / 256.);
+        av_log(NULL, AV_LOG_WARNING, "-vol has been deprecated. Used the "
+               "volume audio filter instead (-af volume=%s).\n", args);
+
+        ret = avfilter_graph_create_filter(&volume,
+                                           avfilter_get_by_name("volume"),
+                                           "volume", args, NULL, fg->graph);
+        if (ret < 0)
+            return ret;
+
+        ret = avfilter_link(*in_filter, 0, volume, 0);
+        if (ret < 0)
+            return ret;
+
+        *in_filter = volume;
+    }
+
     return 0;
 }
 
@@ -1964,7 +1985,7 @@ static int poll_filters(void)
                                                        AV_BUFFERSINK_FLAG_NO_REQUEST);
 #endif
                 if (ret < 0) {
-                    if (ret != AVERROR(EAGAIN)) {
+                    if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
                         char buf[256];
                         av_strerror(ret, buf, sizeof(buf));
                         av_log(NULL, AV_LOG_WARNING,
@@ -2357,7 +2378,6 @@ static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
 {
     AVFrame *decoded_frame;
     AVCodecContext *avctx = ist->st->codec;
-    int bps = av_get_bytes_per_sample(ist->st->codec->sample_fmt);
     int i, ret, resample_changed;
 
     if (!ist->decoded_frame && !(ist->decoded_frame = avcodec_alloc_frame()))
@@ -2409,64 +2429,6 @@ static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
                      avctx->sample_rate;
 #endif
 
-    // preprocess audio (volume)
-    if (audio_volume != 256) {
-        int decoded_data_size = decoded_frame->nb_samples * avctx->channels * bps;
-        void *samples = decoded_frame->data[0];
-        switch (avctx->sample_fmt) {
-        case AV_SAMPLE_FMT_U8:
-        {
-            uint8_t *volp = samples;
-            for (i = 0; i < (decoded_data_size / sizeof(*volp)); i++) {
-                int v = (((*volp - 128) * audio_volume + 128) >> 8) + 128;
-                *volp++ = av_clip_uint8(v);
-            }
-            break;
-        }
-        case AV_SAMPLE_FMT_S16:
-        {
-            int16_t *volp = samples;
-            for (i = 0; i < (decoded_data_size / sizeof(*volp)); i++) {
-                int v = ((*volp) * audio_volume + 128) >> 8;
-                *volp++ = av_clip_int16(v);
-            }
-            break;
-        }
-        case AV_SAMPLE_FMT_S32:
-        {
-            int32_t *volp = samples;
-            for (i = 0; i < (decoded_data_size / sizeof(*volp)); i++) {
-                int64_t v = (((int64_t)*volp * audio_volume + 128) >> 8);
-                *volp++ = av_clipl_int32(v);
-            }
-            break;
-        }
-        case AV_SAMPLE_FMT_FLT:
-        {
-            float *volp = samples;
-            float scale = audio_volume / 256.f;
-            for (i = 0; i < (decoded_data_size / sizeof(*volp)); i++) {
-                *volp++ *= scale;
-            }
-            break;
-        }
-        case AV_SAMPLE_FMT_DBL:
-        {
-            double *volp = samples;
-            double scale = audio_volume / 256.;
-            for (i = 0; i < (decoded_data_size / sizeof(*volp)); i++) {
-                *volp++ *= scale;
-            }
-            break;
-        }
-        default:
-            av_log(NULL, AV_LOG_FATAL,
-                   "Audio volume adjustment on sample format %s is not supported.\n",
-                   av_get_sample_fmt_name(ist->st->codec->sample_fmt));
-            exit_program(1);
-        }
-    }
-
     rate_emu_sleep(ist);
 
     resample_changed = ist->resample_sample_fmt     != decoded_frame->format         ||
@@ -2514,8 +2476,7 @@ static int transcode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
 #ifdef SRCA
         av_buffersrc_write_frame(ist->filters[i]->filter, decoded_frame);
 #else
-        AVFilterBufferRef *fb= avfilter_get_audio_buffer_ref_from_frame(decoded_frame, AV_PERM_WRITE);
-        av_buffersrc_add_ref(ist->filters[i]->filter, fb, 0*AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT);
+        av_buffersrc_add_frame(ist->filters[i]->filter, decoded_frame, 0);
 #endif
     }
 
@@ -4652,7 +4613,7 @@ static OutputStream *new_audio_stream(OptionsContext *o, AVFormatContext *oc, in
     audio_enc->codec_type = AVMEDIA_TYPE_AUDIO;
 
     if (!ost->stream_copy) {
-        char *sample_fmt = NULL, *filters = NULL;;
+        char *sample_fmt = NULL, *filters = NULL;
 
         MATCH_PER_STREAM_OPT(audio_channels, i, audio_enc->channels, oc, st);
 
