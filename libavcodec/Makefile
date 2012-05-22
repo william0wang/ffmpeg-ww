@@ -758,16 +758,19 @@ OBJS-$(!CONFIG_SMALL)                  += inverse.o
 SKIPHEADERS                            += %_tablegen.h                  \
                                           %_tables.h                    \
                                           aac_tablegen_decl.h           \
+                                          codec_names.h                 \
                                           fft-internal.h                \
                                           tableprint.h                  \
                                           $(ARCH)/vp56_arith.h          \
 
 SKIPHEADERS-$(CONFIG_DXVA2)            += dxva2.h dxva2_internal.h
 SKIPHEADERS-$(CONFIG_LIBSCHROEDINGER)  += libschroedinger.h
+SKIPHEADERS-$(CONFIG_LIBUTVIDEO)       += libutvideo.h
 SKIPHEADERS-$(CONFIG_MPEG_XVMC_DECODER) += xvmc.h
 SKIPHEADERS-$(CONFIG_VAAPI)            += vaapi_internal.h
-SKIPHEADERS-$(CONFIG_VDA)              += vda_internal.h
+SKIPHEADERS-$(CONFIG_VDA)              += vda.h vda_internal.h
 SKIPHEADERS-$(CONFIG_VDPAU)            += vdpau.h
+SKIPHEADERS-$(HAVE_OS2THREADS)         += os2threads.h
 SKIPHEADERS-$(HAVE_W32THREADS)         += w32pthreads.h
 
 TESTPROGS = cabac                                                       \

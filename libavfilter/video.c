@@ -52,11 +52,10 @@ static void ff_dlog_ref(void *ctx, AVFilterBufferRef *ref, int end)
                 av_get_picture_type_char(ref->video->pict_type));
     }
     if (ref->audio) {
-        av_dlog(ctx, " cl:%"PRId64"d n:%d r:%d p:%d",
+        av_dlog(ctx, " cl:%"PRId64"d n:%d r:%d",
                 ref->audio->channel_layout,
                 ref->audio->nb_samples,
-                ref->audio->sample_rate,
-                ref->audio->planar);
+                ref->audio->sample_rate);
     }
 
     av_dlog(ctx, "]%s", end ? "\n" : "");
@@ -150,6 +149,8 @@ avfilter_get_video_buffer_ref_from_arrays(uint8_t * const data[4], const int lin
 
     pic->   extended_data = pic->data;
     picref->extended_data = picref->data;
+
+    picref->pts = AV_NOPTS_VALUE;
 
     return picref;
 

@@ -228,7 +228,7 @@ AVOutputFormat *av_guess_format(const char *short_name, const char *filename,
     score_max = 0;
     while ((fmt = av_oformat_next(fmt))) {
         score = 0;
-        if (fmt->name && short_name && !strcmp(fmt->name, short_name))
+        if (fmt->name && short_name && !av_strcasecmp(fmt->name, short_name))
             score += 100;
         if (fmt->mime_type && mime_type && !strcmp(fmt->mime_type, mime_type))
             score += 10;
@@ -3315,7 +3315,9 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt){
         pkt->dts= st->pts_buffer[0];
     }
 
-    if(st->cur_dts && st->cur_dts != AV_NOPTS_VALUE && ((!(s->oformat->flags & AVFMT_TS_NONSTRICT) && st->cur_dts >= pkt->dts) || st->cur_dts > pkt->dts)){
+    if (st->cur_dts && st->cur_dts != AV_NOPTS_VALUE &&
+        ((!(s->oformat->flags & AVFMT_TS_NONSTRICT) &&
+          st->cur_dts >= pkt->dts) || st->cur_dts > pkt->dts)) {
         av_log(s, AV_LOG_ERROR,
                "Application provided invalid, non monotonically increasing dts to muxer in stream %d: %s >= %s\n",
                st->index, av_ts2str(st->cur_dts), av_ts2str(pkt->dts));
@@ -4420,7 +4422,8 @@ AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *strea
 {
     AVRational undef = {0, 1};
     AVRational stream_sample_aspect_ratio = stream ? stream->sample_aspect_ratio : undef;
-    AVRational frame_sample_aspect_ratio  = frame  ? frame->sample_aspect_ratio  : undef;
+    AVRational codec_sample_aspect_ratio  = stream && stream->codec ? stream->codec->sample_aspect_ratio : undef;
+    AVRational frame_sample_aspect_ratio  = frame  ? frame->sample_aspect_ratio  : codec_sample_aspect_ratio;
 
     av_reduce(&stream_sample_aspect_ratio.num, &stream_sample_aspect_ratio.den,
                stream_sample_aspect_ratio.num,  stream_sample_aspect_ratio.den, INT_MAX);

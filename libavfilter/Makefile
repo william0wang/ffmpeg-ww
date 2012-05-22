@@ -28,6 +28,7 @@ OBJS = allfilters.o                                                     \
        avfiltergraph.o                                                  \
        buffer.o                                                         \
        buffersink.o                                                     \
+       buffersrc.o                                                      \
        defaults.o                                                       \
        drawutils.o                                                      \
        formats.o                                                        \
@@ -49,7 +50,7 @@ OBJS-$(CONFIG_AMERGE_FILTER)                 += af_amerge.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
 OBJS-$(CONFIG_ASHOWINFO_FILTER)              += af_ashowinfo.o
-OBJS-$(CONFIG_ASPLIT_FILTER)                 += af_asplit.o
+OBJS-$(CONFIG_ASPLIT_FILTER)                 += f_split.o
 OBJS-$(CONFIG_ASTREAMSYNC_FILTER)            += af_astreamsync.o
 OBJS-$(CONFIG_ASYNCTS_FILTER)                += af_asyncts.o
 OBJS-$(CONFIG_EARWAX_FILTER)                 += af_earwax.o
@@ -82,6 +83,7 @@ OBJS-$(CONFIG_FADE_FILTER)                   += vf_fade.o
 OBJS-$(CONFIG_FIELDORDER_FILTER)             += vf_fieldorder.o
 OBJS-$(CONFIG_FIFO_FILTER)                   += vf_fifo.o
 OBJS-$(CONFIG_FORMAT_FILTER)                 += vf_format.o
+OBJS-$(CONFIG_FPS_FILTER)                    += vf_fps.o
 OBJS-$(CONFIG_FREI0R_FILTER)                 += vf_frei0r.o
 OBJS-$(CONFIG_GRADFUN_FILTER)                += vf_gradfun.o
 OBJS-$(CONFIG_HFLIP_FILTER)                  += vf_hflip.o
@@ -107,7 +109,7 @@ OBJS-$(CONFIG_SETSAR_FILTER)                 += vf_aspect.o
 OBJS-$(CONFIG_SETTB_FILTER)                  += vf_settb.o
 OBJS-$(CONFIG_SHOWINFO_FILTER)               += vf_showinfo.o
 OBJS-$(CONFIG_SLICIFY_FILTER)                += vf_slicify.o
-OBJS-$(CONFIG_SPLIT_FILTER)                  += vf_split.o
+OBJS-$(CONFIG_SPLIT_FILTER)                  += f_split.o
 OBJS-$(CONFIG_SUPER2XSAI_FILTER)             += vf_super2xsai.o
 OBJS-$(CONFIG_SWAPUV_FILTER)                 += vf_swapuv.o
 OBJS-$(CONFIG_THUMBNAIL_FILTER)              += vf_thumbnail.o

@@ -24,6 +24,8 @@
 #include "libavutil/avassert.h"
 #include "libavutil/audioconvert.h"
 
+#include <float.h>
+
 #define  C30DB  M_SQRT2
 #define  C15DB  1.189207115
 #define C__0DB  1.0
@@ -32,6 +34,7 @@
 #define C_45DB  0.594603558
 #define C_60DB  0.5
 
+#define ALIGN 32
 
 //TODO split options array out?
 #define OFFSET(x) offsetof(SwrContext,x)
@@ -77,6 +80,15 @@ static const AVOption options[]={
 {"phase_shift"          , "Resampling Phase Shift"      , OFFSET(phase_shift)    , AV_OPT_TYPE_INT  , {.dbl=10                    }, 0      , 30        , PARAM },
 {"linear_interp"        , "Use Linear Interpolation"    , OFFSET(linear_interp)  , AV_OPT_TYPE_INT  , {.dbl=0                     }, 0      , 1         , PARAM },
 {"cutoff"               , "Cutoff Frequency Ratio"      , OFFSET(cutoff)         , AV_OPT_TYPE_DOUBLE,{.dbl=0.8                   }, 0      , 1         , PARAM },
+{"min_comp"             , "Minimum difference between timestamps and audio data (in seconds) below which no timestamp compensation of either kind is applied"
+                                                        , OFFSET(min_compensation),AV_OPT_TYPE_FLOAT ,{.dbl=FLT_MAX               }, 0      , FLT_MAX   , PARAM },
+{"min_hard_comp"        , "Minimum difference between timestamps and audio data (in seconds) to trigger padding/trimming the data."
+                                                   , OFFSET(min_hard_compensation),AV_OPT_TYPE_FLOAT ,{.dbl=0.1                   }, 0      , INT_MAX   , PARAM },
+{"comp_duration"        , "Duration (in seconds) over which data is stretched/squeezeed to make it match the timestamps."
+                                              , OFFSET(soft_compensation_duration),AV_OPT_TYPE_FLOAT ,{.dbl=1                     }, 0      , INT_MAX   , PARAM },
+{"max_soft_comp"        , "Maximum factor by which data is stretched/squeezeed to make it match the timestamps."
+                                                   , OFFSET(max_soft_compensation),AV_OPT_TYPE_FLOAT ,{.dbl=0                     }, 0      , INT_MAX   , PARAM },
+
 {0}
 };
 
@@ -337,7 +349,7 @@ static int realloc_audio(AudioData *a, int count){
 
     count*=2;
 
-    countb= FFALIGN(count*a->bps, 32);
+    countb= FFALIGN(count*a->bps, ALIGN);
     old= *a;
 
     av_assert0(a->bps);
@@ -372,12 +384,24 @@ static void copy(AudioData *out, AudioData *in,
 
 static void fill_audiodata(AudioData *out, uint8_t *in_arg [SWR_CH_MAX]){
     int i;
-    if(out->planar){
+    if(!in_arg){
+        memset(out->ch, 0, sizeof(out->ch));
+    }else if(out->planar){
         for(i=0; i<out->ch_count; i++)
             out->ch[i]= in_arg[i];
     }else{
         for(i=0; i<out->ch_count; i++)
             out->ch[i]= in_arg[0] + i*out->bps;
+    }
+}
+
+static void reversefill_audiodata(AudioData *out, uint8_t *in_arg [SWR_CH_MAX]){
+    int i;
+    if(out->planar){
+        for(i=0; i<out->ch_count; i++)
+            in_arg[i]= out->ch[i];
+    }else{
+        in_arg[0]= out->ch[0];
     }
 }
 
@@ -391,7 +415,7 @@ static void buf_set(AudioData *out, AudioData *in, int count){
         for(ch=0; ch<out->ch_count; ch++)
             out->ch[ch]= in->ch[ch] + count*out->bps;
     }else{
-        for(ch=0; ch<out->ch_count; ch++)
+        for(ch=out->ch_count-1; ch>=0; ch--)
             out->ch[ch]= in->ch[0] + (ch + count*out->ch_count) * out->bps;
     }
 }
@@ -405,6 +429,10 @@ static int resample(SwrContext *s, AudioData *out_param, int out_count,
     AudioData in, out, tmp;
     int ret_sum=0;
     int border=0;
+
+    av_assert1(s->in_buffer.ch_count == in_param->ch_count);
+    av_assert1(s->in_buffer.planar   == in_param->planar);
+    av_assert1(s->in_buffer.fmt      == in_param->fmt);
 
     tmp=out=*out_param;
     in =  *in_param;
@@ -579,6 +607,27 @@ int swr_convert(struct SwrContext *s, uint8_t *out_arg[SWR_CH_MAX], int out_coun
     AudioData * in= &s->in;
     AudioData *out= &s->out;
 
+    if(s->drop_output > 0){
+        int ret;
+        AudioData tmp = s->out;
+        uint8_t *tmp_arg[SWR_CH_MAX];
+        tmp.count = 0;
+        tmp.data  = NULL;
+        if((ret=realloc_audio(&tmp, s->drop_output))<0)
+            return ret;
+
+        reversefill_audiodata(&tmp, tmp_arg);
+        s->drop_output *= -1; //FIXME find a less hackish solution
+        ret = swr_convert(s, tmp_arg, -s->drop_output, in_arg, in_count); //FIXME optimize but this is as good as never called so maybe it doesnt matter
+        s->drop_output *= -1;
+        if(ret>0)
+            s->drop_output -= ret;
+
+        av_freep(&tmp.data);
+        if(s->drop_output || !out_arg)
+            return 0;
+    }
+
     if(!in_arg){
         if(s->in_buffer_count){
             if (s->resample && !s->flushed) {
@@ -606,7 +655,10 @@ int swr_convert(struct SwrContext *s, uint8_t *out_arg[SWR_CH_MAX], int out_coun
     fill_audiodata(out, out_arg);
 
     if(s->resample){
-        return swr_convert_internal(s, out, out_count, in, in_count);
+        int ret = swr_convert_internal(s, out, out_count, in, in_count);
+        if(ret>0 && !s->drop_output)
+            s->outpts += ret * (int64_t)s->in_sample_rate;
+        return ret;
     }else{
         AudioData tmp= *in;
         int ret2=0;
@@ -650,12 +702,73 @@ int swr_convert(struct SwrContext *s, uint8_t *out_arg[SWR_CH_MAX], int out_coun
                 ret2 += ret;
             }
             if(in_count){
-                buf_set(&tmp, &s->in_buffer, s->in_buffer_index);
+                buf_set(&tmp, &s->in_buffer, s->in_buffer_index + s->in_buffer_count);
                 copy(&tmp, in, in_count);
                 s->in_buffer_count += in_count;
             }
         }
+        if(ret2>0 && !s->drop_output)
+            s->outpts += ret2 * (int64_t)s->in_sample_rate;
         return ret2;
     }
 }
 
+int swr_drop_output(struct SwrContext *s, int count){
+    s->drop_output += count;
+
+    if(s->drop_output <= 0)
+        return 0;
+
+    av_log(s, AV_LOG_VERBOSE, "discarding %d audio samples\n", count);
+    return swr_convert(s, NULL, s->drop_output, NULL, 0);
+}
+
+int swr_inject_silence(struct SwrContext *s, int count){
+    int ret, i;
+    AudioData silence = s->out;
+    uint8_t *tmp_arg[SWR_CH_MAX];
+
+    if(count <= 0)
+        return 0;
+
+    silence.count = 0;
+    silence.data  = NULL;
+    if((ret=realloc_audio(&silence, count))<0)
+        return ret;
+
+    if(silence.planar) for(i=0; i<silence.ch_count; i++) {
+        memset(silence.ch[i], silence.bps==1 ? 0x80 : 0, count*silence.bps);
+    } else
+        memset(silence.ch[0], silence.bps==1 ? 0x80 : 0, count*silence.bps*silence.ch_count);
+
+    reversefill_audiodata(&silence, tmp_arg);
+    av_log(s, AV_LOG_VERBOSE, "adding %d audio samples of silence\n", count);
+    ret = swr_convert(s, NULL, 0, (const uint8_t**)tmp_arg, count);
+    av_freep(&silence.data);
+    return ret;
+}
+
+int64_t swr_next_pts(struct SwrContext *s, int64_t pts){
+    if(pts == INT64_MIN)
+        return s->outpts;
+    if(s->min_compensation >= FLT_MAX) {
+        return (s->outpts = pts - swr_get_delay(s, s->in_sample_rate * (int64_t)s->out_sample_rate));
+    } else {
+        int64_t delta = pts - swr_get_delay(s, s->in_sample_rate * (int64_t)s->out_sample_rate) - s->outpts;
+        double fdelta = delta /(double)(s->in_sample_rate * (int64_t)s->out_sample_rate);
+
+        if(fabs(fdelta) > s->min_compensation) {
+            if(!s->outpts || fabs(fdelta) > s->min_hard_compensation){
+                if(delta > 0) swr_inject_silence(s,  delta / s->out_sample_rate);
+                else          swr_drop_output   (s, -delta / s-> in_sample_rate);
+            } else if(s->soft_compensation_duration && s->max_soft_compensation) {
+                int duration = s->out_sample_rate * s->soft_compensation_duration;
+                int comp = av_clipf(fdelta, -s->max_soft_compensation, s->max_soft_compensation) * duration ;
+                av_log(s, AV_LOG_VERBOSE, "compensating audio timestamp drift:%f compensation:%d in:%d\n", fdelta, comp, duration);
+                swr_set_compensation(s, comp, duration);
+            }
+        }
+
+        return s->outpts;
+    }
+}

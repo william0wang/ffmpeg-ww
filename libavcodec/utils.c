@@ -1212,7 +1212,8 @@ int attribute_align_arg avcodec_encode_audio(AVCodecContext *avctx,
                                                   avctx->sample_fmt, 1);
         if ((ret = avcodec_fill_audio_frame(frame, avctx->channels,
                                             avctx->sample_fmt,
-                                            (const uint8_t *)samples, samples_size, 1)))
+                                            (const uint8_t *) samples,
+                                            samples_size, 1)))
             return ret;
 
         /* fabricate frame pts from sample count.
@@ -1481,8 +1482,11 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
         emms_c(); //needed to avoid an emms_c() call before every return;
 
         avctx->pkt = NULL;
-        if (did_split)
+        if (did_split) {
             ff_packet_free_side_data(&tmp);
+            if(ret == tmp.size)
+                ret = avpkt->size;
+        }
 
         if (*got_picture_ptr){
             avctx->frame_number++;
@@ -1582,8 +1586,11 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
         }
 
         avctx->pkt = NULL;
-        if (did_split)
+        if (did_split) {
             ff_packet_free_side_data(&tmp);
+            if(ret == tmp.size)
+                ret = avpkt->size;
+        }
     }
     return ret;
 }
