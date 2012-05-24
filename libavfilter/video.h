@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010 S.N. Hemanth Meenakshisundaram <smeenaks@ucsd.edu>
+ * Copyright (c) 2007 Bobby Bingham
  *
  * This file is part of FFmpeg.
  *
@@ -18,23 +18,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "avfilter.h"
 
-static void null_filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref) { }
+#ifndef AVFILTER_VIDEO_H
+#define AVFILTER_VIDEO_H
 
-AVFilter avfilter_asink_anullsink = {
-    .name        = "anullsink",
-    .description = NULL_IF_CONFIG_SMALL("Do absolutely nothing with the input audio."),
+AVFilterBufferRef *ff_default_get_video_buffer(AVFilterLink *link,
+                                               int perms, int w, int h);
+AVFilterBufferRef *ff_null_get_video_buffer(AVFilterLink *link, int perms, int w, int h);
 
-    .priv_size = 0,
 
-    .inputs    = (const AVFilterPad[]) {
-        {
-            .name            = "default",
-            .type            = AVMEDIA_TYPE_AUDIO,
-            .filter_samples  = null_filter_samples,
-        },
-        { .name = NULL},
-    },
-    .outputs   = (const AVFilterPad[]) {{ .name = NULL }},
-};
+void ff_null_start_frame(AVFilterLink *link, AVFilterBufferRef *picref);
+void ff_null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir);
+void ff_null_end_frame(AVFilterLink *link);
+
+#endif /* AVFILTER_VIDEO_H */
