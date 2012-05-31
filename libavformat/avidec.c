@@ -578,6 +578,7 @@ static int avi_read_header(AVFormatContext *s)
                 avio_skip(pb, size);
             } else {
                 uint64_t cur_pos = avio_tell(pb);
+                unsigned esize;
                 if (cur_pos < list_end)
                     size = FFMIN(size, list_end - cur_pos);
                 st = s->streams[stream_index];
@@ -591,7 +592,7 @@ static int avi_read_header(AVFormatContext *s)
                         avio_skip(pb, size);
                         break;
                     }
-                    tag1 = ff_get_bmp_header(pb, st);
+                    tag1 = ff_get_bmp_header(pb, st, &esize);
 
                     if (tag1 == MKTAG('D', 'X', 'S', 'B') || tag1 == MKTAG('D','X','S','A')) {
                         st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
@@ -601,7 +602,8 @@ static int avi_read_header(AVFormatContext *s)
                     }
 
                     if(size > 10*4 && size<(1<<30) && size < avi->fsize){
-                        st->codec->extradata_size= size - 10*4;
+                        if(esize == size-1 && (esize&1)) st->codec->extradata_size= esize - 10*4;
+                        else                             st->codec->extradata_size=  size - 10*4;
                         st->codec->extradata= av_malloc(st->codec->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
                         if (!st->codec->extradata) {
                             st->codec->extradata_size= 0;
