@@ -54,14 +54,9 @@ static const AVOption ass_options[] = {
     {NULL},
 };
 
-static const char *ass_get_name(void *ctx)
-{
-    return "ass";
-}
-
 static const AVClass ass_class = {
     "AssContext",
-    ass_get_name,
+    av_default_item_name,
     ass_options
 };
 

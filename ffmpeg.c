@@ -921,11 +921,11 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
 #if FF_API_OLD_VSINK_API
     ret = avfilter_graph_create_filter(&ofilter->filter,
                                        avfilter_get_by_name("buffersink"),
-                                       "out", NULL, NULL, fg->graph);
+                                       "ffmpeg_buffersink", NULL, NULL, fg->graph);
 #else
     ret = avfilter_graph_create_filter(&ofilter->filter,
                                        avfilter_get_by_name("buffersink"),
-                                       "out", NULL, buffersink_params, fg->graph);
+                                       "ffmpeg_buffersink", NULL, buffersink_params, fg->graph);
 #endif
     av_freep(&buffersink_params);
 
@@ -1000,9 +1000,42 @@ static int configure_output_audio_filter(FilterGraph *fg, OutputFilter *ofilter,
 
     ret = avfilter_graph_create_filter(&ofilter->filter,
                                        avfilter_get_by_name("abuffersink_old"),
-                                       "out", NULL, NULL, fg->graph);
+                                       "ffmpeg_abuffersink_old", NULL, NULL, fg->graph);
     if (ret < 0)
         return ret;
+
+#define AUTO_INSERT_FILTER(opt_name, filter_name, arg) do {                 \
+    AVFilterContext *filt_ctx;                                              \
+                                                                            \
+    av_log(NULL, AV_LOG_INFO, opt_name " is forwarded to lavfi "            \
+           "similarly to -af " filter_name "=%s.\n", arg);                  \
+                                                                            \
+    ret = avfilter_graph_create_filter(&filt_ctx,                           \
+                                       avfilter_get_by_name(filter_name),   \
+                                       filter_name, arg, NULL, fg->graph);  \
+    if (ret < 0)                                                            \
+        return ret;                                                         \
+                                                                            \
+    ret = avfilter_link(last_filter, pad_idx, filt_ctx, 0);                 \
+    if (ret < 0)                                                            \
+        return ret;                                                         \
+                                                                            \
+    last_filter = filt_ctx;                                                 \
+    pad_idx = 0;                                                            \
+} while (0)
+    if (ost->audio_channels_mapped) {
+        int i;
+        AVBPrint pan_buf;
+        av_bprint_init(&pan_buf, 256, 8192);
+        av_bprintf(&pan_buf, "0x%"PRIx64,
+                   av_get_default_channel_layout(ost->audio_channels_mapped));
+        for (i = 0; i < ost->audio_channels_mapped; i++)
+            if (ost->audio_channels_map[i] != -1)
+                av_bprintf(&pan_buf, ":c%d=c%d", i, ost->audio_channels_map[i]);
+
+        AUTO_INSERT_FILTER("-map_channel", "pan", pan_buf.str);
+        av_bprint_finalize(&pan_buf, NULL);
+    }
 
     if (codec->channels && !codec->channel_layout)
         codec->channel_layout = av_get_default_channel_layout(codec->channels);
@@ -1044,26 +1077,6 @@ static int configure_output_audio_filter(FilterGraph *fg, OutputFilter *ofilter,
         pad_idx = 0;
     }
 
-#define AUTO_INSERT_FILTER(opt_name, filter_name, arg) do {                 \
-    AVFilterContext *filt_ctx;                                              \
-                                                                            \
-    av_log(NULL, AV_LOG_INFO, opt_name " is forwarded to lavfi "            \
-           "similarly to -af " filter_name "=%s.\n", arg);                  \
-                                                                            \
-    ret = avfilter_graph_create_filter(&filt_ctx,                           \
-                                       avfilter_get_by_name(filter_name),   \
-                                       filter_name, arg, NULL, fg->graph);  \
-    if (ret < 0)                                                            \
-        return ret;                                                         \
-                                                                            \
-    ret = avfilter_link(last_filter, pad_idx, filt_ctx, 0);                 \
-    if (ret < 0)                                                            \
-        return ret;                                                         \
-                                                                            \
-    last_filter = filt_ctx;                                                 \
-    pad_idx = 0;                                                            \
-} while (0)
-
     if (audio_sync_method > 0 && 0) {
         char args[256] = {0};
 
@@ -1071,20 +1084,6 @@ static int configure_output_audio_filter(FilterGraph *fg, OutputFilter *ofilter,
         if (audio_sync_method > 1)
             av_strlcatf(args, sizeof(args), ":max_soft_comp=%d", -audio_sync_method);
         AUTO_INSERT_FILTER("-async", "aresample", args);
-    }
-
-    if (ost->audio_channels_mapped) {
-        int i;
-        AVBPrint pan_buf;
-        av_bprint_init(&pan_buf, 256, 8192);
-        av_bprintf(&pan_buf, "0x%"PRIx64,
-                   av_get_default_channel_layout(ost->audio_channels_mapped));
-        for (i = 0; i < ost->audio_channels_mapped; i++)
-            if (ost->audio_channels_map[i] != -1)
-                av_bprintf(&pan_buf, ":c%d=c%d", i, ost->audio_channels_map[i]);
-
-        AUTO_INSERT_FILTER("-map_channel", "pan", pan_buf.str);
-        av_bprint_finalize(&pan_buf, NULL);
     }
 
     if (audio_volume != 256) {
@@ -1499,6 +1498,7 @@ void av_noreturn exit_program(int ret)
         output_streams[i]->bitstream_filters = NULL;
 
         av_freep(&output_streams[i]->filtered_frame);
+        av_freep(&output_streams[i]->avfilter);
         av_freep(&output_streams[i]);
     }
     for (i = 0; i < nb_input_files; i++) {
@@ -3085,6 +3085,8 @@ static int transcode_init(void)
                 break;
             case AVMEDIA_TYPE_VIDEO:
                 codec->time_base = (AVRational){ost->frame_rate.den, ost->frame_rate.num};
+                if (ost->filter && !(codec->time_base.num && codec->time_base.den))
+                    codec->time_base = ost->filter->filter->inputs[0]->time_base;
                 if (   av_q2d(codec->time_base) < 0.001 && video_sync_method != VSYNC_PASSTHROUGH
                    && (video_sync_method == VSYNC_CFR || (video_sync_method == VSYNC_AUTO && !(oc->oformat->flags & AVFMT_VARIABLE_FPS)))){
                     av_log(oc, AV_LOG_WARNING, "Frame rate very high for a muxer not efficiently supporting it.\n"
@@ -3103,7 +3105,8 @@ static int transcode_init(void)
                     ost->filter->filter->inputs[0]->sample_aspect_ratio;
                 codec->pix_fmt = ost->filter->filter->inputs[0]->format;
 
-                if (codec->width   != icodec->width  ||
+                if (!icodec ||
+                    codec->width   != icodec->width  ||
                     codec->height  != icodec->height ||
                     codec->pix_fmt != icodec->pix_fmt) {
                     codec->bits_per_raw_sample = frame_bits_per_raw_sample;
@@ -3574,10 +3577,12 @@ static int transcode(void)
         }
 
         // fprintf(stderr,"read #%d.%d size=%d\n", ist->file_index, ist->st->index, pkt.size);
-        if (output_packet(ist, &pkt) < 0 ||
+        if ((ret = output_packet(ist, &pkt)) < 0 ||
             ((ret = poll_filters()) < 0 && ret != AVERROR_EOF)) {
-            av_log(NULL, AV_LOG_ERROR, "Error while decoding stream #%d:%d\n",
-                   ist->file_index, ist->st->index);
+            char buf[128];
+            av_strerror(ret, buf, sizeof(buf));
+            av_log(NULL, AV_LOG_ERROR, "Error while decoding stream #%d:%d: %s\n",
+                   ist->file_index, ist->st->index, buf);
             if (exit_on_error)
                 exit_program(1);
             av_free_packet(&pkt);
@@ -5613,6 +5618,16 @@ static int opt_deinterlace(const char *opt, const char *arg)
     return 0;
 }
 
+static int opt_timecode(OptionsContext *o, const char *opt, const char *arg)
+{
+    char *tcr = av_asprintf("timecode=%s", arg);
+    int ret = parse_option(o, "metadata:g", tcr, options);
+    if (ret >= 0)
+        ret = opt_default("gop_timecode", arg);
+    av_free(tcr);
+    return ret;
+}
+
 static void parse_cpuflags(int argc, char **argv, const OptionDef *options)
 {
     int idx = locate_option(argc, argv, options, "cpuflags");
@@ -5747,6 +5762,7 @@ static const OptionDef options[] = {
     { "sameq", OPT_BOOL | OPT_VIDEO, {(void*)&same_quant}, "use same quantizer as source (implies VBR)" },
     { "same_quant", OPT_BOOL | OPT_VIDEO, {(void*)&same_quant},
       "use same quantizer as source (implies VBR)" },
+    { "timecode", HAS_ARG | OPT_VIDEO | OPT_FUNC2, {(void*)opt_timecode}, "set initial TimeCode value.", "hh:mm:ss[:;.]ff" },
     { "pass", HAS_ARG | OPT_VIDEO, {(void*)opt_pass}, "select the pass number (1 or 2)", "n" },
     { "passlogfile", HAS_ARG | OPT_VIDEO, {(void*)&opt_passlogfile}, "select two pass log file name prefix", "prefix" },
     { "deinterlace", OPT_EXPERT | OPT_VIDEO, {(void*)opt_deinterlace},

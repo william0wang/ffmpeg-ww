@@ -57,14 +57,9 @@ static const AVOption blackdetect_options[] = {
     { NULL },
 };
 
-static const char *blackdetect_get_name(void *ctx)
-{
-    return "blackdetect";
-}
-
 static const AVClass blackdetect_class = {
     .class_name = "BlackDetectContext",
-    .item_name  = blackdetect_get_name,
+    .item_name  = av_default_item_name,
     .option     = blackdetect_options,
 };
 

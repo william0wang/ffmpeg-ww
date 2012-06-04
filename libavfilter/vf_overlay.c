@@ -101,14 +101,9 @@ static const AVOption overlay_options[] = {
     {NULL},
 };
 
-static const char *overlay_get_name(void *ctx)
-{
-    return "overlay";
-}
-
 static const AVClass overlay_class = {
     "OverlayContext",
-    overlay_get_name,
+    av_default_item_name,
     overlay_options
 };
 
