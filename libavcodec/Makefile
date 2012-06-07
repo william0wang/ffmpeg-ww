@@ -188,7 +188,7 @@ OBJS-$(CONFIG_FRAPS_DECODER)           += fraps.o
 OBJS-$(CONFIG_FRWU_DECODER)            += frwu.o
 OBJS-$(CONFIG_G723_1_DECODER)          += g723_1.o acelp_vectors.o \
                                           celp_filters.o celp_math.o
-OBJS-$(CONFIG_G723_1_ENCODER)          += g723_1.o
+OBJS-$(CONFIG_G723_1_ENCODER)          += g723_1.o acelp_vectors.o celp_math.o
 OBJS-$(CONFIG_G729_DECODER)            += g729dec.o lsp.o celp_math.o acelp_filters.o acelp_pitch_delay.o acelp_vectors.o g729postfilter.o
 OBJS-$(CONFIG_GIF_DECODER)             += gifdec.o lzw.o
 OBJS-$(CONFIG_GIF_ENCODER)             += gif.o lzwenc.o
@@ -220,6 +220,7 @@ OBJS-$(CONFIG_H264_VAAPI_HWACCEL)      += vaapi_h264.o
 OBJS-$(CONFIG_H264_VDA_HWACCEL)        += vda_h264.o
 OBJS-$(CONFIG_HUFFYUV_DECODER)         += huffyuv.o
 OBJS-$(CONFIG_HUFFYUV_ENCODER)         += huffyuv.o
+OBJS-$(CONFIG_IAC_DECODER)             += imc.o
 OBJS-$(CONFIG_IDCIN_DECODER)           += idcinvideo.o
 OBJS-$(CONFIG_IDF_DECODER)             += bintext.o cga_data.o
 OBJS-$(CONFIG_IFF_BYTERUN1_DECODER)    += iff.o
@@ -347,7 +348,7 @@ OBJS-$(CONFIG_PNG_DECODER)             += png.o pngdec.o pngdsp.o
 OBJS-$(CONFIG_PNG_ENCODER)             += png.o pngenc.o
 OBJS-$(CONFIG_PPM_DECODER)             += pnmdec.o pnm.o
 OBJS-$(CONFIG_PPM_ENCODER)             += pnmenc.o pnm.o
-OBJS-$(CONFIG_PRORES_DECODER)          += proresdec2.o
+OBJS-$(CONFIG_PRORES_DECODER)          += proresdec2.o proresdsp.o
 OBJS-$(CONFIG_PRORES_LGPL_DECODER)     += proresdec_lgpl.o proresdsp.o proresdata.o
 OBJS-$(CONFIG_PRORES_ENCODER)          += proresenc_anatoliy.o
 OBJS-$(CONFIG_PRORES_ANATOLIY_ENCODER) += proresenc_anatoliy.o
@@ -626,6 +627,7 @@ OBJS-$(CONFIG_MATROSKA_DEMUXER)        += mpeg4audio.o mpegaudiodata.o
 OBJS-$(CONFIG_MATROSKA_MUXER)          += xiph.o mpeg4audio.o \
                                           flacdec.o flacdata.o flac.o \
                                           mpegaudiodata.o vorbis_data.o
+OBJS-$(CONFIG_MP2_MUXER)               += mpegaudiodata.o mpegaudiodecheader.o
 OBJS-$(CONFIG_MP3_MUXER)               += mpegaudiodata.o mpegaudiodecheader.o
 OBJS-$(CONFIG_MOV_DEMUXER)             += mpeg4audio.o mpegaudiodata.o ac3tab.o timecode.o
 OBJS-$(CONFIG_MOV_MUXER)               += mpeg4audio.o mpegaudiodata.o

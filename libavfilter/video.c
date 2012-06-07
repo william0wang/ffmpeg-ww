@@ -26,46 +26,6 @@
 #include "internal.h"
 #include "video.h"
 
-static char *ff_get_ref_perms_string(char *buf, size_t buf_size, int perms)
-{
-    snprintf(buf, buf_size, "%s%s%s%s%s%s",
-             perms & AV_PERM_READ      ? "r" : "",
-             perms & AV_PERM_WRITE     ? "w" : "",
-             perms & AV_PERM_PRESERVE  ? "p" : "",
-             perms & AV_PERM_REUSE     ? "u" : "",
-             perms & AV_PERM_REUSE2    ? "U" : "",
-             perms & AV_PERM_NEG_LINESIZES ? "n" : "");
-    return buf;
-}
-
-static void ff_dlog_ref(void *ctx, AVFilterBufferRef *ref, int end)
-{
-    av_unused char buf[16];
-    av_dlog(ctx,
-            "ref[%p buf:%p refcount:%d perms:%s data:%p linesize[%d, %d, %d, %d] pts:%"PRId64" pos:%"PRId64,
-            ref, ref->buf, ref->buf->refcount, ff_get_ref_perms_string(buf, sizeof(buf), ref->perms), ref->data[0],
-            ref->linesize[0], ref->linesize[1], ref->linesize[2], ref->linesize[3],
-            ref->pts, ref->pos);
-
-    if (ref->video) {
-        av_dlog(ctx, " a:%d/%d s:%dx%d i:%c iskey:%d type:%c",
-                ref->video->sample_aspect_ratio.num, ref->video->sample_aspect_ratio.den,
-                ref->video->w, ref->video->h,
-                !ref->video->interlaced     ? 'P' :         /* Progressive  */
-                ref->video->top_field_first ? 'T' : 'B',    /* Top / Bottom */
-                ref->video->key_frame,
-                av_get_picture_type_char(ref->video->pict_type));
-    }
-    if (ref->audio) {
-        av_dlog(ctx, " cl:%"PRId64"d n:%d r:%d",
-                ref->audio->channel_layout,
-                ref->audio->nb_samples,
-                ref->audio->sample_rate);
-    }
-
-    av_dlog(ctx, "]%s", end ? "\n" : "");
-}
-
 AVFilterBufferRef *ff_null_get_video_buffer(AVFilterLink *link, int perms, int w, int h)
 {
     return avfilter_get_video_buffer(link->dst->outputs[0], perms, w, h);
@@ -191,7 +151,7 @@ AVFilterBufferRef *avfilter_get_video_buffer(AVFilterLink *link, int perms, int 
 
 void ff_null_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
 {
-    avfilter_start_frame(link->dst->outputs[0], picref);
+    ff_start_frame(link->dst->outputs[0], picref);
 }
 
 static void default_start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
@@ -204,13 +164,13 @@ static void default_start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
     if (outlink) {
         outlink->out_buf = avfilter_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
         avfilter_copy_buffer_ref_props(outlink->out_buf, picref);
-        avfilter_start_frame(outlink, avfilter_ref_buffer(outlink->out_buf, ~0));
+        ff_start_frame(outlink, avfilter_ref_buffer(outlink->out_buf, ~0));
     }
 }
 
 /* XXX: should we do the duplicating of the picture ref here, instead of
  * forcing the source filter to do it? */
-void avfilter_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
+void ff_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
 {
     void (*start_frame)(AVFilterLink *, AVFilterBufferRef *);
     AVFilterPad *dst = link->dstpad;
@@ -257,7 +217,7 @@ void avfilter_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
 
 void ff_null_end_frame(AVFilterLink *link)
 {
-    avfilter_end_frame(link->dst->outputs[0]);
+    ff_end_frame(link->dst->outputs[0]);
 }
 
 static void default_end_frame(AVFilterLink *inlink)
@@ -275,11 +235,11 @@ static void default_end_frame(AVFilterLink *inlink)
             avfilter_unref_buffer(outlink->out_buf);
             outlink->out_buf = NULL;
         }
-        avfilter_end_frame(outlink);
+        ff_end_frame(outlink);
     }
 }
 
-void avfilter_end_frame(AVFilterLink *link)
+void ff_end_frame(AVFilterLink *link)
 {
     void (*end_frame)(AVFilterLink *);
 
@@ -298,7 +258,7 @@ void avfilter_end_frame(AVFilterLink *link)
 
 void ff_null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
 {
-    avfilter_draw_slice(link->dst->outputs[0], y, h, slice_dir);
+    ff_draw_slice(link->dst->outputs[0], y, h, slice_dir);
 }
 
 static void default_draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
@@ -309,10 +269,10 @@ static void default_draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir
         outlink = inlink->dst->outputs[0];
 
     if (outlink)
-        avfilter_draw_slice(outlink, y, h, slice_dir);
+        ff_draw_slice(outlink, y, h, slice_dir);
 }
 
-void avfilter_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
+void ff_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
 {
     uint8_t *src[4], *dst[4];
     int i, j, vsub;
@@ -385,5 +345,17 @@ void avfilter_null_end_frame(AVFilterLink *link)
 void avfilter_null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
 {
     ff_null_draw_slice(link, y, h, slice_dir);
+}
+void avfilter_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
+{
+    ff_start_frame(link, picref);
+}
+void avfilter_end_frame(AVFilterLink *link)
+{
+    ff_end_frame(link);
+}
+void avfilter_draw_slice(AVFilterLink *link, int y, int h, int slice_dir)
+{
+    ff_draw_slice(link, y, h, slice_dir);
 }
 #endif

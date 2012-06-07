@@ -30,6 +30,8 @@
 #include "libavutil/avstring.h"
 #include "libavutil/file.h"
 #include "avfilter.h"
+#include "formats.h"
+#include "video.h"
 
 static void fill_iplimage_from_picref(IplImage *img, const AVFilterBufferRef *picref, enum PixelFormat pixfmt)
 {
@@ -61,7 +63,7 @@ static int query_formats(AVFilterContext *ctx)
         PIX_FMT_BGR24, PIX_FMT_BGRA, PIX_FMT_GRAY8, PIX_FMT_NONE
     };
 
-    avfilter_set_common_pixel_formats(ctx, avfilter_make_format_list(pix_fmts));
+    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
 
@@ -364,8 +366,8 @@ static void end_frame(AVFilterLink *inlink)
     fill_picref_from_iplimage(outpicref, &outimg, inlink->format);
 
     avfilter_unref_buffer(inpicref);
-    avfilter_draw_slice(outlink, 0, outlink->h, 1);
-    avfilter_end_frame(outlink);
+    ff_draw_slice(outlink, 0, outlink->h, 1);
+    ff_end_frame(outlink);
     avfilter_unref_buffer(outpicref);
 }
 

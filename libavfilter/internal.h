@@ -45,28 +45,6 @@ typedef struct AVFilterCommand {
 } AVFilterCommand;
 
 /**
- * Check for the validity of graph.
- *
- * A graph is considered valid if all its input and output pads are
- * connected.
- *
- * @return 0 in case of success, a negative value otherwise
- */
-int ff_avfilter_graph_check_validity(AVFilterGraph *graphctx, AVClass *log_ctx);
-
-/**
- * Configure all the links of graphctx.
- *
- * @return 0 in case of success, a negative value otherwise
- */
-int ff_avfilter_graph_config_links(AVFilterGraph *graphctx, AVClass *log_ctx);
-
-/**
- * Configure the formats of all the links in the graph.
- */
-int ff_avfilter_graph_config_formats(AVFilterGraph *graphctx, AVClass *log_ctx);
-
-/**
  * Update the position of a link in the age heap.
  */
 void ff_avfilter_graph_update_heap(AVFilterGraph *graph, AVFilterLink *link);
@@ -156,8 +134,64 @@ void ff_free_pool(AVFilterPool *pool);
 
 void ff_command_queue_pop(AVFilterContext *filter);
 
+/* misc debug functions */
+
 #define FF_DPRINTF_START(ctx, func) av_dlog(NULL, "%-16s: ", #func)
 
+char *ff_get_ref_perms_string(char *buf, size_t buf_size, int perms);
+
+void ff_dlog_ref(void *ctx, AVFilterBufferRef *ref, int end);
+
 void ff_dlog_link(void *ctx, AVFilterLink *link, int end);
+
+/**
+ * Insert a new pad.
+ *
+ * @param idx Insertion point. Pad is inserted at the end if this point
+ *            is beyond the end of the list of pads.
+ * @param count Pointer to the number of pads in the list
+ * @param padidx_off Offset within an AVFilterLink structure to the element
+ *                   to increment when inserting a new pad causes link
+ *                   numbering to change
+ * @param pads Pointer to the pointer to the beginning of the list of pads
+ * @param links Pointer to the pointer to the beginning of the list of links
+ * @param newpad The new pad to add. A copy is made when adding.
+ */
+void ff_insert_pad(unsigned idx, unsigned *count, size_t padidx_off,
+                   AVFilterPad **pads, AVFilterLink ***links,
+                   AVFilterPad *newpad);
+
+/** Insert a new input pad for the filter. */
+static inline void ff_insert_inpad(AVFilterContext *f, unsigned index,
+                                   AVFilterPad *p)
+{
+    ff_insert_pad(index, &f->input_count, offsetof(AVFilterLink, dstpad),
+                  &f->input_pads, &f->inputs, p);
+}
+
+/** Insert a new output pad for the filter. */
+static inline void ff_insert_outpad(AVFilterContext *f, unsigned index,
+                                    AVFilterPad *p)
+{
+    ff_insert_pad(index, &f->output_count, offsetof(AVFilterLink, srcpad),
+                  &f->output_pads, &f->outputs, p);
+}
+
+/**
+ * Poll a frame from the filter chain.
+ *
+ * @param  link the input link
+ * @return the number of immediately available frames, a negative
+ * number in case of error
+ */
+int ff_poll_frame(AVFilterLink *link);
+
+/**
+ * Request an input frame from the filter at the other end of the link.
+ *
+ * @param link the input link
+ * @return     zero on success
+ */
+int ff_request_frame(AVFilterLink *link);
 
 #endif /* AVFILTER_INTERNAL_H */
