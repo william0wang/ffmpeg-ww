@@ -142,6 +142,11 @@ int av_buffersink_get_buffer_ref(AVFilterContext *ctx,
     return 0;
 }
 
+AVRational av_buffersink_get_frame_rate(AVFilterContext *ctx)
+{
+    return ctx->inputs[0]->frame_rate;
+}
+
 int av_buffersink_poll_frame(AVFilterContext *ctx)
 {
     BufferSinkContext *buf = ctx->priv;
@@ -188,7 +193,7 @@ static av_cold void vsink_uninit(AVFilterContext *ctx)
 {
     BufferSinkContext *buf = ctx->priv;
     av_freep(&buf->pixel_fmts);
-    return common_uninit(ctx);
+    common_uninit(ctx);
 }
 
 static int vsink_query_formats(AVFilterContext *ctx)
@@ -258,7 +263,7 @@ static av_cold void asink_uninit(AVFilterContext *ctx)
 
     av_freep(&buf->sample_fmts);
     av_freep(&buf->channel_layouts);
-    return common_uninit(ctx);
+    common_uninit(ctx);
 }
 
 static int asink_query_formats(AVFilterContext *ctx)

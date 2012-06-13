@@ -85,6 +85,11 @@
 #elif HAVE_KBHIT
 #include <conio.h>
 #endif
+
+#if HAVE_PTHREADS
+#include <pthread.h>
+#endif
+
 #include <time.h>
 
 #include "cmdutils.h"
@@ -170,6 +175,11 @@ static int print_stats = 1;
 static int debug_ts = 0;
 static int current_time;
 
+#if HAVE_PTHREADS
+/* signal to input threads that they should exit; set by the main thread */
+static int transcoding_finished;
+#endif
+
 #define DEFAULT_PASS_LOGFILENAME_PREFIX "ffmpeg2pass"
 
 typedef struct InputFilter {
@@ -254,6 +264,15 @@ typedef struct InputFile {
     int nb_streams;       /* number of stream that ffmpeg is aware of; may be different
                              from ctx.nb_streams if new streams appear during av_read_frame() */
     int rate_emu;
+
+#if HAVE_PTHREADS
+    pthread_t thread;           /* thread reading from this file */
+    int finished;               /* the thread has exited */
+    int joined;                 /* the thread has been joined */
+    pthread_mutex_t fifo_lock;  /* lock for access to fifo */
+    pthread_cond_t  fifo_cond;  /* the main thread will signal on this cond after reading from fifo */
+    AVFifoBuffer *fifo;         /* demuxed packets are stored here; freed by the main thread */
+#endif
 } InputFile;
 
 typedef struct OutputStream {
@@ -985,21 +1004,30 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     AVRational tb = ist->framerate.num ? (AVRational){ist->framerate.den,
                                                       ist->framerate.num} :
                                          ist->st->time_base;
+    AVRational fr = ist->framerate.num ? ist->framerate :
+                                         ist->st->r_frame_rate;
     AVRational sar;
-    char args[255];
+    AVBPrint args;
     int pad_idx = in->pad_idx;
     int ret;
 
     sar = ist->st->sample_aspect_ratio.num ?
           ist->st->sample_aspect_ratio :
           ist->st->codec->sample_aspect_ratio;
-    snprintf(args, sizeof(args), "%d:%d:%d:%d:%d:%d:%d:flags=%d", ist->st->codec->width,
+    if(!sar.den)
+        sar = (AVRational){0,1};
+    av_bprint_init(&args, 0, 1);
+    av_bprintf(&args,
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:"
+             "pixel_aspect=%d/%d:sws_param=flags=%d", ist->st->codec->width,
              ist->st->codec->height, ist->st->codec->pix_fmt,
              tb.num, tb.den, sar.num, sar.den,
              SWS_BILINEAR + ((ist->st->codec->flags&CODEC_FLAG_BITEXACT) ? SWS_BITEXACT:0));
+    if (fr.num && fr.den)
+        av_bprintf(&args, ":frame_rate=%d/%d", fr.num, fr.den);
 
     if ((ret = avfilter_graph_create_filter(&ifilter->filter, filter, in->name,
-                                            args, NULL, fg->graph)) < 0)
+                                            args.str, NULL, fg->graph)) < 0)
         return ret;
 
     if (ist->framerate.num) {
@@ -1746,6 +1774,7 @@ duplicate_frame:
         pkt.flags |= AV_PKT_FLAG_KEY;
 
         write_frame(s, &pkt, ost);
+        video_size += pkt.size;
     } else {
         int got_packet;
         AVFrame big_picture;
@@ -2722,16 +2751,6 @@ static InputStream *get_input_stream(OutputStream *ost)
 {
     if (ost->source_index >= 0)
         return input_streams[ost->source_index];
-
-    if (ost->filter) {
-        FilterGraph *fg = ost->filter->graph;
-        int i;
-
-        for (i = 0; i < fg->nb_inputs; i++)
-            if (fg->inputs[i]->ist->st->codec->codec_type == ost->st->codec->codec_type)
-                return fg->inputs[i]->ist;
-    }
-
     return NULL;
 }
 
@@ -2739,7 +2758,7 @@ static int transcode_init(void)
 {
     int ret = 0, i, j, k;
     AVFormatContext *oc;
-    AVCodecContext *codec, *icodec;
+    AVCodecContext *codec, *icodec = NULL;
     OutputStream *ost;
     InputStream *ist;
     char error[1024];
@@ -2847,6 +2866,10 @@ static int transcode_init(void)
                     codec->time_base.num *= icodec->ticks_per_frame;
                 }
             }
+
+            if(ost->frame_rate.num)
+                codec->time_base = (AVRational){ost->frame_rate.den, ost->frame_rate.num};
+
             av_reduce(&codec->time_base.num, &codec->time_base.den,
                         codec->time_base.num, codec->time_base.den, INT_MAX);
 
@@ -2907,6 +2930,8 @@ static int transcode_init(void)
             ost->encoding_needed = 1;
 
             if (codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+                if (ost->filter && !ost->frame_rate.num)
+                    ost->frame_rate = av_buffersink_get_frame_rate(ost->filter->filter);
                 if (ist && !ost->frame_rate.num)
                     ost->frame_rate = ist->st->r_frame_rate.num ? ist->st->r_frame_rate : (AVRational){25, 1};
                 if (ost->enc && ost->enc->supported_framerates && !ost->force_fps) {
@@ -3303,6 +3328,125 @@ static int check_keyboard_interaction(int64_t cur_time)
     return 0;
 }
 
+#if HAVE_PTHREADS
+static void *input_thread(void *arg)
+{
+    InputFile *f = arg;
+    int ret = 0;
+
+    while (!transcoding_finished && ret >= 0) {
+        AVPacket pkt;
+        ret = av_read_frame(f->ctx, &pkt);
+
+        if (ret == AVERROR(EAGAIN)) {
+            usleep(10000);
+            ret = 0;
+            continue;
+        } else if (ret < 0)
+            break;
+
+        pthread_mutex_lock(&f->fifo_lock);
+        while (!av_fifo_space(f->fifo))
+            pthread_cond_wait(&f->fifo_cond, &f->fifo_lock);
+
+        av_dup_packet(&pkt);
+        av_fifo_generic_write(f->fifo, &pkt, sizeof(pkt), NULL);
+
+        pthread_mutex_unlock(&f->fifo_lock);
+    }
+
+    f->finished = 1;
+    return NULL;
+}
+
+static void free_input_threads(void)
+{
+    int i;
+
+    if (nb_input_files == 1)
+        return;
+
+    transcoding_finished = 1;
+
+    for (i = 0; i < nb_input_files; i++) {
+        InputFile *f = input_files[i];
+        AVPacket pkt;
+
+        if (f->joined)
+            continue;
+
+        pthread_mutex_lock(&f->fifo_lock);
+        while (av_fifo_size(f->fifo)) {
+            av_fifo_generic_read(f->fifo, &pkt, sizeof(pkt), NULL);
+            av_free_packet(&pkt);
+        }
+        pthread_cond_signal(&f->fifo_cond);
+        pthread_mutex_unlock(&f->fifo_lock);
+
+        pthread_join(f->thread, NULL);
+        f->joined = 1;
+
+        while (av_fifo_size(f->fifo)) {
+            av_fifo_generic_read(f->fifo, &pkt, sizeof(pkt), NULL);
+            av_free_packet(&pkt);
+        }
+        av_fifo_free(f->fifo);
+    }
+}
+
+static int init_input_threads(void)
+{
+    int i, ret;
+
+    if (nb_input_files == 1)
+        return 0;
+
+    for (i = 0; i < nb_input_files; i++) {
+        InputFile *f = input_files[i];
+
+        if (!(f->fifo = av_fifo_alloc(8*sizeof(AVPacket))))
+            return AVERROR(ENOMEM);
+
+        pthread_mutex_init(&f->fifo_lock, NULL);
+        pthread_cond_init (&f->fifo_cond, NULL);
+
+        if ((ret = pthread_create(&f->thread, NULL, input_thread, f)))
+            return AVERROR(ret);
+    }
+    return 0;
+}
+
+static int get_input_packet_mt(InputFile *f, AVPacket *pkt)
+{
+    int ret = 0;
+
+    pthread_mutex_lock(&f->fifo_lock);
+
+    if (av_fifo_size(f->fifo)) {
+        av_fifo_generic_read(f->fifo, pkt, sizeof(*pkt), NULL);
+        pthread_cond_signal(&f->fifo_cond);
+    } else {
+        if (f->finished)
+            ret = AVERROR_EOF;
+        else
+            ret = AVERROR(EAGAIN);
+    }
+
+    pthread_mutex_unlock(&f->fifo_lock);
+
+    return ret;
+}
+#endif
+
+static int get_input_packet(InputFile *f, AVPacket *pkt)
+{
+#if HAVE_PTHREADS
+    if (nb_input_files > 1)
+        return get_input_packet_mt(f, pkt);
+#endif
+    return av_read_frame(f->ctx, pkt);
+}
+
 /*
  * The following code is the main loop of the file converter
  */
@@ -3328,6 +3472,11 @@ static int transcode(void)
     }
 
     timer_start = av_gettime();
+
+#if HAVE_PTHREADS
+    if ((ret = init_input_threads()) < 0)
+        goto fail;
+#endif
 
     for (; received_sigterm == 0;) {
         int file_index, ist_index;
@@ -3355,12 +3504,13 @@ static int transcode(void)
                 usleep(10000);
                 continue;
             }
+            av_log(NULL, AV_LOG_VERBOSE, "No more inputs to read from, finishing.\n");
             break;
         }
 
-        /* read a frame from it and output it in the fifo */
         is  = input_files[file_index]->ctx;
-        ret = av_read_frame(is, &pkt);
+        ret = get_input_packet(input_files[file_index], &pkt);
+
         if (ret == AVERROR(EAGAIN)) {
             no_packet[file_index] = 1;
             no_packet_count++;
@@ -3473,6 +3623,9 @@ static int transcode(void)
         /* dump report by using the output first video and audio streams */
         print_report(0, timer_start, cur_time);
     }
+#if HAVE_PTHREADS
+    free_input_threads();
+#endif
 
     /* at the end of stream, we must flush the decoder buffers */
     for (i = 0; i < nb_input_streams; i++) {
@@ -3517,6 +3670,9 @@ static int transcode(void)
 
  fail:
     av_freep(&no_packet);
+#if HAVE_PTHREADS
+    free_input_threads();
+#endif
 
     if (output_streams) {
         for (i = 0; i < nb_output_streams; i++) {
@@ -4417,24 +4573,25 @@ static OutputStream *new_video_stream(OptionsContext *o, AVFormatContext *oc, in
     AVStream *st;
     OutputStream *ost;
     AVCodecContext *video_enc;
+    char *frame_rate = NULL;
 
     ost = new_output_stream(o, oc, AVMEDIA_TYPE_VIDEO, source_index);
     st  = ost->st;
     video_enc = st->codec;
 
+    MATCH_PER_STREAM_OPT(frame_rates, str, frame_rate, oc, st);
+    if (frame_rate && av_parse_video_rate(&ost->frame_rate, frame_rate) < 0) {
+        av_log(NULL, AV_LOG_FATAL, "Invalid framerate value: %s\n", frame_rate);
+        exit_program(1);
+    }
+
     if (!ost->stream_copy) {
         const char *p = NULL;
-        char *forced_key_frames = NULL, *frame_rate = NULL, *frame_size = NULL;
+        char *forced_key_frames = NULL, *frame_size = NULL;
         char *frame_aspect_ratio = NULL, *frame_pix_fmt = NULL;
         char *intra_matrix = NULL, *inter_matrix = NULL;
         const char *filters = "null";
         int i;
-
-        MATCH_PER_STREAM_OPT(frame_rates, str, frame_rate, oc, st);
-        if (frame_rate && av_parse_video_rate(&ost->frame_rate, frame_rate) < 0) {
-            av_log(NULL, AV_LOG_FATAL, "Invalid framerate value: %s\n", frame_rate);
-            exit_program(1);
-        }
 
         MATCH_PER_STREAM_OPT(frame_sizes, str, frame_size, oc, st);
         if (frame_size && av_parse_video_size(&video_enc->width, &video_enc->height, frame_size) < 0) {

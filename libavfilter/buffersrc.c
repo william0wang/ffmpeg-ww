@@ -42,13 +42,14 @@ typedef struct {
     const AVClass    *class;
     AVFifoBuffer     *fifo;
     AVRational        time_base;     ///< time_base to set in the output link
+    AVRational        frame_rate;    ///< frame_rate to set in the output link
     unsigned          nb_failed_requests;
 
     /* video only */
-    int               h, w;
+    int               w, h;
     enum PixelFormat  pix_fmt;
     AVRational        pixel_aspect;
-    char              sws_param[256];
+    char              *sws_param;
 
     /* audio only */
     int sample_rate;
@@ -216,35 +217,83 @@ unsigned av_buffersrc_get_nb_failed_requests(AVFilterContext *buffer_src)
     return ((BufferSourceContext *)buffer_src->priv)->nb_failed_requests;
 }
 
+#define OFFSET(x) offsetof(BufferSourceContext, x)
+#define V AV_OPT_FLAG_VIDEO_PARAM
+static const AVOption video_options[] = {
+    { "time_base",      NULL, OFFSET(time_base),           AV_OPT_TYPE_RATIONAL,   { 0 }, 0, INT_MAX, V },
+    { "frame_rate",     NULL, OFFSET(frame_rate),          AV_OPT_TYPE_RATIONAL,   { 0 }, 0, INT_MAX, V },
+    { "video_size",     NULL, OFFSET(w),                   AV_OPT_TYPE_IMAGE_SIZE,           .flags = V },
+    { "pix_fmt",        NULL, OFFSET(pix_fmt),             AV_OPT_TYPE_PIXEL_FMT,            .flags = V },
+    { "pixel_aspect",   NULL, OFFSET(pixel_aspect),        AV_OPT_TYPE_RATIONAL,   { 0 }, 0, INT_MAX, V },
+    { "sws_param",      NULL, OFFSET(sws_param),           AV_OPT_TYPE_STRING,               .flags = V },
+    { NULL },
+};
+#undef V
+
+static const AVClass vbuffer_class = {
+    .class_name = "vbuffer source",
+    .item_name  = av_default_item_name,
+    .option     = video_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
+};
+
 static av_cold int init_video(AVFilterContext *ctx, const char *args, void *opaque)
 {
     BufferSourceContext *c = ctx->priv;
-    char pix_fmt_str[128];
+    char pix_fmt_str[128], sws_param[256] = "", *colon, *equal;
     int ret, n = 0;
-    *c->sws_param = 0;
 
-    if (!args ||
-        (n = sscanf(args, "%d:%d:%127[^:]:%d:%d:%d:%d:%255c", &c->w, &c->h, pix_fmt_str,
-                    &c->time_base.num, &c->time_base.den,
-                    &c->pixel_aspect.num, &c->pixel_aspect.den, c->sws_param)) < 7) {
-        av_log(ctx, AV_LOG_ERROR, "Expected at least 7 arguments, but only %d found in '%s'\n", n, args);
+    c->class = &vbuffer_class;
+
+    if (!args) {
+        av_log(ctx, AV_LOG_ERROR, "Arguments required\n");
         return AVERROR(EINVAL);
     }
+    colon = strchr(args, ':');
+    equal = strchr(args, '=');
+    if (equal && (!colon || equal < colon)) {
+        av_opt_set_defaults(c);
+        ret = av_set_options_string(c, args, "=", ":");
+        if (ret < 0) {
+            av_log(ctx, AV_LOG_ERROR, "Error parsing options string: %s.\n", args);
+            goto fail;
+        }
+    } else {
+    if ((n = sscanf(args, "%d:%d:%127[^:]:%d:%d:%d:%d:%255c", &c->w, &c->h, pix_fmt_str,
+                    &c->time_base.num, &c->time_base.den,
+                    &c->pixel_aspect.num, &c->pixel_aspect.den, sws_param)) < 7) {
+        av_log(ctx, AV_LOG_ERROR, "Expected at least 7 arguments, but only %d found in '%s'\n", n, args);
+        ret = AVERROR(EINVAL);
+        goto fail;
+    }
+    av_log(ctx, AV_LOG_WARNING, "Flat options syntax is deprecated, use key=value pairs.\n");
 
     if ((ret = ff_parse_pixel_format(&c->pix_fmt, pix_fmt_str, ctx)) < 0)
-        return ret;
+        goto fail;
+    c->sws_param = av_strdup(sws_param);
+    if (!c->sws_param) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
+    }
 
-    if (!(c->fifo = av_fifo_alloc(sizeof(AVFilterBufferRef*))))
-        return AVERROR(ENOMEM);
+    if (!(c->fifo = av_fifo_alloc(sizeof(AVFilterBufferRef*)))) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
-    av_log(ctx, AV_LOG_INFO, "w:%d h:%d pixfmt:%s tb:%d/%d sar:%d/%d sws_param:%s\n",
+    av_log(ctx, AV_LOG_INFO, "w:%d h:%d pixfmt:%s tb:%d/%d fr:%d/%d sar:%d/%d sws_param:%s\n",
            c->w, c->h, av_pix_fmt_descriptors[c->pix_fmt].name,
-           c->time_base.num, c->time_base.den,
-           c->pixel_aspect.num, c->pixel_aspect.den, c->sws_param);
+           c->time_base.num, c->time_base.den, c->frame_rate.num, c->frame_rate.den,
+           c->pixel_aspect.num, c->pixel_aspect.den, (char *)av_x_if_null(c->sws_param, ""));
     return 0;
+
+fail:
+    av_opt_free(c);
+    return ret;
 }
 
-#define OFFSET(x) offsetof(BufferSourceContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
 static const AVOption audio_options[] = {
     { "time_base",      NULL, OFFSET(time_base),           AV_OPT_TYPE_RATIONAL, { 0 }, 0, INT_MAX, A },
@@ -318,6 +367,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     }
     av_fifo_free(s->fifo);
     s->fifo = NULL;
+    av_freep(&s->sws_param);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -368,6 +418,7 @@ static int config_props(AVFilterLink *link)
     }
 
     link->time_base = c->time_base;
+    link->frame_rate = c->frame_rate;
     return 0;
 }
 

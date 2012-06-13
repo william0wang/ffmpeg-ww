@@ -2163,9 +2163,6 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 #if CONFIG_H263_DECODER
     case CODEC_ID_H263:
 #endif
-#if CONFIG_H264_DECODER
-    case CODEC_ID_H264:
-#endif
 #if CONFIG_MPEG4_DECODER
     case CODEC_ID_MPEG4:
 #endif
@@ -2592,6 +2589,30 @@ static int mov_read_chan2(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_tref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    uint32_t i, size;
+    MOVStreamContext *sc;
+
+    if (c->fc->nb_streams < 1)
+        return AVERROR_INVALIDDATA;
+    sc = c->fc->streams[c->fc->nb_streams - 1]->priv_data;
+
+    size = avio_rb32(pb);
+    if (size < 12)
+        return 0;
+
+    sc->trefs_count = (size - 4) / 8;
+    sc->trefs = av_malloc(sc->trefs_count * sizeof(*sc->trefs));
+    if (!sc->trefs)
+        return AVERROR(ENOMEM);
+
+    sc->tref_type = avio_rl32(pb);
+    for (i = 0; i < sc->trefs_count; i++)
+        sc->trefs[i] = avio_rb32(pb);
+    return 0;
+}
+
 static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('A','P','R','G'), mov_read_aprg },
 { MKTAG('a','v','s','s'), mov_read_avss },
@@ -2636,7 +2657,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('t','f','h','d'), mov_read_tfhd }, /* track fragment header */
 { MKTAG('t','r','a','k'), mov_read_trak },
 { MKTAG('t','r','a','f'), mov_read_default },
-{ MKTAG('t','r','e','f'), mov_read_default },
+{ MKTAG('t','r','e','f'), mov_read_tref },
 { MKTAG('c','h','a','p'), mov_read_chap },
 { MKTAG('t','r','e','x'), mov_read_trex },
 { MKTAG('t','r','u','n'), mov_read_trun },
@@ -2825,6 +2846,7 @@ static int mov_read_close(AVFormatContext *s)
             av_freep(&sc->drefs[j].dir);
         }
         av_freep(&sc->drefs);
+        av_freep(&sc->trefs);
         if (sc->pb && sc->pb != s->pb)
             avio_close(sc->pb);
         sc->pb = NULL;
@@ -2850,11 +2872,47 @@ static int mov_read_close(AVFormatContext *s)
     return 0;
 }
 
+static int tmcd_is_referenced(AVFormatContext *s, int tmcd_id)
+{
+    int i, j;
+
+    for (i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        MOVStreamContext *sc = st->priv_data;
+
+        if (s->streams[i]->codec->codec_type != AVMEDIA_TYPE_VIDEO)
+            continue;
+        for (j = 0; j < sc->trefs_count; j++)
+            if (tmcd_id == sc->trefs[j])
+                return 1;
+    }
+    return 0;
+}
+
+/* look for a tmcd track not referenced by any video track, and export it globally */
+static void export_orphan_timecode(AVFormatContext *s)
+{
+    int i;
+
+    for (i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+
+        if (st->codec->codec_tag  == MKTAG('t','m','c','d') &&
+            !tmcd_is_referenced(s, i + 1)) {
+            AVDictionaryEntry *tcr = av_dict_get(st->metadata, "timecode", NULL, 0);
+            if (tcr) {
+                av_dict_set(&s->metadata, "timecode", tcr->value, 0);
+                break;
+            }
+        }
+    }
+}
+
 static int mov_read_header(AVFormatContext *s)
 {
     MOVContext *mov = s->priv_data;
     AVIOContext *pb = s->pb;
-    int err;
+    int i, err;
     MOVAtom atom = { AV_RL32("root") };
 
     mov->fc = s;
@@ -2878,7 +2936,6 @@ static int mov_read_header(AVFormatContext *s)
     av_dlog(mov->fc, "on_parse_exit_offset=%"PRId64"\n", avio_tell(pb));
 
     if (pb->seekable) {
-        int i;
         if (mov->chapter_track > 0)
             mov_read_chapters(s);
         for (i = 0; i < s->nb_streams; i++)
@@ -2886,8 +2943,24 @@ static int mov_read_header(AVFormatContext *s)
                 mov_read_timecode_track(s, s->streams[i]);
     }
 
+    /* copy timecode metadata from tmcd tracks to the related video streams */
+    for (i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        MOVStreamContext *sc = st->priv_data;
+        if (sc->tref_type == AV_RL32("tmcd") && sc->trefs_count) {
+            AVDictionaryEntry *tcr;
+            int tmcd_st_id = sc->trefs[0] - 1;
+
+            if (tmcd_st_id < 0 || tmcd_st_id >= s->nb_streams)
+                continue;
+            tcr = av_dict_get(s->streams[tmcd_st_id]->metadata, "timecode", NULL, 0);
+            if (tcr)
+                av_dict_set(&st->metadata, "timecode", tcr->value, 0);
+        }
+    }
+    export_orphan_timecode(s);
+
     if (mov->trex_data) {
-        int i;
         for (i = 0; i < s->nb_streams; i++) {
             AVStream *st = s->streams[i];
             MOVStreamContext *sc = st->priv_data;

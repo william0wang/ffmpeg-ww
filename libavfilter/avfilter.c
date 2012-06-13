@@ -231,8 +231,12 @@ int avfilter_config_links(AVFilterContext *filter)
                                                     "callbacks on all outputs\n");
                     return AVERROR(EINVAL);
                 }
-            } else if ((ret = config_link(link)) < 0)
+            } else if ((ret = config_link(link)) < 0) {
+                av_log(link->src, AV_LOG_ERROR,
+                       "Failed to configure output pad on %s\n",
+                       link->src->name);
                 return ret;
+            }
 
             switch (link->type) {
             case AVMEDIA_TYPE_VIDEO:
@@ -242,6 +246,9 @@ int avfilter_config_links(AVFilterContext *filter)
                 if (!link->sample_aspect_ratio.num && !link->sample_aspect_ratio.den)
                     link->sample_aspect_ratio = inlink ?
                         inlink->sample_aspect_ratio : (AVRational){1,1};
+
+                if (inlink && !link->frame_rate.num && !link->frame_rate.den)
+                    link->frame_rate = inlink->frame_rate;
 
                 if (inlink) {
                     if (!link->w)
@@ -274,8 +281,12 @@ int avfilter_config_links(AVFilterContext *filter)
             }
 
             if ((config_link = link->dstpad->config_props))
-                if ((ret = config_link(link)) < 0)
+                if ((ret = config_link(link)) < 0) {
+                    av_log(link->src, AV_LOG_ERROR,
+                           "Failed to configure input pad on %s\n",
+                           link->dst->name);
                     return ret;
+                }
 
             link->init_state = AVLINK_INIT;
         }
@@ -407,7 +418,7 @@ static int pad_count(const AVFilterPad *pads)
     return count;
 }
 
-static char *default_filter_name(void *filter_ctx)
+static const char *default_filter_name(void *filter_ctx)
 {
     AVFilterContext *ctx = filter_ctx;
     return ctx->name ? ctx->name : ctx->filter->name;

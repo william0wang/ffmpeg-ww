@@ -39,9 +39,9 @@
 // similar pix_fmts with higher bpp.
 #define RGB_PIXEL_FORMATS   PIX_FMT_RGB24,PIX_FMT_RGBA,PIX_FMT_RGB48,PIX_FMT_RGBA64
 #define GRAY_PIXEL_FORMATS  PIX_FMT_GRAY8,PIX_FMT_GRAY8A,PIX_FMT_GRAY16
-#define YUV_PIXEL_FORMATS   PIX_FMT_YUV410P,PIX_FMT_YUV411P, \
-                            PIX_FMT_YUV420P,PIX_FMT_YUV422P,PIX_FMT_YUVA420P, \
-                            PIX_FMT_YUV440P,PIX_FMT_YUV444P, \
+#define YUV_PIXEL_FORMATS   PIX_FMT_YUV410P,PIX_FMT_YUV411P,PIX_FMT_YUVA420P, \
+                            PIX_FMT_YUV420P,PIX_FMT_YUV422P,PIX_FMT_YUVA422P, \
+                            PIX_FMT_YUV440P,PIX_FMT_YUV444P,PIX_FMT_YUVA444P, \
                             PIX_FMT_YUV420P9,PIX_FMT_YUV422P9,PIX_FMT_YUV444P9, \
                             PIX_FMT_YUV420P10,PIX_FMT_YUV422P10,PIX_FMT_YUV444P10, \
                             PIX_FMT_YUV420P16,PIX_FMT_YUV422P16,PIX_FMT_YUV444P16
@@ -66,8 +66,8 @@ static inline int libopenjpeg_matches_pix_fmt(const opj_image_t *image, enum Pix
 
     switch (descriptor.nb_components) {
     case 4: match = match && descriptor.comp[3].depth_minus1 + 1 >= image->comps[3].prec &&
-                             1 << descriptor.log2_chroma_w == image->comps[3].dx &&
-                             1 << descriptor.log2_chroma_h == image->comps[3].dy;
+                             1 == image->comps[3].dx &&
+                             1 == image->comps[3].dy;
     case 3: match = match && descriptor.comp[2].depth_minus1 + 1 >= image->comps[2].prec &&
                              1 << descriptor.log2_chroma_w == image->comps[2].dx &&
                              1 << descriptor.log2_chroma_h == image->comps[2].dy;
@@ -92,19 +92,19 @@ static inline enum PixelFormat libopenjpeg_guess_pix_fmt(const opj_image_t *imag
     switch (image->color_space) {
     case CLRSPC_SRGB:
         possible_fmts = libopenjpeg_rgb_pix_fmts;
-        possible_fmts_nb = sizeof(libopenjpeg_rgb_pix_fmts) / sizeof(enum PixelFormat);
+        possible_fmts_nb = FF_ARRAY_ELEMS(libopenjpeg_rgb_pix_fmts);
         break;
     case CLRSPC_GRAY:
         possible_fmts = libopenjpeg_gray_pix_fmts;
-        possible_fmts_nb = sizeof(libopenjpeg_gray_pix_fmts) / sizeof(enum PixelFormat);
+        possible_fmts_nb = FF_ARRAY_ELEMS(libopenjpeg_gray_pix_fmts);
         break;
     case CLRSPC_SYCC:
         possible_fmts = libopenjpeg_yuv_pix_fmts;
-        possible_fmts_nb = sizeof(libopenjpeg_yuv_pix_fmts) / sizeof(enum PixelFormat);
+        possible_fmts_nb = FF_ARRAY_ELEMS(libopenjpeg_yuv_pix_fmts);
         break;
     default:
         possible_fmts = libopenjpeg_all_pix_fmts;
-        possible_fmts_nb = sizeof(libopenjpeg_all_pix_fmts) / sizeof(enum PixelFormat);
+        possible_fmts_nb = FF_ARRAY_ELEMS(libopenjpeg_all_pix_fmts);
         break;
     }
 

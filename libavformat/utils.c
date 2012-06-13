@@ -2045,7 +2045,7 @@ static void update_stream_timings(AVFormatContext *ic)
         st = ic->streams[i];
         if (st->start_time != AV_NOPTS_VALUE && st->time_base.den) {
             start_time1= av_rescale_q(st->start_time, st->time_base, AV_TIME_BASE_Q);
-            if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE || st->codec->codec_type == AVMEDIA_TYPE_DATA) {
                 if (start_time1 < start_time_text)
                     start_time_text = start_time1;
             } else
@@ -2063,6 +2063,9 @@ static void update_stream_timings(AVFormatContext *ic)
     }
     if (start_time == INT64_MAX || (start_time > start_time_text && start_time - start_time_text < AV_TIME_BASE))
         start_time = start_time_text;
+    else if(start_time > start_time_text)
+        av_log(ic, AV_LOG_VERBOSE, "Ignoring outlier non primary stream starttime %f\n", start_time_text / (float)AV_TIME_BASE);
+
     if (start_time != INT64_MAX) {
         ic->start_time = start_time;
         if (end_time != INT64_MIN)

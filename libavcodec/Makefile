@@ -37,7 +37,7 @@ OBJS-$(CONFIG_AC3DSP)                  += ac3dsp.o
 OBJS-$(CONFIG_CRYSTALHD)               += crystalhd.o
 OBJS-$(CONFIG_ENCODERS)                += faandct.o jfdctfst.o jfdctint.o
 OBJS-$(CONFIG_DCT)                     += dct.o dct32_fixed.o dct32_float.o
-OBJS-$(CONFIG_DWT)                     += dwt.o
+OBJS-$(CONFIG_DWT)                     += dwt.o snow.o
 OBJS-$(CONFIG_DXVA2)                   += dxva2.o
 FFT-OBJS-$(CONFIG_HARDCODED_TABLES)    += cos_tables.o cos_fixed_tables.o
 OBJS-$(CONFIG_FFT)                     += avfft.o fft_fixed.o fft_float.o \
@@ -88,6 +88,10 @@ OBJS-$(CONFIG_AMRWB_DECODER)           += amrwbdec.o celp_filters.o   \
                                           acelp_vectors.o             \
                                           acelp_pitch_delay.o lsp.o
 OBJS-$(CONFIG_AMV_DECODER)             += sp5xdec.o mjpegdec.o mjpeg.o
+OBJS-$(CONFIG_AMV_ENCODER)             += mjpegenc.o mjpeg.o           \
+                                          mpegvideo_enc.o motion_est.o \
+                                          ratecontrol.o mpeg12data.o   \
+                                          mpegvideo.o
 OBJS-$(CONFIG_ANM_DECODER)             += anm.o
 OBJS-$(CONFIG_ANSI_DECODER)            += ansi.o cga_data.o
 OBJS-$(CONFIG_APE_DECODER)             += apedec.o
@@ -167,7 +171,6 @@ OBJS-$(CONFIG_EATQI_DECODER)           += eatqi.o eaidct.o mpeg12.o \
 OBJS-$(CONFIG_EIGHTBPS_DECODER)        += 8bps.o
 OBJS-$(CONFIG_EIGHTSVX_EXP_DECODER)    += 8svx.o
 OBJS-$(CONFIG_EIGHTSVX_FIB_DECODER)    += 8svx.o
-OBJS-$(CONFIG_EIGHTSVX_RAW_DECODER)    += 8svx.o
 OBJS-$(CONFIG_ESCAPE124_DECODER)       += escape124.o
 OBJS-$(CONFIG_ESCAPE130_DECODER)       += escape130.o
 OBJS-$(CONFIG_EXR_DECODER)             += exr.o
@@ -677,8 +680,9 @@ OBJS-$(CONFIG_LIBUTVIDEO_ENCODER)         += libutvideoenc.o
 OBJS-$(CONFIG_LIBVO_AACENC_ENCODER)       += libvo-aacenc.o mpeg4audio.o \
                                              audio_frame_queue.o
 OBJS-$(CONFIG_LIBVO_AMRWBENC_ENCODER)     += libvo-amrwbenc.o
-OBJS-$(CONFIG_LIBVORBIS_ENCODER)          += libvorbis.o audio_frame_queue.o \
-                                             vorbis_data.o vorbis_parser.o
+OBJS-$(CONFIG_LIBVORBIS_DECODER)          += libvorbisdec.o
+OBJS-$(CONFIG_LIBVORBIS_ENCODER)          += libvorbisenc.o audio_frame_queue.o \
+                                             vorbis_data.o vorbis_parser.o xiph.o
 OBJS-$(CONFIG_LIBVPX_DECODER)             += libvpxdec.o
 OBJS-$(CONFIG_LIBVPX_ENCODER)             += libvpxenc.o
 OBJS-$(CONFIG_LIBX264_ENCODER)            += libx264.o
