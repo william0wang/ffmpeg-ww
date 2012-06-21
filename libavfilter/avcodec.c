@@ -24,6 +24,7 @@
  */
 
 #include "avcodec.h"
+#include "libavutil/avassert.h"
 #include "libavutil/opt.h"
 
 int avfilter_copy_frame_props(AVFilterBufferRef *dst, const AVFrame *src)
@@ -83,14 +84,21 @@ int avfilter_copy_buf_props(AVFrame *dst, const AVFilterBufferRef *src)
 {
     int planes, nb_channels;
 
+    if (!dst)
+        return AVERROR(EINVAL);
+    /* abort in case the src is NULL and dst is not, avoid inconsistent state in dst */
+    av_assert0(src);
+
     memcpy(dst->data, src->data, sizeof(dst->data));
     memcpy(dst->linesize, src->linesize, sizeof(dst->linesize));
 
     dst->pts     = src->pts;
     dst->format  = src->format;
+    av_frame_set_pkt_pos(dst, src->pos);
 
     switch (src->type) {
     case AVMEDIA_TYPE_VIDEO:
+        av_assert0(src->video);
         dst->width               = src->video->w;
         dst->height              = src->video->h;
         dst->sample_aspect_ratio = src->video->sample_aspect_ratio;
@@ -100,6 +108,7 @@ int avfilter_copy_buf_props(AVFrame *dst, const AVFilterBufferRef *src)
         dst->pict_type           = src->video->pict_type;
         break;
     case AVMEDIA_TYPE_AUDIO:
+        av_assert0(src->audio);
         nb_channels = av_get_channel_layout_nb_channels(src->audio->channel_layout);
         planes      = av_sample_fmt_is_planar(src->format) ? nb_channels : 1;
 
@@ -111,10 +120,9 @@ int avfilter_copy_buf_props(AVFrame *dst, const AVFilterBufferRef *src)
                    planes * sizeof(dst->extended_data));
         } else
             dst->extended_data = dst->data;
-
-        dst->sample_rate         = src->audio->sample_rate;
-        dst->channel_layout      = src->audio->channel_layout;
         dst->nb_samples          = src->audio->nb_samples;
+        av_frame_set_sample_rate   (dst, src->audio->sample_rate);
+        av_frame_set_channel_layout(dst, src->audio->channel_layout);
         break;
     default:
         return AVERROR(EINVAL);
@@ -126,48 +134,17 @@ int avfilter_copy_buf_props(AVFrame *dst, const AVFilterBufferRef *src)
 int avfilter_fill_frame_from_audio_buffer_ref(AVFrame *frame,
                                               const AVFilterBufferRef *samplesref)
 {
-    if (!samplesref || !samplesref->audio || !frame)
-        return AVERROR(EINVAL);
-
-    memcpy(frame->data, samplesref->data, sizeof(frame->data));
-    memcpy(frame->linesize, samplesref->linesize, sizeof(frame->linesize));
-    av_frame_set_pkt_pos(frame, samplesref->pos);
-    frame->format         = samplesref->format;
-    frame->nb_samples     = samplesref->audio->nb_samples;
-    frame->pts            = samplesref->pts;
-    frame->sample_rate    = samplesref->audio->sample_rate;
-    frame->channel_layout = samplesref->audio->channel_layout;
-
-    return 0;
+    return avfilter_copy_buf_props(frame, samplesref);
 }
 
 int avfilter_fill_frame_from_video_buffer_ref(AVFrame *frame,
                                               const AVFilterBufferRef *picref)
 {
-    if (!picref || !picref->video || !frame)
-        return AVERROR(EINVAL);
-
-    memcpy(frame->data,     picref->data,     sizeof(frame->data));
-    memcpy(frame->linesize, picref->linesize, sizeof(frame->linesize));
-    av_frame_set_pkt_pos(frame, picref->pos);
-    frame->interlaced_frame = picref->video->interlaced;
-    frame->top_field_first  = picref->video->top_field_first;
-    frame->key_frame        = picref->video->key_frame;
-    frame->pict_type        = picref->video->pict_type;
-    frame->sample_aspect_ratio = picref->video->sample_aspect_ratio;
-    frame->width            = picref->video->w;
-    frame->height           = picref->video->h;
-    frame->format           = picref->format;
-    frame->pts              = picref->pts;
-
-    return 0;
+    return avfilter_copy_buf_props(frame, picref);
 }
 
 int avfilter_fill_frame_from_buffer_ref(AVFrame *frame,
                                         const AVFilterBufferRef *ref)
 {
-    if (!ref)
-        return AVERROR(EINVAL);
-    return ref->video ? avfilter_fill_frame_from_video_buffer_ref(frame, ref)
-                      : avfilter_fill_frame_from_audio_buffer_ref(frame, ref);
+    return avfilter_copy_buf_props(frame, ref);
 }

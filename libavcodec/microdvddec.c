@@ -101,6 +101,8 @@ static char *microdvd_load_tags(struct microdvd_tag *tags, char *s)
         case 'C':
             tag.persistent = MICRODVD_PERSISTENT_ON;
         case 'c':
+            if (*s == '$')
+                s++;
             tag.data1 = strtol(s, &s, 16) & 0x00ffffff;
             if (*s != '}')
                 break;
@@ -226,7 +228,7 @@ static void microdvd_close_no_persistent_tags(AVBPrint *new_line,
 {
     int i, sidx;
 
-    for (i = sizeof(MICRODVD_TAGS) - 2; i; i--) {
+    for (i = sizeof(MICRODVD_TAGS) - 2; i >= 0; i--) {
         if (tags[i].persistent != MICRODVD_PERSISTENT_OFF)
             continue;
         switch (tags[i].key) {

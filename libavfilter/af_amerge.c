@@ -49,12 +49,15 @@ typedef struct {
 static const AVOption amerge_options[] = {
     { "inputs", "specify the number of inputs", OFFSET(nb_inputs),
       AV_OPT_TYPE_INT, { .dbl = 2 }, 2, SWR_CH_MAX },
+    {0}
 };
 
 static const AVClass amerge_class = {
-    .class_name = "AMergeContext",
+    .class_name = "amerge",
     .item_name  = av_default_item_name,
     .option     = amerge_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static av_cold void uninit(AVFilterContext *ctx)
@@ -118,8 +121,8 @@ static int query_formats(AVFilterContext *ctx)
                 if ((inlayout[i] >> c) & 1)
                     *(route[i]++) = out_ch_number++;
     }
-    formats = avfilter_make_format_list(ff_packed_sample_fmts_array);
-    avfilter_set_common_sample_formats(ctx, formats);
+    formats = ff_make_format_list(ff_packed_sample_fmts_array);
+    ff_set_common_formats(ctx, formats);
     for (i = 0; i < am->nb_inputs; i++) {
         layouts = NULL;
         ff_add_channel_layout(&layouts, inlayout[i]);
@@ -314,7 +317,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
             .min_perms        = AV_PERM_READ | AV_PERM_PRESERVE,
         };
         snprintf(name, sizeof(name), "in%d", i);
-        avfilter_insert_inpad(ctx, i, &pad);
+        ff_insert_inpad(ctx, i, &pad);
     }
     return 0;
 }

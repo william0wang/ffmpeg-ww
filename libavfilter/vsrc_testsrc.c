@@ -86,8 +86,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
         return ret;
     }
 
-    if ((ret = av_parse_video_rate(&frame_rate_q, test->rate)) < 0 ||
-        frame_rate_q.den <= 0 || frame_rate_q.num <= 0) {
+    if ((ret = av_parse_video_rate(&frame_rate_q, test->rate)) < 0) {
         av_log(ctx, AV_LOG_ERROR, "Invalid frame rate: '%s'\n", test->rate);
         return ret;
     }
@@ -159,9 +158,11 @@ static int request_frame(AVFilterLink *outlink)
 #if CONFIG_NULLSRC_FILTER
 
 static const AVClass nullsrc_class = {
-    .class_name = "NullSourceContext",
+    .class_name = "nullsrc",
     .item_name  = av_default_item_name,
     .option     = testsrc_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static void nullsrc_fill_picture(AVFilterContext *ctx, AVFilterBufferRef *picref) { }
@@ -194,9 +195,11 @@ AVFilter avfilter_vsrc_nullsrc = {
 #if CONFIG_TESTSRC_FILTER
 
 static const AVClass testsrc_class = {
-    .class_name = "TestSourceContext",
+    .class_name = "testsrc",
     .item_name  = av_default_item_name,
     .option     = testsrc_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 /**
@@ -416,9 +419,11 @@ AVFilter avfilter_vsrc_testsrc = {
 #if CONFIG_RGBTESTSRC_FILTER
 
 static const AVClass rgbtestsrc_class = {
-    .class_name = "RGBTestSourceContext",
+    .class_name = "rgbtestsrc",
     .item_name  = av_default_item_name,
     .option     = testsrc_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 #define R 0

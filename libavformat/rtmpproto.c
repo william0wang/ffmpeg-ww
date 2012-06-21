@@ -76,6 +76,7 @@ typedef struct RTMPContext {
     uint8_t*      flv_data;                   ///< buffer with data for demuxer
     int           flv_size;                   ///< current buffer size
     int           flv_off;                    ///< number of bytes read from current buffer
+    int           flv_nb_packets;             ///< number of flv packets published
     RTMPPacket    out_pkt;                    ///< rtmp packet, created from flv a/v or metadata (for output)
     uint32_t      client_report_size;         ///< number of bytes after which client should report to server
     uint32_t      bytes_read;                 ///< number of bytes read from server
@@ -90,6 +91,7 @@ typedef struct RTMPContext {
     char*         swfurl;                     ///< url of the swf player
     int           server_bw;                  ///< server bandwidth
     int           client_buffer_time;         ///< client buffer time in ms
+    int           flush_interval;             ///< number of packets flushed in the same request (RTMPT only)
 } RTMPContext;
 
 #define PLAYER_KEY_OPEN_PART_LEN 30   ///< length of partial key used for first client digest signing
@@ -1112,9 +1114,15 @@ static int rtmp_open(URLContext *s, const char *uri, int flags)
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname), &port,
                  path, sizeof(path), s->filename);
 
-    if (port < 0)
-        port = RTMP_DEFAULT_PORT;
-    ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
+    if (!strcmp(proto, "rtmpt")) {
+        /* open the http tunneling connection */
+        ff_url_join(buf, sizeof(buf), "rtmphttp", NULL, hostname, port, NULL);
+    } else {
+        /* open the tcp connection */
+        if (port < 0)
+            port = RTMP_DEFAULT_PORT;
+        ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
+    }
 
     if ((ret = ffurl_open(&rt->stream, buf, AVIO_FLAG_READ_WRITE,
                           &s->interrupt_callback, NULL)) < 0) {
@@ -1287,6 +1295,7 @@ static int rtmp_write(URLContext *s, const uint8_t *buf, int size)
     int pktsize, pkttype;
     uint32_t ts;
     const uint8_t *buf_temp = buf;
+    uint8_t c;
     int ret;
 
     do {
@@ -1354,8 +1363,42 @@ static int rtmp_write(URLContext *s, const uint8_t *buf, int size)
             rt->flv_size = 0;
             rt->flv_off = 0;
             rt->flv_header_bytes = 0;
+            rt->flv_nb_packets++;
         }
     } while (buf_temp - buf < size);
+
+    if (rt->flv_nb_packets < rt->flush_interval)
+        return size;
+    rt->flv_nb_packets = 0;
+
+    /* set stream into nonblocking mode */
+    rt->stream->flags |= AVIO_FLAG_NONBLOCK;
+
+    /* try to read one byte from the stream */
+    ret = ffurl_read(rt->stream, &c, 1);
+
+    /* switch the stream back into blocking mode */
+    rt->stream->flags &= ~AVIO_FLAG_NONBLOCK;
+
+    if (ret == AVERROR(EAGAIN)) {
+        /* no incoming data to handle */
+        return size;
+    } else if (ret < 0) {
+        return ret;
+    } else if (ret == 1) {
+        RTMPPacket rpkt = { 0 };
+
+        if ((ret = ff_rtmp_packet_read_internal(rt->stream, &rpkt,
+                                                rt->chunk_size,
+                                                rt->prev_pkt[0], c)) <= 0)
+             return ret;
+
+        if ((ret = rtmp_parse_result(s, rt, &rpkt)) < 0)
+            return ret;
+
+        ff_rtmp_packet_destroy(&rpkt);
+    }
+
     return size;
 }
 
@@ -1368,6 +1411,7 @@ static const AVOption rtmp_options[] = {
     {"rtmp_buffer", "Set buffer time in milliseconds. The default is 3000.", OFFSET(client_buffer_time), AV_OPT_TYPE_INT, {3000}, 0, INT_MAX, DEC|ENC},
     {"rtmp_conn", "Append arbitrary AMF data to the Connect message", OFFSET(conn), AV_OPT_TYPE_STRING, {.str = NULL }, 0, 0, DEC|ENC},
     {"rtmp_flashver", "Version of the Flash plugin used to run the SWF player.", OFFSET(flashver), AV_OPT_TYPE_STRING, {.str = NULL }, 0, 0, DEC|ENC},
+    {"rtmp_flush_interval", "Number of packets flushed in the same request (RTMPT only).", OFFSET(flush_interval), AV_OPT_TYPE_INT, {10}, 0, INT_MAX, ENC},
     {"rtmp_live", "Specify that the media is a live stream.", OFFSET(live), AV_OPT_TYPE_INT, {-2}, INT_MIN, INT_MAX, DEC, "rtmp_live"},
     {"any", "both", 0, AV_OPT_TYPE_CONST, {-2}, 0, 0, DEC, "rtmp_live"},
     {"live", "live stream", 0, AV_OPT_TYPE_CONST, {-1}, 0, 0, DEC, "rtmp_live"},
@@ -1394,4 +1438,22 @@ URLProtocol ff_rtmp_protocol = {
     .priv_data_size = sizeof(RTMPContext),
     .flags          = URL_PROTOCOL_FLAG_NETWORK,
     .priv_data_class= &rtmp_class,
+};
+
+static const AVClass rtmpt_class = {
+    .class_name = "rtmpt",
+    .item_name  = av_default_item_name,
+    .option     = rtmp_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+URLProtocol ff_rtmpt_protocol = {
+    .name            = "rtmpt",
+    .url_open        = rtmp_open,
+    .url_read        = rtmp_read,
+    .url_write       = rtmp_write,
+    .url_close       = rtmp_close,
+    .priv_data_size  = sizeof(RTMPContext),
+    .flags           = URL_PROTOCOL_FLAG_NETWORK,
+    .priv_data_class = &rtmpt_class,
 };

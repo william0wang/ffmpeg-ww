@@ -94,7 +94,7 @@ static void dwt_quantize(SnowContext *s, Plane *p, DWTELEM *buffer, int width, i
     //FIXME pass the copy cleanly ?
 
 //    memcpy(dwt_buffer, buffer, height * stride * sizeof(DWTELEM));
-    ff_spatial_dwt(buffer, width, height, stride, type, s->spatial_decomposition_count);
+    ff_spatial_dwt(buffer, s->temp_dwt_buffer, width, height, stride, type, s->spatial_decomposition_count);
 
     for(level=0; level<s->spatial_decomposition_count; level++){
         for(orientation=level ? 1 : 0; orientation<4; orientation++){
@@ -119,7 +119,7 @@ static void dwt_quantize(SnowContext *s, Plane *p, DWTELEM *buffer, int width, i
                     for(xs= 0; xs<Q2_STEP; xs++){
                         memcpy(idwt2_buffer, best_dequant, height * stride * sizeof(IDWTELEM));
                         dequantize_all(s, p, idwt2_buffer, width, height);
-                        ff_spatial_idwt(idwt2_buffer, width, height, stride, type, s->spatial_decomposition_count);
+                        ff_spatial_idwt(idwt2_buffer, s->temp_idwt_buffer, width, height, stride, type, s->spatial_decomposition_count);
                         find_sse(s, p, best_score, score_stride, idwt2_buffer, s->spatial_idwt_buffer, level, orientation);
                         memcpy(idwt2_buffer, best_dequant, height * stride * sizeof(IDWTELEM));
                         for(y=ys; y<b->height; y+= Q2_STEP){
@@ -130,7 +130,7 @@ static void dwt_quantize(SnowContext *s, Plane *p, DWTELEM *buffer, int width, i
                             }
                         }
                         dequantize_all(s, p, idwt2_buffer, width, height);
-                        ff_spatial_idwt(idwt2_buffer, width, height, stride, type, s->spatial_decomposition_count);
+                        ff_spatial_idwt(idwt2_buffer, s->temp_idwt_buffer, width, height, stride, type, s->spatial_decomposition_count);
                         find_sse(s, p, score, score_stride, idwt2_buffer, s->spatial_idwt_buffer, level, orientation);
                         for(y=ys; y<b->height; y+= Q2_STEP){
                             for(x=xs; x<b->width; x+= Q2_STEP){
@@ -1588,7 +1588,7 @@ static void calculate_visual_weight(SnowContext *s, Plane *p){
 
             memset(s->spatial_idwt_buffer, 0, sizeof(*s->spatial_idwt_buffer)*width*height);
             ibuf[b->width/2 + b->height/2*b->stride]= 256*16;
-            ff_spatial_idwt(s->spatial_idwt_buffer, width, height, width, s->spatial_decomposition_type, s->spatial_decomposition_count);
+            ff_spatial_idwt(s->spatial_idwt_buffer, s->temp_idwt_buffer, width, height, width, s->spatial_decomposition_type, s->spatial_decomposition_count);
             for(y=0; y<height; y++){
                 for(x=0; x<width; x++){
                     int64_t d= s->spatial_idwt_buffer[x + y*width]*16;
@@ -1778,7 +1778,7 @@ redo_frame:
             /*  if(QUANTIZE2)
                 dwt_quantize(s, p, s->spatial_dwt_buffer, w, h, w, s->spatial_decomposition_type);
             else*/
-                ff_spatial_dwt(s->spatial_dwt_buffer, w, h, w, s->spatial_decomposition_type, s->spatial_decomposition_count);
+                ff_spatial_dwt(s->spatial_dwt_buffer, s->temp_dwt_buffer, w, h, w, s->spatial_decomposition_type, s->spatial_decomposition_count);
 
             if(s->pass1_rc && plane_index==0){
                 int delta_qlog = ratecontrol_1pass(s, pic);
@@ -1818,7 +1818,7 @@ redo_frame:
                 }
             }
 
-            ff_spatial_idwt(s->spatial_idwt_buffer, w, h, w, s->spatial_decomposition_type, s->spatial_decomposition_count);
+            ff_spatial_idwt(s->spatial_idwt_buffer, s->temp_idwt_buffer, w, h, w, s->spatial_decomposition_type, s->spatial_decomposition_count);
             if(s->qlog == LOSSLESS_QLOG){
                 for(y=0; y<h; y++){
                     for(x=0; x<w; x++){
@@ -1950,14 +1950,17 @@ int main(void){
     s.spatial_decomposition_count=6;
     s.spatial_decomposition_type=1;
 
+    s.temp_dwt_buffer  = av_mallocz(width * sizeof(DWTELEM));
+    s.temp_idwt_buffer = av_mallocz(width * sizeof(IDWTELEM));
+
     av_lfg_init(&prng, 1);
 
     printf("testing 5/3 DWT\n");
     for(i=0; i<width*height; i++)
         buffer[0][i] = buffer[1][i] = av_lfg_get(&prng) % 54321 - 12345;
 
-    ff_spatial_dwt(buffer[0], width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
-    ff_spatial_idwt((IDWTELEM*)buffer[0], width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
+    ff_spatial_dwt(buffer[0], s.temp_dwt_buffer, width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
+    ff_spatial_idwt((IDWTELEM*)buffer[0], s.temp_idwt_buffer, width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
 
     for(i=0; i<width*height; i++)
         if(buffer[0][i]!= buffer[1][i]) printf("fsck: %6d %12d %7d\n",i, buffer[0][i], buffer[1][i]);
@@ -1967,8 +1970,8 @@ int main(void){
     for(i=0; i<width*height; i++)
         buffer[0][i] = buffer[1][i] = av_lfg_get(&prng) % 54321 - 12345;
 
-    ff_spatial_dwt(buffer[0], width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
-    ff_spatial_idwt((IDWTELEM*)buffer[0], width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
+    ff_spatial_dwt(buffer[0], s.temp_dwt_buffer, width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
+    ff_spatial_idwt((IDWTELEM*)buffer[0], s.temp_idwt_buffer, width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
 
     for(i=0; i<width*height; i++)
         if(FFABS(buffer[0][i] - buffer[1][i])>20) printf("fsck: %6d %12d %7d\n",i, buffer[0][i], buffer[1][i]);
@@ -1994,7 +1997,7 @@ int main(void){
 
                 memset(buffer[0], 0, sizeof(int)*width*height);
                 buf[w/2 + h/2*stride]= 256*256;
-                ff_spatial_idwt((IDWTELEM*)buffer[0], width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
+                ff_spatial_idwt((IDWTELEM*)buffer[0], s.temp_idwt_buffer, width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
                 for(y=0; y<height; y++){
                     for(x=0; x<width; x++){
                         int64_t d= buffer[0][x + y*width];
@@ -2036,7 +2039,7 @@ int main(void){
                     buffer[0][x+width*y]= 256*256*tab[(x&1) + 2*(y&1)];
                 }
             }
-            ff_spatial_dwt(buffer[0], width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
+            ff_spatial_dwt(buffer[0], s.temp_dwt_buffer, width, height, width, s.spatial_decomposition_type, s.spatial_decomposition_count);
             for(y=0; y<height; y++){
                 for(x=0; x<width; x++){
                     int64_t d= buffer[0][x + y*width];

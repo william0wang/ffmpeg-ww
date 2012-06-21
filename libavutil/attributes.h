@@ -40,6 +40,14 @@
 #endif
 #endif
 
+#ifndef av_extern_inline
+#if defined(__ICL) && __ICL >= 1210 || defined(__GNUC_STDC_INLINE__)
+#    define av_extern_inline extern inline
+#else
+#    define av_extern_inline inline
+#endif
+#endif
+
 #ifndef av_noreturn
 #if AV_GCC_VERSION_AT_LEAST(2,5)
 #    define av_noreturn __attribute__((noreturn))
@@ -62,6 +70,10 @@
 #else
 #    define av_pure
 #endif
+#endif
+
+#ifndef av_restrict
+#define av_restrict restrict
 #endif
 
 #ifndef av_const

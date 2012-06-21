@@ -1045,7 +1045,7 @@ static int matroska_decode_buffer(uint8_t** buf, int* buf_size,
     int result = 0;
     int olen;
 
-    if (pkt_size >= 10000000)
+    if (pkt_size >= 10000000U)
         return -1;
 
     switch (encodings[0].compression.algo) {
@@ -1907,7 +1907,7 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
         case 0x1: /* Xiph lacing */
         case 0x2: /* fixed-size lacing */
         case 0x3: /* EBML lacing */
-            assert(size>0); // size <=3 is checked before size-=3 above
+            av_assert0(size>0); // size <=3 is checked before size-=3 above
             laces = (*data) + 1;
             data += 1;
             size -= 1;
@@ -1975,6 +1975,11 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
 
     if (res == 0) {
         for (n = 0; n < laces; n++) {
+            if (lace_size[n] > size) {
+                av_log(matroska->ctx, AV_LOG_ERROR, "Invalid packet size\n");
+                break;
+            }
+
             if ((st->codec->codec_id == CODEC_ID_RA_288 ||
                  st->codec->codec_id == CODEC_ID_COOK ||
                  st->codec->codec_id == CODEC_ID_SIPR ||
@@ -2040,18 +2045,15 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
                 }
             } else {
                 MatroskaTrackEncoding *encodings = track->encodings.elem;
-                int offset = 0, pkt_size = lace_size[n];
+                int offset = 0;
+                uint32_t pkt_size = lace_size[n];
                 uint8_t *pkt_data = data;
-
-                if (pkt_size > size) {
-                    av_log(matroska->ctx, AV_LOG_ERROR, "Invalid packet size\n");
-                    break;
-                }
 
                 if (encodings && encodings->scope & 1) {
                     offset = matroska_decode_buffer(&pkt_data,&pkt_size, track);
                     if (offset < 0)
                         continue;
+                    av_assert0(offset + pkt_size >= pkt_size);
                 }
 
                 pkt = av_mallocz(sizeof(AVPacket));

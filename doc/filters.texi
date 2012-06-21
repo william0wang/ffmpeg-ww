@@ -273,6 +273,36 @@ For example, to resample the input audio to 44100Hz:
 aresample=44100
 @end example
 
+@section asetnsamples
+
+Set the number of samples per each output audio frame.
+
+The last output packet may contain a different number of samples, as
+the filter will flush all the remaining samples when the input audio
+signal its end.
+
+The filter accepts parameters as a list of @var{key}=@var{value} pairs,
+separated by ":".
+
+@table @option
+
+@item nb_out_samples, n
+Set the number of frames per each output audio frame. The number is
+intended as the number of samples @emph{per each channel}.
+Default value is 1024.
+
+@item pad, p
+If set to 1, the filter will pad the last audio frame with zeroes, so
+that the last frame will contain the same number of samples as the
+previous ones. Default value is 1.
+@end table
+
+For example, to set the number of per-frame samples to 1234 and
+disable padding for the last frame, use:
+@example
+asetnsamples=n=1234:p=0
+@end example
+
 @section ashowinfo
 
 Show a line containing various information for each input audio frame.
@@ -374,6 +404,24 @@ input, while avoiding too much of a desynchronization:
 amovie=file.ogg [a] ; amovie=file.mp3 [b] ;
 [a] [b] astreamsync=(2*random(1))-1+tanh(5*(t1-t2)) [a2] [b2] ;
 [a2] [b2] amerge
+@end example
+
+@section atempo
+
+Adjust audio tempo.
+
+The filter accepts exactly one parameter, the audio tempo. If not
+specified then the filter will assume nominal 1.0 tempo. Tempo must
+be in the [0.5, 2.0] range.
+
+For example, to slow down audio to 80% tempo:
+@example
+atempo=0.8
+@end example
+
+For example, to speed up audio to 125% tempo:
+@example
+atempo=1.25
 @end example
 
 @section earwax
@@ -1827,22 +1875,32 @@ The number and kind of parameters depend on the loaded effect. If an
 effect parameter is not specified the default value is set.
 
 Some examples follow:
-@example
-# apply the distort0r effect, set the first two double parameters
-frei0r=distort0r:0.5:0.01
 
-# apply the colordistance effect, takes a color as first parameter
+@itemize
+@item
+Apply the distort0r effect, set the first two double parameters:
+@example
+frei0r=distort0r:0.5:0.01
+@end example
+
+@item
+Apply the colordistance effect, takes a color as first parameter:
+@example
 frei0r=colordistance:0.2/0.3/0.4
 frei0r=colordistance:violet
 frei0r=colordistance:0x112233
-
-# apply the perspective effect, specify the top left and top right
-# image positions
-frei0r=perspective:0.2/0.2:0.8/0.2
 @end example
 
+@item
+Apply the perspective effect, specify the top left and top right image
+positions:
+@example
+frei0r=perspective:0.2/0.2:0.8/0.2
+@end example
+@end itemize
+
 For more information see:
-@url{http://piksel.org/frei0r}
+@url{http://frei0r.dyne.org}
 
 @section gradfun
 
@@ -2309,6 +2367,13 @@ ffmpeg -i input -i logo1 -i logo2 -filter_complex
 # add a transparent color layer on top of the main video,
 # WxH specifies the size of the main input to the overlay filter
 color=red@.3:WxH [over]; [in][over] overlay [out]
+
+# play an original video and a filtered version (here with the deshake filter)
+# side by side
+ffplay input.avi -vf 'split[a][b]; [a]pad=iw*2:ih[src]; [b]deshake[filt]; [src][filt]overlay=w'
+
+# the previous example is the same as:
+ffplay input.avi -vf 'split[b], pad=iw*2[src], [b]deshake, [src]overlay=w'
 @end example
 
 You can chain together more overlays but the efficiency of such
@@ -3354,24 +3419,28 @@ cellauto=p='@@@@ @@ @@@@':s=100x400:full=0:rule=18
 
 Provide an uniformly colored input.
 
-It accepts the following parameters:
-@var{color}:@var{frame_size}:@var{frame_rate}
+This source accepts list of options in the form of
+@var{key}=@var{value} pairs separated by ":".
+
+Alternatively, it accepts a string in the form
+@var{color}:@var{size}:@var{rate}, but this syntax is
+deprecated.
 
 Follows the description of the accepted parameters.
 
 @table @option
 
-@item color
+@item color, c
 Specify the color of the source. It can be the name of a color (case
 insensitive match) or a 0xRRGGBB[AA] sequence, possibly followed by an
 alpha specifier. The default value is "black".
 
-@item frame_size
+@item size, s
 Specify the size of the sourced video, it may be a string of the form
 @var{width}x@var{height}, or the name of a size abbreviation. The
 default value is "320x240".
 
-@item frame_rate
+@item rate, r
 Specify the frame rate of the sourced video, as the number of frames
 generated per second. It has to be a string in the format
 @var{frame_rate_num}/@var{frame_rate_den}, an integer number, a float
@@ -3386,7 +3455,7 @@ frames per second, which will be overlayed over the source connected
 to the pad with identifier "in".
 
 @example
-"color=red@@0.2:qcif:10 [color]; [in][color] overlay [out]"
+"color=c=red@@0.2:s=qcif:r=10 [color]; [in][color] overlay [out]"
 @end example
 
 @section movie
@@ -3528,10 +3597,9 @@ the form @var{num}/@var{den} or a frame rate abbreviation.
 information regarding frei0r and how to set the parameters read the
 section @ref{frei0r} in the description of the video filters.
 
-Some examples follow:
+For example, to generate a frei0r partik0l source with size 200x200
+and frame rate 10 which is overlayed on the overlay filter main input:
 @example
-# generate a frei0r partik0l source with size 200x200 and frame rate 10
-# which is overlayed on the overlay filter main input
 frei0r_src=200x200:10:partik0l=1234 [overlay]; [in][overlay] overlay
 @end example
 
@@ -3758,3 +3826,48 @@ mainly useful as a template and to be employed in analysis / debugging
 tools.
 
 @c man end VIDEO SINKS
+
+@chapter Transmedia Filters
+@c man begin TRANSMEDIA FILTERS
+
+Below is a description of the currently available transmedia filters.
+
+@section showwaves
+
+Convert input audio to a video output, representing the samples waves.
+
+The filter accepts the following named parameters:
+@table @option
+
+@item n
+Set the number of samples which are printed on the same column. A
+larger value will decrease the frame rate. Must be a positive
+integer. This option can be set only if the value for @var{rate}
+is not explicitly specified.
+
+@item rate, r
+Set the (approximate) output frame rate. This is done by setting the
+option @var{n}. Default value is "25".
+
+@item size, s
+Specify the video size for the output. Default value is "600x240".
+@end table
+
+Some examples follow.
+@itemize
+@item
+Output the input file audio and the corresponding video representation
+at the same time:
+@example
+amovie=a.mp3,asplit[out0],showwaves[out1]
+@end example
+
+@item
+Create a synthetic signal and show it with showwaves, forcing a
+framerate of 30 frames per second:
+@example
+aevalsrc=sin(1*2*PI*t)*sin(880*2*PI*t):cos(2*PI*200*t),asplit[out0],showwaves=r=30[out1]
+@end example
+@end itemize
+
+@c man end TRANSMEDIA FILTERS

@@ -92,9 +92,11 @@ static const AVOption lut_options[] = {
 };
 
 static const AVClass lut_class = {
-    "LutContext",
-    av_default_item_name,
-    lut_options
+    .class_name = "lut",
+    .item_name  = av_default_item_name,
+    .option     = lut_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -325,9 +327,9 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
             inrow  = inpic ->data[plane] + (y>>vsub) * inpic ->linesize[plane];
             outrow = outpic->data[plane] + (y>>vsub) * outpic->linesize[plane];
 
-            for (i = 0; i < h>>vsub; i ++) {
+            for (i = 0; i < (h + (1<<vsub) - 1)>>vsub; i ++) {
                 const uint8_t *tab = lut->lut[plane];
-                int w = inlink->w>>hsub;
+                int w = (inlink->w + (1<<hsub) - 1)>>hsub;
                 for (j = 0; j < w; j++)
                     outrow[j] = tab[inrow[j]];
                 inrow  += inpic ->linesize[plane];

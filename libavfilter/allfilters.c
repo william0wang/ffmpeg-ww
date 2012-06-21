@@ -40,10 +40,12 @@ void avfilter_register_all(void)
     REGISTER_FILTER (AMIX,        amix,        af);
     REGISTER_FILTER (ANULL,       anull,       af);
     REGISTER_FILTER (ARESAMPLE,   aresample,   af);
+    REGISTER_FILTER (ASETNSAMPLES, asetnsamples, af);
     REGISTER_FILTER (ASHOWINFO,   ashowinfo,   af);
     REGISTER_FILTER (ASPLIT,      asplit,      af);
     REGISTER_FILTER (ASTREAMSYNC, astreamsync, af);
     REGISTER_FILTER (ASYNCTS,     asyncts,     af);
+    REGISTER_FILTER (ATEMPO,      atempo,      af);
     REGISTER_FILTER (CHANNELSPLIT,channelsplit,af);
     REGISTER_FILTER (EARWAX,      earwax,      af);
     REGISTER_FILTER (PAN,         pan,         af);
@@ -126,6 +128,9 @@ void avfilter_register_all(void)
 
     REGISTER_FILTER (BUFFERSINK,  buffersink,  vsink);
     REGISTER_FILTER (NULLSINK,    nullsink,    vsink);
+
+    /* transmedia filters */
+    REGISTER_FILTER (SHOWWAVES,   showwaves,   avf);
 
     /* those filters are part of public or internal API => registered
      * unconditionally */

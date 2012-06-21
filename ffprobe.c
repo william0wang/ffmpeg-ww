@@ -53,6 +53,7 @@ static int do_show_frames  = 0;
 static AVDictionary *fmt_entries_to_show = NULL;
 static int do_show_packets = 0;
 static int do_show_streams = 0;
+static int do_show_data    = 0;
 static int do_show_program_version  = 0;
 static int do_show_library_versions = 0;
 
@@ -165,6 +166,7 @@ typedef struct Writer {
     void (*print_section_header)(WriterContext *wctx, const char *);
     void (*print_section_footer)(WriterContext *wctx, const char *);
     void (*print_integer)       (WriterContext *wctx, const char *, long long int);
+    void (*print_rational)      (WriterContext *wctx, AVRational *q, char *sep);
     void (*print_string)        (WriterContext *wctx, const char *, const char *);
     void (*show_tags)           (WriterContext *wctx, AVDictionary *dict);
     int flags;                  ///< a combination or WRITER_FLAG_*
@@ -309,6 +311,16 @@ static inline void writer_print_integer(WriterContext *wctx,
     }
 }
 
+static inline void writer_print_rational(WriterContext *wctx,
+                                         const char *key, AVRational q, char sep)
+{
+    AVBPrint buf;
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
+    av_bprintf(&buf, "%d%c%d", q.num, sep, q.den);
+    wctx->writer->print_string(wctx, key, buf.str);
+    wctx->nb_item++;
+}
+
 static inline void writer_print_string(WriterContext *wctx,
                                        const char *key, const char *val, int opt)
 {
@@ -348,6 +360,34 @@ static void writer_print_ts(WriterContext *wctx, const char *key, int64_t ts, in
 static inline void writer_show_tags(WriterContext *wctx, AVDictionary *dict)
 {
     wctx->writer->show_tags(wctx, dict);
+}
+
+static void writer_print_data(WriterContext *wctx, const char *name,
+                              uint8_t *data, int size)
+{
+    AVBPrint bp;
+    int offset = 0, l, i;
+
+    av_bprint_init(&bp, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprintf(&bp, "\n");
+    while (size) {
+        av_bprintf(&bp, "%08x: ", offset);
+        l = FFMIN(size, 16);
+        for (i = 0; i < l; i++) {
+            av_bprintf(&bp, "%02x", data[i]);
+            if (i & 1)
+                av_bprintf(&bp, " ");
+        }
+        av_bprint_chars(&bp, ' ', 41 - 2 * i - i / 2);
+        for (i = 0; i < l; i++)
+            av_bprint_chars(&bp, data[i] - 32U < 95 ? data[i] : '.', 1);
+        av_bprintf(&bp, "\n");
+        offset += l;
+        data   += l;
+        size   -= l;
+    }
+    writer_print_string(wctx, name, bp.str, 0);
+    av_bprint_finalize(&bp, NULL);
 }
 
 #define MAX_REGISTERED_WRITERS_NB 64
@@ -1508,6 +1548,7 @@ static void writer_register_all(void)
 } while (0)
 
 #define print_int(k, v)         writer_print_integer(w, k, v)
+#define print_q(k, v, s)        writer_print_rational(w, k, v, s)
 #define print_str(k, v)         writer_print_string(w, k, v, 0)
 #define print_str_opt(k, v)     writer_print_string(w, k, v, 1)
 #define print_time(k, v, tb)    writer_print_time(w, k, v, tb, 0)
@@ -1540,10 +1581,14 @@ static void show_packet(WriterContext *w, AVFormatContext *fmt_ctx, AVPacket *pk
     print_time("dts_time",        pkt->dts, &st->time_base);
     print_duration_ts("duration",        pkt->duration);
     print_duration_time("duration_time", pkt->duration, &st->time_base);
+    print_duration_ts("convergence_duration", pkt->convergence_duration);
+    print_duration_time("convergence_duration_time", pkt->convergence_duration, &st->time_base);
     print_val("size",             pkt->size, unit_byte_str);
     if (pkt->pos != -1) print_fmt    ("pos", "%"PRId64, pkt->pos);
     else                print_str_opt("pos", "N/A");
     print_fmt("flags", "%c",      pkt->flags & AV_PKT_FLAG_KEY ? 'K' : '_');
+    if (do_show_data)
+        writer_print_data(w, "data", pkt->data, pkt->size);
     print_section_footer("packet");
 
     av_bprint_finalize(&pbuf, NULL);
@@ -1580,9 +1625,7 @@ static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream)
         if (s) print_str    ("pix_fmt", s);
         else   print_str_opt("pix_fmt", "unknown");
         if (frame->sample_aspect_ratio.num) {
-            print_fmt("sample_aspect_ratio", "%d:%d",
-                      frame->sample_aspect_ratio.num,
-                      frame->sample_aspect_ratio.den);
+            print_q("sample_aspect_ratio", frame->sample_aspect_ratio, ':');
         } else {
             print_str_opt("sample_aspect_ratio", "N/A");
         }
@@ -1710,7 +1753,7 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
         s = av_get_media_type_string(dec_ctx->codec_type);
         if (s) print_str    ("codec_type", s);
         else   print_str_opt("codec_type", "unknown");
-        print_fmt("codec_time_base", "%d/%d", dec_ctx->time_base.num, dec_ctx->time_base.den);
+        print_q("codec_time_base", dec_ctx->time_base, '/');
 
         /* print AVI/FourCC tag */
         av_get_codec_tag_string(val_str, sizeof(val_str), dec_ctx->codec_tag);
@@ -1723,16 +1766,12 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
             print_int("height",       dec_ctx->height);
             print_int("has_b_frames", dec_ctx->has_b_frames);
             if (dec_ctx->sample_aspect_ratio.num) {
-                print_fmt("sample_aspect_ratio", "%d:%d",
-                          dec_ctx->sample_aspect_ratio.num,
-                          dec_ctx->sample_aspect_ratio.den);
+                print_q("sample_aspect_ratio", dec_ctx->sample_aspect_ratio, ':');
                 av_reduce(&display_aspect_ratio.num, &display_aspect_ratio.den,
                           dec_ctx->width  * dec_ctx->sample_aspect_ratio.num,
                           dec_ctx->height * dec_ctx->sample_aspect_ratio.den,
                           1024*1024);
-                print_fmt("display_aspect_ratio", "%d:%d",
-                          display_aspect_ratio.num,
-                          display_aspect_ratio.den);
+                print_q("display_aspect_ratio", display_aspect_ratio, ':');
             } else {
                 print_str_opt("sample_aspect_ratio", "N/A");
                 print_str_opt("display_aspect_ratio", "N/A");
@@ -1776,9 +1815,9 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
 
     if (fmt_ctx->iformat->flags & AVFMT_SHOW_IDS) print_fmt    ("id", "0x%x", stream->id);
     else                                          print_str_opt("id", "N/A");
-    print_fmt("r_frame_rate",   "%d/%d", stream->r_frame_rate.num,   stream->r_frame_rate.den);
-    print_fmt("avg_frame_rate", "%d/%d", stream->avg_frame_rate.num, stream->avg_frame_rate.den);
-    print_fmt("time_base",      "%d/%d", stream->time_base.num,      stream->time_base.den);
+    print_q("r_frame_rate",   stream->r_frame_rate,   '/');
+    print_q("avg_frame_rate", stream->avg_frame_rate, '/');
+    print_q("time_base",      stream->time_base,      '/');
     print_time("start_time",    stream->start_time, &stream->time_base);
     print_time("duration",      stream->duration,   &stream->time_base);
     if (dec_ctx->bit_rate > 0) print_val    ("bit_rate", dec_ctx->bit_rate, unit_bit_per_second_str);
@@ -1790,6 +1829,9 @@ static void show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_i
     if (nb_streams_packets[stream_idx]) print_fmt    ("nb_read_packets", "%"PRIu64, nb_streams_packets[stream_idx]);
     else                                print_str_opt("nb_read_packets", "N/A");
     show_tags(stream->metadata);
+    if (do_show_data)
+        writer_print_data(w, "extradata", dec_ctx->extradata,
+                                          dec_ctx->extradata_size);
 
     print_section_footer("stream");
     av_bprint_finalize(&pbuf, NULL);
@@ -2073,6 +2115,7 @@ static const OptionDef options[] = {
     { "print_format", OPT_STRING | HAS_ARG, {(void*)&print_format},
       "set the output printing format (available formats are: default, compact, csv, flat, ini, json, xml)", "format" },
     { "of", OPT_STRING | HAS_ARG, {(void*)&print_format}, "alias for -print_format", "format" },
+    { "show_data",    OPT_BOOL, {(void*)&do_show_data}, "show packets data" },
     { "show_error",   OPT_BOOL, {(void*)&do_show_error} ,  "show probing error" },
     { "show_format",  OPT_BOOL, {(void*)&do_show_format} , "show format/container info" },
     { "show_frames",  OPT_BOOL, {(void*)&do_show_frames} , "show frames info" },

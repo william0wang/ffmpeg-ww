@@ -25,6 +25,7 @@
 #include "avio_internal.h"
 #include "riff.h"
 #include "libavcodec/bytestream.h"
+#include "libavutil/avassert.h"
 
 /* Note: when encoding, the first matching tag is used, so order is
    important if multiple tags possible for a given codec. */
@@ -306,6 +307,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_Y41P,         MKTAG('Y', '4', '1', 'P') },
     { CODEC_ID_FLIC,         MKTAG('A', 'F', 'L', 'C') },
     { CODEC_ID_EXR,          MKTAG('e', 'x', 'r', ' ') },
+    { CODEC_ID_MSS1,         MKTAG('M', 'S', 'S', '1') },
     { CODEC_ID_NONE,         0 }
 };
 
@@ -706,7 +708,7 @@ void ff_parse_specific_params(AVCodecContext *stream, int *au_rate, int *au_ssiz
 
 void ff_get_guid(AVIOContext *s, ff_asf_guid *g)
 {
-    assert(sizeof(*g) == 16);
+    av_assert0(sizeof(*g) == 16); //compiler will optimize this out
     if (avio_read(s, *g, sizeof(*g)) < (int)sizeof(*g))
         memset(*g, 0, sizeof(*g));
 }

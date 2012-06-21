@@ -1099,7 +1099,24 @@ typedef struct AVFormatContext {
     int raw_packet_buffer_remaining_size;
 
     int avio_flags;
+
+    /**
+     * The duration field can be estimated through various ways, and this field can be used
+     * to know how the duration was estimated.
+     */
+    enum {
+        AVFMT_DURATION_FROM_PTS,    ///< duration accurately estimated from PTSes
+        AVFMT_DURATION_FROM_STREAM, ///< duration estimated from a stream with a known duration
+        AVFMT_DURATION_FROM_BITRATE ///< duration estimated from bitrate (less accurate)
+    } duration_estimation_method;
 } AVFormatContext;
+
+/**
+ * Returns the method used to set ctx->duration.
+ *
+ * @return AVFMT_DURATION_FROM_PTS, AVFMT_DURATION_FROM_STREAM, or AVFMT_DURATION_FROM_BITRATE.
+ */
+int av_fmt_ctx_get_duration_estimation_method(const AVFormatContext* ctx);
 
 typedef struct AVPacketList {
     AVPacket pkt;
@@ -1837,10 +1854,9 @@ void av_dump_format(AVFormatContext *ic,
                     const char *url,
                     int is_output);
 
-/**
- * Get the current time in microseconds.
- */
+#if FF_API_AV_GETTIME
 int64_t av_gettime(void);
+#endif
 
 /**
  * Return in 'buf' the path with '%d' replaced by a number.

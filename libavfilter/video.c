@@ -164,6 +164,8 @@ static void default_start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
     if (outlink) {
         outlink->out_buf = ff_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
         avfilter_copy_buffer_ref_props(outlink->out_buf, picref);
+        outlink->out_buf->video->w = outlink->w;
+        outlink->out_buf->video->h = outlink->h;
         ff_start_frame(outlink, avfilter_ref_buffer(outlink->out_buf, ~0));
     }
 }
@@ -218,7 +220,7 @@ void ff_start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
 void ff_null_start_frame_keep_ref(AVFilterLink *inlink,
                                                 AVFilterBufferRef *picref)
 {
-    avfilter_start_frame(inlink->dst->outputs[0], avfilter_ref_buffer(picref, ~0));
+    ff_start_frame(inlink->dst->outputs[0], avfilter_ref_buffer(picref, ~0));
 }
 
 void ff_null_end_frame(AVFilterLink *link)

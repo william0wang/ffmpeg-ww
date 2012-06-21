@@ -79,9 +79,11 @@ static const AVOption eval_options[]= {
 };
 
 static const AVClass eval_class = {
-    "AEvalSrcContext",
-    av_default_item_name,
-    eval_options
+    .class_name = "aevalsrc",
+    .item_name  = av_default_item_name,
+    .option     = eval_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -199,9 +201,9 @@ static int query_formats(AVFilterContext *ctx)
     int64_t chlayouts[] = { eval->chlayout, -1 };
     int sample_rates[] = { eval->sample_rate, -1 };
 
-    avfilter_set_common_sample_formats (ctx, avfilter_make_format_list(sample_fmts));
+    ff_set_common_formats (ctx, ff_make_format_list(sample_fmts));
     ff_set_common_channel_layouts(ctx, avfilter_make_format64_list(chlayouts));
-    ff_set_common_samplerates(ctx, avfilter_make_format_list(sample_rates));
+    ff_set_common_samplerates(ctx, ff_make_format_list(sample_rates));
 
     return 0;
 }

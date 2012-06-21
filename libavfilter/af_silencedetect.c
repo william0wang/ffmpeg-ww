@@ -49,9 +49,11 @@ static const AVOption silencedetect_options[] = {
 };
 
 static const AVClass silencedetect_class = {
-    .class_name = "SilenceDetectContext",
+    .class_name = "silencedetect",
     .item_name  = av_default_item_name,
     .option     = silencedetect_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_FILTER,
 };
 
 static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
@@ -137,10 +139,10 @@ static int query_formats(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
     ff_set_common_channel_layouts(ctx, layouts);
 
-    formats = avfilter_make_format_list(sample_fmts);
+    formats = ff_make_format_list(sample_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
-    avfilter_set_common_sample_formats(ctx, formats);
+    ff_set_common_formats(ctx, formats);
 
     formats = ff_all_samplerates();
     if (!formats)

@@ -95,7 +95,7 @@ static void end_frame(AVFilterLink *inlink)
 
 AVFilter avfilter_vf_split = {
     .name      = "split",
-    .description = NULL_IF_CONFIG_SMALL("Pass on the input to two outputs."),
+    .description = NULL_IF_CONFIG_SMALL("Pass on the input video to N outputs."),
 
     .init   = split_init,
     .uninit = split_uninit,
@@ -118,6 +118,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *samplesref)
     for (i = 0; i < ctx->nb_outputs; i++)
         ff_filter_samples(inlink->dst->outputs[i],
                           avfilter_ref_buffer(samplesref, ~AV_PERM_WRITE));
+    avfilter_unref_buffer(samplesref);
 }
 
 AVFilter avfilter_af_asplit = {

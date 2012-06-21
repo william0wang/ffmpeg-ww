@@ -6,6 +6,14 @@ version next:
 - Scene detection in libavfilter
 - Indeo Audio decoder
 - channelsplit audio filter
+- setnsamples audio filter
+- atempo filter
+- ffprobe -show_data option
+- RTMPT protocol support
+- iLBC encoding/decoding via libilbc
+- Microsoft Screen 1 decoder
+- showwaves filter
+- LucasArts SMUSH playback support
 
 
 version 0.11:

@@ -21,7 +21,6 @@
 
 #include "libavutil/avstring.h"
 #include "avformat.h"
-#include <unistd.h>
 #include "internal.h"
 #include "network.h"
 #include "http.h"
@@ -308,15 +307,15 @@ static int process_line(URLContext *h, char *line, int line_count,
             strcpy(s->location, p);
             *new_location = 1;
         } else if (!av_strcasecmp (tag, "Content-Length") && s->filesize == -1) {
-            s->filesize = atoll(p);
+            s->filesize = strtoll(p, NULL, 10);
         } else if (!av_strcasecmp (tag, "Content-Range")) {
             /* "bytes $from-$to/$document_size" */
             const char *slash;
             if (!strncmp (p, "bytes ", 6)) {
                 p += 6;
-                s->off = atoll(p);
+                s->off = strtoll(p, NULL, 10);
                 if ((slash = strchr(p, '/')) && strlen(slash) > 0)
-                    s->filesize = atoll(slash+1);
+                    s->filesize = strtoll(slash+1, NULL, 10);
             }
             h->is_streamed = 0; /* we _can_ in fact seek */
         } else if (!av_strcasecmp(tag, "Accept-Ranges") && !strncmp(p, "bytes", 5)) {
@@ -351,6 +350,8 @@ static int http_read_header(URLContext *h, int *new_location)
     HTTPContext *s = h->priv_data;
     char line[1024];
     int err = 0;
+
+    s->chunksize = -1;
 
     for (;;) {
         if ((err = http_get_line(s, line, sizeof(line))) < 0)
@@ -470,7 +471,6 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
         s->http_code = 200;
         return 0;
     }
-    s->chunksize = -1;
 
     /* wait for header */
     err = http_read_header(h, new_location);
@@ -510,14 +510,13 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
     HTTPContext *s = h->priv_data;
     int err, new_location;
 
-    if (s->end_chunked_post) {
-        if (!s->end_header) {
-            err = http_read_header(h, &new_location);
-            if (err < 0)
-                return err;
-        }
+    if (!s->hd)
+        return AVERROR_EOF;
 
-        return http_buf_read(h, buf, size);
+    if (s->end_chunked_post && !s->end_header) {
+        err = http_read_header(h, &new_location);
+        if (err < 0)
+            return err;
     }
 
     if (s->chunksize >= 0) {

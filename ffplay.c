@@ -1560,15 +1560,15 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     snprintf(sws_flags_str, sizeof(sws_flags_str), "flags=%d", sws_flags);
     graph->scale_sws_opts = av_strdup(sws_flags_str);
 
-    snprintf(buffersrc_args, sizeof(buffersrc_args), "%d:%d:%d:%d:%d:%d:%d",
+    snprintf(buffersrc_args, sizeof(buffersrc_args),
+             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
              codec->width, codec->height, codec->pix_fmt,
              is->video_st->time_base.num, is->video_st->time_base.den,
              codec->sample_aspect_ratio.num, codec->sample_aspect_ratio.den);
 
-
     if ((ret = avfilter_graph_create_filter(&filt_src,
                                             avfilter_get_by_name("buffer"),
-                                            "src", buffersrc_args, NULL,
+                                            "ffplay_buffer", buffersrc_args, NULL,
                                             graph)) < 0)
         return ret;
 
@@ -1699,7 +1699,7 @@ static int video_thread(void *arg)
 
         frame->pts = pts_int;
         frame->sample_aspect_ratio = av_guess_sample_aspect_ratio(is->ic, is->video_st, frame);
-        if (is->use_dr1) {
+        if (is->use_dr1 && frame->opaque) {
             FrameBuffer      *buf = frame->opaque;
             AVFilterBufferRef *fb = avfilter_get_video_buffer_ref_from_arrays(
                                         frame->data, frame->linesize,
@@ -2687,14 +2687,13 @@ static void stream_cycle_channel(VideoState *is, int codec_type)
 
 static void toggle_full_screen(VideoState *is)
 {
-    av_unused int i;
-    is_full_screen = !is_full_screen;
 #if defined(__APPLE__) && SDL_VERSION_ATLEAST(1, 2, 14)
     /* OS X needs to reallocate the SDL overlays */
-    for (i = 0; i < VIDEO_PICTURE_QUEUE_SIZE; i++) {
+    int i;
+    for (i = 0; i < VIDEO_PICTURE_QUEUE_SIZE; i++)
         is->pictq[i].reallocate = 1;
-    }
 #endif
+    is_full_screen = !is_full_screen;
     video_open(is, 1);
 }
 
