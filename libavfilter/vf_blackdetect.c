@@ -36,6 +36,7 @@ typedef struct {
     int64_t black_min_duration;      ///< minimum duration of detected black, expressed in timebase units
     int64_t black_start;             ///< pts start time of the first black picture
     int64_t black_end;               ///< pts end time of the last black picture
+    int64_t last_picref_pts;         ///< pts of the last input picture
     int black_started;
 
     double       picture_black_ratio_th;
@@ -57,13 +58,7 @@ static const AVOption blackdetect_options[] = {
     { NULL },
 };
 
-static const AVClass blackdetect_class = {
-    .class_name = "blackdetect",
-    .item_name  = av_default_item_name,
-    .option     = blackdetect_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(blackdetect);
 
 #define YUVJ_FORMATS \
     PIX_FMT_YUVJ420P, PIX_FMT_YUVJ422P, PIX_FMT_YUVJ444P, PIX_FMT_YUVJ440P
@@ -85,7 +80,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     int ret;
     BlackDetectContext *blackdetect = ctx->priv;
@@ -122,6 +117,35 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+static void check_black_end(AVFilterContext *ctx)
+{
+    BlackDetectContext *blackdetect = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
+
+    if ((blackdetect->black_end - blackdetect->black_start) >= blackdetect->black_min_duration) {
+        av_log(blackdetect, AV_LOG_INFO,
+               "black_start:%s black_end:%s black_duration:%s\n",
+               av_ts2timestr(blackdetect->black_start, &inlink->time_base),
+               av_ts2timestr(blackdetect->black_end,   &inlink->time_base),
+               av_ts2timestr(blackdetect->black_end - blackdetect->black_start, &inlink->time_base));
+    }
+}
+
+static int request_frame(AVFilterLink *outlink)
+{
+    AVFilterContext *ctx = outlink->src;
+    BlackDetectContext *blackdetect = ctx->priv;
+    AVFilterLink *inlink = ctx->inputs[0];
+    int ret = ff_request_frame(inlink);
+
+    if (ret == AVERROR_EOF && blackdetect->black_started) {
+        // FIXME: black_end should be set to last_picref_pts + last_picref_duration
+        blackdetect->black_end = blackdetect->last_picref_pts;
+        check_black_end(ctx);
+    }
+    return ret;
+}
+
 static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -151,8 +175,7 @@ static void end_frame(AVFilterLink *inlink)
     av_log(ctx, AV_LOG_DEBUG,
            "frame:%u picture_black_ratio:%f pos:%"PRId64" pts:%s t:%s type:%c\n",
            blackdetect->frame_count, picture_black_ratio,
-           picref->pos, av_ts2str(picref->pts),
-           av_ts2timestr(blackdetect->black_start, &inlink->time_base),
+           picref->pos, av_ts2str(picref->pts), av_ts2timestr(picref->pts, &inlink->time_base),
            av_get_picture_type_char(picref->video->pict_type));
 
     if (picture_black_ratio >= blackdetect->picture_black_ratio_th) {
@@ -165,16 +188,10 @@ static void end_frame(AVFilterLink *inlink)
         /* black ends here */
         blackdetect->black_started = 0;
         blackdetect->black_end = picref->pts;
-
-        if ((blackdetect->black_end - blackdetect->black_start) >= blackdetect->black_min_duration) {
-            av_log(blackdetect, AV_LOG_INFO,
-                   "black_start:%s black_end:%s black_duration:%s\n",
-                   av_ts2timestr(blackdetect->black_start, &inlink->time_base),
-                   av_ts2timestr(blackdetect->black_end, &inlink->time_base),
-                   av_ts2timestr(blackdetect->black_end - blackdetect->black_start, &inlink->time_base));
-        }
+        check_black_end(ctx);
     }
 
+    blackdetect->last_picref_pts = picref->pts;
     blackdetect->frame_count++;
     blackdetect->nb_black_pixels = 0;
     avfilter_unref_buffer(picref);
@@ -201,7 +218,8 @@ AVFilter avfilter_vf_blackdetect = {
 
     .outputs = (const AVFilterPad[]) {
         { .name             = "default",
-          .type             = AVMEDIA_TYPE_VIDEO },
+          .type             = AVMEDIA_TYPE_VIDEO,
+          .request_frame    = request_frame, },
         { .name = NULL }
     },
 };

@@ -120,7 +120,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     CropContext *crop = ctx->priv;
 
@@ -224,7 +224,7 @@ static int config_input(AVFilterLink *link)
     } else
         crop->out_sar = link->sample_aspect_ratio;
 
-    av_log(ctx, AV_LOG_INFO, "w:%d h:%d sar:%d/%d -> w:%d h:%d sar:%d/%d\n",
+    av_log(ctx, AV_LOG_VERBOSE, "w:%d h:%d sar:%d/%d -> w:%d h:%d sar:%d/%d\n",
            link->w, link->h, link->sample_aspect_ratio.num, link->sample_aspect_ratio.den,
            crop->w, crop->h, crop->out_sar.num, crop->out_sar.den);
 

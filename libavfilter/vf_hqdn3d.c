@@ -197,7 +197,7 @@ static void PrecalcCoefs(int *Ct, double Dist25)
 #define PARAM2_DEFAULT 3.0
 #define PARAM3_DEFAULT 6.0
 
-static int init(AVFilterContext *ctx, const char *args, void *opaque)
+static int init(AVFilterContext *ctx, const char *args)
 {
     HQDN3DContext *hqdn3d = ctx->priv;
     double LumSpac, LumTmp, ChromSpac, ChromTmp;
@@ -238,7 +238,7 @@ static int init(AVFilterContext *ctx, const char *args, void *opaque)
         }
     }
 
-    av_log(ctx, AV_LOG_INFO, "ls:%lf cs:%lf lt:%lf ct:%lf\n",
+    av_log(ctx, AV_LOG_VERBOSE, "ls:%lf cs:%lf lt:%lf ct:%lf\n",
            LumSpac, ChromSpac, LumTmp, ChromTmp);
     if (LumSpac < 0 || ChromSpac < 0 || isnan(ChromTmp)) {
         av_log(ctx, AV_LOG_ERROR,

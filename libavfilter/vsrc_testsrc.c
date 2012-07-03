@@ -72,7 +72,7 @@ static const AVOption testsrc_options[]= {
     { NULL },
 };
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     TestSourceContext *test = ctx->priv;
     AVRational frame_rate_q;
@@ -167,13 +167,13 @@ static const AVClass nullsrc_class = {
 
 static void nullsrc_fill_picture(AVFilterContext *ctx, AVFilterBufferRef *picref) { }
 
-static av_cold int nullsrc_init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int nullsrc_init(AVFilterContext *ctx, const char *args)
 {
     TestSourceContext *test = ctx->priv;
 
     test->class = &nullsrc_class;
     test->fill_picture_fn = nullsrc_fill_picture;
-    return init(ctx, args, opaque);
+    return init(ctx, args);
 }
 
 AVFilter avfilter_vsrc_nullsrc = {
@@ -194,13 +194,7 @@ AVFilter avfilter_vsrc_nullsrc = {
 
 #if CONFIG_TESTSRC_FILTER
 
-static const AVClass testsrc_class = {
-    .class_name = "testsrc",
-    .item_name  = av_default_item_name,
-    .option     = testsrc_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(testsrc);
 
 /**
  * Fill a rectangle with value val.
@@ -379,13 +373,13 @@ static void test_fill_picture(AVFilterContext *ctx, AVFilterBufferRef *picref)
     }
 }
 
-static av_cold int test_init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int test_init(AVFilterContext *ctx, const char *args)
 {
     TestSourceContext *test = ctx->priv;
 
     test->class = &testsrc_class;
     test->fill_picture_fn = test_fill_picture;
-    return init(ctx, args, opaque);
+    return init(ctx, args);
 }
 
 static int test_query_formats(AVFilterContext *ctx)
@@ -482,13 +476,13 @@ static void rgbtest_fill_picture(AVFilterContext *ctx, AVFilterBufferRef *picref
      }
 }
 
-static av_cold int rgbtest_init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int rgbtest_init(AVFilterContext *ctx, const char *args)
 {
     TestSourceContext *test = ctx->priv;
 
     test->class = &rgbtestsrc_class;
     test->fill_picture_fn = rgbtest_fill_picture;
-    return init(ctx, args, opaque);
+    return init(ctx, args);
 }
 
 static int rgbtest_query_formats(AVFilterContext *ctx)

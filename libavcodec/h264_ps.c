@@ -324,7 +324,9 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
     constraint_set_flags |= get_bits1(&s->gb) << 1;   //constraint_set1_flag
     constraint_set_flags |= get_bits1(&s->gb) << 2;   //constraint_set2_flag
     constraint_set_flags |= get_bits1(&s->gb) << 3;   //constraint_set3_flag
-    get_bits(&s->gb, 4); // reserved
+    constraint_set_flags |= get_bits1(&s->gb) << 4;   //constraint_set4_flag
+    constraint_set_flags |= get_bits1(&s->gb) << 5;   //constraint_set5_flag
+    get_bits(&s->gb, 2); // reserved
     level_idc= get_bits(&s->gb, 8);
     sps_id= get_ue_golomb_31(&s->gb);
 
@@ -347,7 +349,10 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
     sps->scaling_matrix_present = 0;
     sps->colorspace = 2; //AVCOL_SPC_UNSPECIFIED
 
-    if(sps->profile_idc >= 100){ //high profile
+    if(sps->profile_idc == 100 || sps->profile_idc == 110 ||
+       sps->profile_idc == 122 || sps->profile_idc == 244 || sps->profile_idc ==  44 ||
+       sps->profile_idc ==  83 || sps->profile_idc ==  86 || sps->profile_idc == 118 ||
+       sps->profile_idc == 128 ) {
         sps->chroma_format_idc= get_ue_golomb_31(&s->gb);
         if (sps->chroma_format_idc > 3U) {
             av_log(h->s.avctx, AV_LOG_ERROR, "chroma_format_idc %d is illegal\n", sps->chroma_format_idc);
@@ -380,7 +385,12 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
     sps->poc_type= get_ue_golomb_31(&s->gb);
 
     if(sps->poc_type == 0){ //FIXME #define
-        sps->log2_max_poc_lsb= get_ue_golomb(&s->gb) + 4;
+        unsigned t = get_ue_golomb(&s->gb);
+        if(t>12){
+            av_log(h->s.avctx, AV_LOG_ERROR, "log2_max_poc_lsb (%d) is out of range\n", t);
+            goto fail;
+        }
+        sps->log2_max_poc_lsb= t + 4;
     } else if(sps->poc_type == 1){//FIXME #define
         sps->delta_pic_order_always_zero_flag= get_bits1(&s->gb);
         sps->offset_for_non_ref_pic= get_se_golomb(&s->gb);

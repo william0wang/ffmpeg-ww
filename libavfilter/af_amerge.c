@@ -23,6 +23,7 @@
  * Audio merging filter
  */
 
+#include "libavutil/audioconvert.h"
 #include "libavutil/bprint.h"
 #include "libavutil/opt.h"
 #include "libswresample/swresample.h" // only for SWR_CH_MAX
@@ -52,13 +53,7 @@ static const AVOption amerge_options[] = {
     {0}
 };
 
-static const AVClass amerge_class = {
-    .class_name = "amerge",
-    .item_name  = av_default_item_name,
-    .option     = amerge_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(amerge);
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
@@ -146,7 +141,7 @@ static int config_output(AVFilterLink *outlink)
         if (ctx->inputs[i]->sample_rate != ctx->inputs[0]->sample_rate) {
             av_log(ctx, AV_LOG_ERROR,
                    "Inputs must have the same sample rate "
-                   "(%"PRIi64" for in%d vs %"PRIi64")\n",
+                   "%d for in%d vs %d\n",
                    ctx->inputs[i]->sample_rate, i, ctx->inputs[0]->sample_rate);
             return AVERROR(EINVAL);
         }
@@ -175,7 +170,7 @@ static int request_frame(AVFilterLink *outlink)
 
     for (i = 0; i < am->nb_inputs; i++)
         if (!am->in[i].nb_samples)
-            if ((ret = avfilter_request_frame(ctx->inputs[i])) < 0)
+            if ((ret = ff_request_frame(ctx->inputs[i])) < 0)
                 return ret;
     return 0;
 }
@@ -293,7 +288,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     ff_filter_samples(ctx->outputs[0], outbuf);
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     AMergeContext *am = ctx->priv;
     int ret, i;

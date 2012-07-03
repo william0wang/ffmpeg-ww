@@ -97,7 +97,7 @@ details), you must upgrade FFmpeg's license to GPL in order to use it.
 
 iLBC is a narrowband speech codec that has been made freely available
 by Google as part of the WebRTC project. libilbc is a packaging friendly
-copy of the iLBC codec. Libav can make use of the libilbc library for
+copy of the iLBC codec. FFmpeg can make use of the libilbc library for
 iLBC encoding and decoding.
 
 Go to @url{https://github.com/dekkers/libilbc} and follow the instructions for
@@ -335,7 +335,7 @@ library:
     @tab Multimedia format used by many games.
 @item SMJPEG                    @tab X @tab X
     @tab Used in certain Loki game ports.
-@item Smush
+@item Smush                     @tab   @tab X
     @tab Multimedia format used in some LucasArts games.
 @item Sony OpenMG (OMA)         @tab X @tab X
     @tab Audio format used in Sony Sonic Stage and Sony Vegas.
@@ -563,8 +563,10 @@ following image formats are supported:
 @item LCL (LossLess Codec Library) ZLIB  @tab  E  @tab  E
 @item LOCO                   @tab     @tab  X
 @item LucasArts Smush        @tab     @tab  X
-    @ Used in LucasArts games
+    @tab Used in LucasArts games.
 @item lossless MJPEG         @tab  X  @tab  X
+@item Microsoft ATC Screen   @tab     @tab  X
+    @tab Also known as Microsoft Screen 3.
 @item Microsoft RLE          @tab     @tab  X
 @item Microsoft Screen 1     @tab     @tab  X
     @tab Also known as Windows Media Video V7 Screen.
@@ -834,7 +836,7 @@ following image formats are supported:
 @item TrueHD                 @tab     @tab  X
     @tab Used in HD-DVD and Blu-Ray discs.
 @item TwinVQ (VQF flavor)    @tab     @tab  X
-@item VIMA
+@item VIMA                   @tab     @tab  X
     @tab Used in LucasArts SMUSH animations.
 @item Vorbis                 @tab  E  @tab  X
     @tab A native but very primitive encoder exists.
@@ -864,6 +866,8 @@ performance on systems without hardware floating point support).
 @item JACOsub      @tab X @tab X @tab   @tab X
 @item MicroDVD     @tab X @tab X @tab   @tab X
 @item PGS          @tab   @tab   @tab   @tab X
+@item RealText     @tab   @tab X @tab   @tab X
+@item SAMI         @tab   @tab X @tab   @tab X
 @item SubRip (SRT) @tab X @tab X @tab X @tab X
 @item XSUB         @tab   @tab   @tab X @tab X
 @end multitable

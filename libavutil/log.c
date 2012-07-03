@@ -24,16 +24,23 @@
  * logging functions
  */
 
+#include "config.h"
+
+#if HAVE_UNISTD_H
 #include <unistd.h>
+#endif
 #include <stdlib.h>
 #include "avutil.h"
 #include "log.h"
+
+#define LINE_SZ 1024
 
 static int av_log_level = AV_LOG_INFO;
 static int flags;
 
 #if defined(_WIN32) && !defined(__MINGW32CE__)
 #include <windows.h>
+#include <io.h>
 static const uint8_t color[16 + AV_CLASS_CATEGORY_NB] = {
     [AV_LOG_PANIC  /8] = 12,
     [AV_LOG_FATAL  /8] = 12,
@@ -49,7 +56,7 @@ static const uint8_t color[16 + AV_CLASS_CATEGORY_NB] = {
     [16+AV_CLASS_CATEGORY_DEMUXER         ] =  5,
     [16+AV_CLASS_CATEGORY_ENCODER         ] = 11,
     [16+AV_CLASS_CATEGORY_DECODER         ] =  3,
-    [16+AV_CLASS_CATEGORY_FILTER          ] =  1,
+    [16+AV_CLASS_CATEGORY_FILTER          ] = 10,
     [16+AV_CLASS_CATEGORY_BITSTREAM_FILTER] =  9,
 };
 
@@ -74,7 +81,7 @@ static const uint8_t color[16 + AV_CLASS_CATEGORY_NB] = {
     [16+AV_CLASS_CATEGORY_DEMUXER         ] = 0x05,
     [16+AV_CLASS_CATEGORY_ENCODER         ] = 0x16,
     [16+AV_CLASS_CATEGORY_DECODER         ] = 0x06,
-    [16+AV_CLASS_CATEGORY_FILTER          ] = 0x04,
+    [16+AV_CLASS_CATEGORY_FILTER          ] = 0x12,
     [16+AV_CLASS_CATEGORY_BITSTREAM_FILTER] = 0x14,
 };
 
@@ -148,7 +155,7 @@ static int get_category(void *ptr){
 }
 
 static void format_line(void *ptr, int level, const char *fmt, va_list vl,
-                        char part[3][512], int part_size, int *print_prefix, int type[2])
+                        char part[3][LINE_SZ], int part_size, int *print_prefix, int type[2])
 {
     AVClass* avc = ptr ? *(AVClass **) ptr : NULL;
     part[0][0] = part[1][0] = part[2][0] = 0;
@@ -176,7 +183,7 @@ static void format_line(void *ptr, int level, const char *fmt, va_list vl,
 void av_log_format_line(void *ptr, int level, const char *fmt, va_list vl,
                         char *line, int line_size, int *print_prefix)
 {
-    char part[3][512];
+    char part[3][LINE_SZ];
     format_line(ptr, level, fmt, vl, part, sizeof(part[0]), print_prefix, NULL);
     snprintf(line, line_size, "%s%s%s", part[0], part[1], part[2]);
 }
@@ -185,9 +192,9 @@ void av_log_default_callback(void* ptr, int level, const char* fmt, va_list vl)
 {
     static int print_prefix = 1;
     static int count;
-    static char prev[1024];
-    char part[3][512];
-    char line[1024];
+    static char prev[LINE_SZ];
+    char part[3][LINE_SZ];
+    char line[LINE_SZ];
     static int is_atty;
     int type[2];
 

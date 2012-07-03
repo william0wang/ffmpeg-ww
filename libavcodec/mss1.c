@@ -554,10 +554,10 @@ static int decode_pal(MSS1Context *ctx, ArithCoder *acoder)
         r = arith_get_bits(acoder, 8);
         g = arith_get_bits(acoder, 8);
         b = arith_get_bits(acoder, 8);
-        *pal++ = (r << 16) | (g << 8) | b;
+        *pal++ = (0xFF << 24) | (r << 16) | (g << 8) | b;
     }
 
-    return 0;
+    return !!ncol;
 }
 
 static int decode_pivot(MSS1Context *ctx, ArithCoder *acoder, int base)
@@ -783,6 +783,12 @@ static av_cold int mss1_decode_init(AVCodecContext *avctx)
     av_log(avctx, AV_LOG_DEBUG, "Encoder version %d.%d\n",
            AV_RB32(avctx->extradata + 4), AV_RB32(avctx->extradata + 8));
     c->free_colours     = AV_RB32(avctx->extradata + 48);
+    if ((unsigned)c->free_colours > 256) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Incorrect number of changeable palette entries: %d\n",
+               c->free_colours);
+        return AVERROR_INVALIDDATA;
+    }
     av_log(avctx, AV_LOG_DEBUG, "%d free colour(s)\n", c->free_colours);
     avctx->coded_width  = AV_RB32(avctx->extradata + 20);
     avctx->coded_height = AV_RB32(avctx->extradata + 24);
@@ -803,7 +809,7 @@ static av_cold int mss1_decode_init(AVCodecContext *avctx)
            av_int2float(AV_RB32(avctx->extradata + 44)));
 
     for (i = 0; i < 256; i++)
-        c->pal[i] = AV_RB24(avctx->extradata + 52 + i * 3);
+        c->pal[i] = 0xFF << 24 | AV_RB24(avctx->extradata + 52 + i * 3);
 
     avctx->pix_fmt = PIX_FMT_PAL8;
 

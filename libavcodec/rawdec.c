@@ -27,6 +27,7 @@
 #include "avcodec.h"
 #include "imgconvert.h"
 #include "raw.h"
+#include "libavutil/avassert.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
@@ -45,7 +46,12 @@ static const AVOption options[]={
 {"top", "top field first", offsetof(RawVideoContext, tff), AV_OPT_TYPE_INT, {.dbl = -1}, -1, 1, AV_OPT_FLAG_DECODING_PARAM|AV_OPT_FLAG_VIDEO_PARAM},
 {NULL}
 };
-static const AVClass class = { "rawdec", NULL, options, LIBAVUTIL_VERSION_INT };
+
+static const AVClass class = {
+    .class_name = "rawdec",
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 
 static const PixelFormatTag pix_fmt_bps_avi[] = {
     { PIX_FMT_MONOWHITE, 1 },
@@ -166,7 +172,7 @@ static int raw_decode(AVCodecContext *avctx,
     if (context->buffer) {
         int i;
         uint8_t *dst = context->buffer;
-        buf_size = context->length - 256*4;
+        buf_size = context->length - AVPALETTE_SIZE;
         if (avctx->bits_per_coded_sample == 4){
             for(i=0; 2*i+1 < buf_size && i<avpkt->size; i++){
                 dst[2*i+0]= buf[i]>>4;
@@ -174,6 +180,7 @@ static int raw_decode(AVCodecContext *avctx,
             }
             linesize_align = 8;
         } else {
+            av_assert0(avctx->bits_per_coded_sample == 2);
             for(i=0; 4*i+3 < buf_size && i<avpkt->size; i++){
                 dst[4*i+0]= buf[i]>>6;
                 dst[4*i+1]= buf[i]>>4&3;
@@ -189,7 +196,7 @@ static int raw_decode(AVCodecContext *avctx,
        avctx->codec_tag == MKTAG('A', 'V', 'u', 'p'))
         buf += buf_size - context->length;
 
-    len = context->length - (avctx->pix_fmt==PIX_FMT_PAL8 ? 256*4 : 0);
+    len = context->length - (avctx->pix_fmt==PIX_FMT_PAL8 ? AVPALETTE_SIZE : 0);
     if (buf_size < len) {
         av_log(avctx, AV_LOG_ERROR, "Invalid buffer size, packet size %d < expected length %d\n", buf_size, len);
         return AVERROR(EINVAL);

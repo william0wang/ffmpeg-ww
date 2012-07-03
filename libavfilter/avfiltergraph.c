@@ -26,12 +26,14 @@
 #include "libavutil/audioconvert.h"
 #include "libavutil/avassert.h"
 #include "libavutil/pixdesc.h"
+#include "libavcodec/avcodec.h" // avcodec_find_best_pix_fmt2()
 #include "avfilter.h"
 #include "avfiltergraph.h"
 #include "formats.h"
 #include "internal.h"
 
 #include "libavutil/audioconvert.h"
+#include "libavutil/avassert.h"
 #include "libavutil/log.h"
 
 static const AVClass filtergraph_class = {
@@ -46,9 +48,7 @@ AVFilterGraph *avfilter_graph_alloc(void)
     AVFilterGraph *ret = av_mallocz(sizeof(AVFilterGraph));
     if (!ret)
         return NULL;
-#if FF_API_GRAPH_AVCLASS
     ret->av_class = &filtergraph_class;
-#endif
     return ret;
 }
 
@@ -187,7 +187,7 @@ static int filter_query_formats(AVFilterContext *ctx)
     if ((ret = ctx->filter->query_formats(ctx)) < 0)
         return ret;
 
-    formats = avfilter_make_all_formats(type);
+    formats = ff_all_formats(type);
     if (!formats)
         return AVERROR(ENOMEM);
     ff_set_common_formats(ctx, formats);
@@ -649,7 +649,7 @@ static void swap_sample_fmts_on_filter(AVFilterContext *filter)
 
     for (i = 0; i < filter->nb_outputs; i++) {
         AVFilterLink *outlink = filter->outputs[i];
-        int best_idx, best_score = INT_MIN;
+        int best_idx = -1, best_score = INT_MIN;
 
         if (outlink->type != AVMEDIA_TYPE_AUDIO ||
             outlink->in_formats->format_count < 2)
@@ -682,6 +682,7 @@ static void swap_sample_fmts_on_filter(AVFilterContext *filter)
                 best_idx   = j;
             }
         }
+        av_assert0(best_idx >= 0);
         FFSWAP(int, outlink->in_formats->formats[0],
                outlink->in_formats->formats[best_idx]);
     }
@@ -815,11 +816,51 @@ static int ff_avfilter_graph_config_pointers(AVFilterGraph *graph,
     return 0;
 }
 
+static int graph_insert_fifos(AVFilterGraph *graph, AVClass *log_ctx)
+{
+    AVFilterContext *f;
+    int i, j, ret;
+    int fifo_count = 0;
+
+    for (i = 0; i < graph->filter_count; i++) {
+        f = graph->filters[i];
+
+        for (j = 0; j < f->nb_inputs; j++) {
+            AVFilterLink *link = f->inputs[j];
+            AVFilterContext *fifo_ctx;
+            AVFilter *fifo;
+            char name[32];
+
+            if (!link->dstpad->needs_fifo)
+                continue;
+
+            fifo = f->inputs[j]->type == AVMEDIA_TYPE_VIDEO ?
+                   avfilter_get_by_name("fifo") :
+                   avfilter_get_by_name("afifo");
+
+            snprintf(name, sizeof(name), "auto-inserted fifo %d", fifo_count++);
+
+            ret = avfilter_graph_create_filter(&fifo_ctx, fifo, name, NULL,
+                                               NULL, graph);
+            if (ret < 0)
+                return ret;
+
+            ret = avfilter_insert_filter(link, fifo_ctx, 0, 0);
+            if (ret < 0)
+                return ret;
+        }
+    }
+
+    return 0;
+}
+
 int avfilter_graph_config(AVFilterGraph *graphctx, void *log_ctx)
 {
     int ret;
 
     if ((ret = graph_check_validity(graphctx, log_ctx)))
+        return ret;
+    if ((ret = graph_insert_fifos(graphctx, log_ctx)) < 0)
         return ret;
     if ((ret = graph_config_formats(graphctx, log_ctx)))
         return ret;
@@ -939,7 +980,7 @@ int avfilter_graph_request_oldest(AVFilterGraph *graph)
 {
     while (graph->sink_links_count) {
         AVFilterLink *oldest = graph->sink_links[0];
-        int r = avfilter_request_frame(oldest);
+        int r = ff_request_frame(oldest);
         if (r != AVERROR_EOF)
             return r;
         /* EOF: remove the link from the heap */

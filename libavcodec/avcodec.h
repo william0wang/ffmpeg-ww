@@ -258,6 +258,7 @@ enum CodecID {
     CODEC_ID_XBM,
     CODEC_ID_ZEROCODEC,
     CODEC_ID_MSS1,
+    CODEC_ID_MSA1,
     CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
     CODEC_ID_ESCAPE130  = MKBETAG('E','1','3','0'),
     CODEC_ID_EXR        = MKBETAG('0','E','X','R'),
@@ -430,6 +431,8 @@ enum CodecID {
     CODEC_ID_MICRODVD   = MKBETAG('m','D','V','D'),
     CODEC_ID_EIA_608    = MKBETAG('c','6','0','8'),
     CODEC_ID_JACOSUB    = MKBETAG('J','S','U','B'),
+    CODEC_ID_SAMI       = MKBETAG('S','A','M','I'),
+    CODEC_ID_REALTEXT   = MKBETAG('R','T','X','T'),
 
     /* other specific kind of codecs (generally used for attachments) */
     CODEC_ID_FIRST_UNKNOWN = 0x18000,           ///< A dummy ID pointing at the start of various fake codecs.
@@ -725,6 +728,10 @@ typedef struct RcOverride{
  * Audio encoder supports receiving a different number of samples in each call.
  */
 #define CODEC_CAP_VARIABLE_FRAME_SIZE 0x10000
+/**
+ * Codec is intra only.
+ */
+#define CODEC_CAP_INTRA_ONLY       0x40000000
 /**
  * Codec is lossless.
  */
@@ -1519,7 +1526,7 @@ typedef struct AVCodecContext {
     /**
      * Pixel format, see PIX_FMT_xxx.
      * May be set by the demuxer if known from headers.
-     * May be overriden by the decoder if it knows better.
+     * May be overridden by the decoder if it knows better.
      * - encoding: Set by user.
      * - decoding: Set by user if known, overridden by libavcodec if known
      */
@@ -2283,7 +2290,7 @@ typedef struct AVCodecContext {
 
     /**
      * ratecontrol qmin qmax limiting method
-     * 0-> clipping, 1-> use a nice continous function to limit qscale wthin qmin/qmax.
+     * 0-> clipping, 1-> use a nice continuous function to limit qscale wthin qmin/qmax.
      * - encoding: Set by user.
      * - decoding: unused
      */
@@ -3182,7 +3189,7 @@ typedef struct AVSubtitleRect {
 
     /**
      * 0 terminated ASS/SSA compatible event line.
-     * The pressentation of this is unaffected by the other values in this
+     * The presentation of this is unaffected by the other values in this
      * struct.
      */
     char *ass;
@@ -4049,11 +4056,12 @@ int attribute_deprecated avcodec_encode_audio(AVCodecContext *avctx,
  *                  The user can supply an output buffer by setting
  *                  avpkt->data and avpkt->size prior to calling the
  *                  function, but if the size of the user-provided data is not
- *                  large enough, encoding will fail. All other AVPacket fields
- *                  will be reset by the encoder using av_init_packet(). If
- *                  avpkt->data is NULL, the encoder will allocate it.
- *                  The encoder will set avpkt->size to the size of the
- *                  output packet.
+ *                  large enough, encoding will fail. If avpkt->data and
+ *                  avpkt->size are set, avpkt->destruct must also be set. All
+ *                  other AVPacket fields will be reset by the encoder using
+ *                  av_init_packet(). If avpkt->data is NULL, the encoder will
+ *                  allocate it. The encoder will set avpkt->size to the size
+ *                  of the output packet.
  *
  *                  If this function fails or produces no output, avpkt will be
  *                  freed using av_free_packet() (i.e. avpkt->destruct will be
@@ -4257,42 +4265,19 @@ int avpicture_alloc(AVPicture *picture, enum PixelFormat pix_fmt, int width, int
 void avpicture_free(AVPicture *picture);
 
 /**
- * Fill in the AVPicture fields.
- * The fields of the given AVPicture are filled in by using the 'ptr' address
- * which points to the image data buffer. Depending on the specified picture
- * format, one or multiple image data pointers and line sizes will be set.
- * If a planar format is specified, several pointers will be set pointing to
- * the different picture planes and the line sizes of the different planes
- * will be stored in the lines_sizes array.
- * Call with ptr == NULL to get the required size for the ptr buffer.
+ * Fill in the AVPicture fields, always assume a linesize alignment of
+ * 1.
  *
- * To allocate the buffer and fill in the AVPicture fields in one call,
- * use avpicture_alloc().
- *
- * @param picture AVPicture whose fields are to be filled in
- * @param ptr Buffer which will contain or contains the actual image data
- * @param pix_fmt The format in which the picture data is stored.
- * @param width the width of the image in pixels
- * @param height the height of the image in pixels
- * @return size of the image data in bytes
+ * @see av_image_fill_arrays()
  */
 int avpicture_fill(AVPicture *picture, uint8_t *ptr,
                    enum PixelFormat pix_fmt, int width, int height);
 
 /**
- * Copy pixel data from an AVPicture into a buffer.
- * The data is stored compactly, without any gaps for alignment or padding
- * which may be applied by avpicture_fill().
+ * Copy pixel data from an AVPicture into a buffer, always assume a
+ * linesize alignment of 1.
  *
- * @see avpicture_get_size()
- *
- * @param[in] src AVPicture containing image data
- * @param[in] pix_fmt The format in which the picture data is stored.
- * @param[in] width the width of the image in pixels.
- * @param[in] height the height of the image in pixels.
- * @param[out] dest A buffer into which picture data will be copied.
- * @param[in] dest_size The size of 'dest'.
- * @return The number of bytes written to dest, or a negative value (error code) on error.
+ * @see av_image_copy_to_buffer()
  */
 int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, int height,
                      unsigned char *dest, int dest_size);
@@ -4300,14 +4285,9 @@ int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, 
 /**
  * Calculate the size in bytes that a picture of the given width and height
  * would occupy if stored in the given picture format.
- * Note that this returns the size of a compact representation as generated
- * by avpicture_layout(), which can be smaller than the size required for e.g.
- * avpicture_fill().
+ * Always assume a linesize alignment of 1.
  *
- * @param pix_fmt the given picture format
- * @param width the width of the image
- * @param height the height of the image
- * @return Image data size in bytes or -1 on error (e.g. too large dimensions).
+ * @see av_image_get_buffer_size().
  */
 int avpicture_get_size(enum PixelFormat pix_fmt, int width, int height);
 

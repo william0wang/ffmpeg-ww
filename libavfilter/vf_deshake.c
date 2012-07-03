@@ -331,7 +331,7 @@ static void find_motion(DeshakeContext *deshake, uint8_t *src1, uint8_t *src2,
     av_free(angles);
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     DeshakeContext *deshake = ctx->priv;
     char filename[256] = {0};
@@ -420,7 +420,8 @@ static av_cold void uninit(AVFilterContext *ctx)
     avfilter_unref_buffer(deshake->ref);
     if (deshake->fp)
         fclose(deshake->fp);
-    avcodec_close(deshake->avctx);
+    if (deshake->avctx)
+        avcodec_close(deshake->avctx);
     av_freep(&deshake->avctx);
 }
 

@@ -103,15 +103,9 @@ static const AVOption overlay_options[] = {
     {NULL},
 };
 
-static const AVClass overlay_class = {
-    .class_name = "overlay",
-    .item_name  = av_default_item_name,
-    .option     = overlay_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(overlay);
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     OverlayContext *over = ctx->priv;
     char *args1 = av_strdup(args);
@@ -251,7 +245,7 @@ static int config_input_overlay(AVFilterLink *inlink)
         ff_fill_rgba_map(over->overlay_rgba_map, inlink->format) >= 0;
     over->overlay_has_alpha = ff_fmt_is_in(inlink->format, alpha_pix_fmts);
 
-    av_log(ctx, AV_LOG_INFO,
+    av_log(ctx, AV_LOG_VERBOSE,
            "main w:%d h:%d fmt:%s overlay x:%d y:%d w:%d h:%d fmt:%s\n",
            ctx->inputs[MAIN]->w, ctx->inputs[MAIN]->h,
            av_pix_fmt_descriptors[ctx->inputs[MAIN]->format].name,
@@ -290,7 +284,7 @@ static int config_output(AVFilterLink *outlink)
                       av_gcd((int64_t)tb1.num * tb2.den,
                              (int64_t)tb2.num * tb1.den),
                       (int64_t)tb1.den * tb2.den, INT_MAX);
-    av_log(ctx, AV_LOG_INFO,
+    av_log(ctx, AV_LOG_VERBOSE,
            "main_tb:%d/%d overlay_tb:%d/%d -> tb:%d/%d exact:%d\n",
            tb1.num, tb1.den, tb2.num, tb2.den, tb->num, tb->den, exact);
     if (!exact)

@@ -30,6 +30,7 @@
 #include "formats.h"
 #include "audio.h"
 #include "video.h"
+#include "internal.h"
 
 typedef struct {
     const AVClass *class;
@@ -54,13 +55,7 @@ static const AVOption showwaves_options[] = {
     { NULL },
 };
 
-static const AVClass showwaves_class = {
-    .class_name = "showwaves",
-    .item_name  = av_default_item_name,
-    .option     = showwaves_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(showwaves);
 
 static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
 {
@@ -175,7 +170,7 @@ static int request_frame(AVFilterLink *outlink)
 
     showwaves->req_fullfilled = 0;
     do {
-        ret = avfilter_request_frame(inlink);
+        ret = ff_request_frame(inlink);
     } while (!showwaves->req_fullfilled && ret >= 0);
 
     if (ret == AVERROR_EOF && showwaves->outpicref)
@@ -201,13 +196,16 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 
     /* draw data in the buffer */
     for (i = 0; i < nb_samples; i++) {
-        if (showwaves->buf_idx == 0) {
+        if (showwaves->buf_idx == 0 && showwaves->sample_count_mod == 0) {
             showwaves->outpicref = outpicref =
                 ff_get_video_buffer(outlink, AV_PERM_WRITE|AV_PERM_ALIGN,
                                     outlink->w, outlink->h);
             outpicref->video->w = outlink->w;
             outpicref->video->h = outlink->h;
-            outpicref->pts = insamples->pts;
+            outpicref->pts = insamples->pts +
+                             av_rescale_q((p - (int16_t *)insamples->data[0]) / nb_channels,
+                                          (AVRational){ 1, inlink->sample_rate },
+                                          outlink->time_base);
             outlink->out_buf = outpicref;
             linesize = outpicref->linesize[0];
             memset(outpicref->data[0], 0, showwaves->h*linesize);

@@ -30,9 +30,9 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "libavutil/dict.h"
+#include "libavutil/time.h"
 #include "avformat.h"
 #include "internal.h"
-#include <unistd.h>
 #include "avio_internal.h"
 #include "url.h"
 
@@ -407,7 +407,7 @@ reload:
             while (av_gettime() - v->last_load_time < reload_interval) {
                 if (ff_check_interrupt(c->interrupt_callback))
                     return AVERROR_EXIT;
-                usleep(100*1000);
+                av_usleep(100*1000);
             }
             /* Enough time has elapsed since the last reload */
             goto reload;
@@ -519,6 +519,7 @@ static int hls_read_header(AVFormatContext *s)
              * so avformat_close_input shouldn't be called. If
              * avformat_open_input fails below, it frees and zeros the
              * context, so it doesn't need any special treatment like this. */
+            av_log(s, AV_LOG_ERROR, "Error when loading first segment '%s'\n", v->segments[0]->url);
             avformat_free_context(v->ctx);
             v->ctx = NULL;
             goto fail;

@@ -28,6 +28,7 @@
  */
 
 #include <stdio.h>
+#include "libavutil/audioconvert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/opt.h"
 #include "libswresample/swresample.h"
@@ -95,7 +96,7 @@ static void skip_spaces(char **arg)
     *arg += len;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args0, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args0)
 {
     PanContext *const pan = ctx->priv;
     char *arg, *arg0, *tokenizer, *args = av_strdup(args0);
@@ -217,7 +218,7 @@ static int query_formats(AVFilterContext *ctx)
 
     pan->pure_gains = are_gains_pure(pan);
     /* libswr supports any sample and packing formats */
-    ff_set_common_formats(ctx, avfilter_make_all_formats(AVMEDIA_TYPE_AUDIO));
+    ff_set_common_formats(ctx, ff_all_formats(AVMEDIA_TYPE_AUDIO));
 
     formats = ff_all_samplerates();
     if (!formats)

@@ -59,15 +59,9 @@ static const AVOption color_options[]= {
     { NULL },
 };
 
-static const AVClass color_class = {
-    .class_name = "color",
-    .item_name  = av_default_item_name,
-    .option     = color_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(color);
 
-static av_cold int color_init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int color_init(AVFilterContext *ctx, const char *args)
 {
     ColorContext *color = ctx->priv;
     char color_string[128] = "black";
@@ -141,7 +135,7 @@ static int color_config_props(AVFilterLink *inlink)
     if (av_image_check_size(color->w, color->h, 0, ctx) < 0)
         return AVERROR(EINVAL);
 
-    av_log(ctx, AV_LOG_INFO, "w:%d h:%d r:%d/%d color:0x%02x%02x%02x%02x\n",
+    av_log(ctx, AV_LOG_VERBOSE, "w:%d h:%d r:%d/%d color:0x%02x%02x%02x%02x\n",
            color->w, color->h, color->time_base.den, color->time_base.num,
            color->color_rgba[0], color->color_rgba[1], color->color_rgba[2], color->color_rgba[3]);
     inlink->w = color->w;

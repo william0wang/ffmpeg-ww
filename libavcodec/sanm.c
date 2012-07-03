@@ -283,7 +283,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
         ctx->subversion = AV_RL16(avctx->extradata);
         for (i = 0; i < 256; i++)
-            ctx->pal[i] = AV_RL32(avctx->extradata + 2 + i * 4);
+            ctx->pal[i] = 0xFF << 24 | AV_RL32(avctx->extradata + 2 + i * 4);
     }
 
     return 0;
@@ -996,16 +996,18 @@ static int decode_4(SANMVideoContext *ctx)
 
 static int decode_5(SANMVideoContext *ctx)
 {
+#if HAVE_BIGENDIAN
     uint16_t *frm;
     int npixels;
+#endif
     uint8_t *dst = (uint8_t*)ctx->frm0;
 
     if (rle_decode(ctx, dst, ctx->buf_size))
         return AVERROR_INVALIDDATA;
 
+#if HAVE_BIGENDIAN
     npixels = ctx->npixels;
     frm = ctx->frm0;
-#if HAVE_BIGENDIAN
     while (npixels--)
         *frm++ = av_bswap16(*frm);
 #endif
@@ -1161,7 +1163,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
                     return AVERROR_INVALIDDATA;
                 }
                 for (i = 0; i < 256; i++)
-                    ctx->pal[i] = bytestream2_get_be24u(&ctx->gb);
+                    ctx->pal[i] = 0xFF << 24 | bytestream2_get_be24u(&ctx->gb);
                 break;
             case MKBETAG('F', 'O', 'B', 'J'):
                 if (size < 16)
@@ -1179,7 +1181,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
                             int t = (ctx->pal[i] >> (16 - j * 8)) & 0xFF;
                             tmp[j] = av_clip_uint8((t * 129 + ctx->delta_pal[i * 3 + j]) >> 7);
                         }
-                        ctx->pal[i] = AV_RB24(tmp);
+                        ctx->pal[i] = 0xFF << 24 | AV_RB24(tmp);
                     }
                 } else {
                     if (size < 768 * 2 + 4) {
@@ -1192,7 +1194,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
                         ctx->delta_pal[i] = bytestream2_get_le16u(&ctx->gb);
                     if (size >= 768 * 5 + 4) {
                         for (i = 0; i < 256; i++)
-                            ctx->pal[i] = bytestream2_get_be24u(&ctx->gb);
+                            ctx->pal[i] = 0xFF << 24 | bytestream2_get_be24u(&ctx->gb);
                     } else {
                         memset(ctx->pal, 0, sizeof(ctx->pal));
                     }

@@ -173,6 +173,14 @@ struct AVFilterPad {
      * and another value on error.
      */
     int (*config_props)(AVFilterLink *link);
+
+    /**
+     * The filter expects a fifo to be inserted on its input link,
+     * typically because it has a delay.
+     *
+     * input pads only.
+     */
+    int needs_fifo;
 };
 #endif
 
@@ -325,5 +333,14 @@ int ff_poll_frame(AVFilterLink *link);
  * @return     zero on success
  */
 int ff_request_frame(AVFilterLink *link);
+
+#define AVFILTER_DEFINE_CLASS(fname)            \
+    static const AVClass fname##_class = {      \
+        .class_name = #fname,                   \
+        .item_name  = av_default_item_name,     \
+        .option     = fname##_options,          \
+        .version    = LIBAVUTIL_VERSION_INT,    \
+        .category   = AV_CLASS_CATEGORY_FILTER, \
+    }
 
 #endif /* AVFILTER_INTERNAL_H */

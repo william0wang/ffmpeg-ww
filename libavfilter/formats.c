@@ -262,11 +262,6 @@ int ff_add_channel_layout(AVFilterChannelLayouts **l, uint64_t channel_layout)
 
 AVFilterFormats *ff_all_formats(enum AVMediaType type)
 {
-    return avfilter_make_all_formats(type);
-}
-
-AVFilterFormats *avfilter_make_all_formats(enum AVMediaType type)
-{
     AVFilterFormats *ret = NULL;
     int fmt;
     int num_formats = type == AVMEDIA_TYPE_VIDEO ? PIX_FMT_NB    :
@@ -289,19 +284,6 @@ const int64_t avfilter_all_channel_layouts[] = {
 // {
 //     return avfilter_make_format64_list(avfilter_all_channel_layouts);
 // }
-
-#if FF_API_PACKING
-AVFilterFormats *avfilter_make_all_packing_formats(void)
-{
-    static const int packing[] = {
-        AVFILTER_PACKED,
-        AVFILTER_PLANAR,
-        -1,
-    };
-
-    return ff_make_format_list(packing);
-}
-#endif
 
 AVFilterFormats *ff_planar_sample_fmts(void)
 {
@@ -543,45 +525,6 @@ int ff_parse_channel_layout(int64_t *ret, const char *arg, void *log_ctx)
     return 0;
 }
 
-#if FF_API_FILTERS_PUBLIC
-int avfilter_default_query_formats(AVFilterContext *ctx)
-{
-    return ff_default_query_formats(ctx);
-}
-void avfilter_set_common_formats(AVFilterContext *ctx, AVFilterFormats *formats)
-{
-    ff_set_common_formats(ctx, formats);
-}
-AVFilterFormats *avfilter_make_format_list(const int *fmts)
-{
-    return ff_make_format_list(fmts);
-}
-int avfilter_add_format(AVFilterFormats **avff, int64_t fmt)
-{
-    return ff_add_format(avff, fmt);
-}
-AVFilterFormats *avfilter_all_formats(enum AVMediaType type)
-{
-    return ff_all_formats(type);
-}
-AVFilterFormats *avfilter_merge_formats(AVFilterFormats *a, AVFilterFormats *b)
-{
-    return ff_merge_formats(a, b);
-}
-void avfilter_formats_ref(AVFilterFormats *f, AVFilterFormats **ref)
-{
-    ff_formats_ref(f, ref);
-}
-void avfilter_formats_unref(AVFilterFormats **ref)
-{
-    ff_formats_unref(ref);
-}
-void avfilter_formats_changeref(AVFilterFormats **oldref,
-                                AVFilterFormats **newref)
-{
-    ff_formats_changeref(oldref, newref);
-}
-#endif
 #ifdef TEST
 
 #undef printf
@@ -600,3 +543,4 @@ int main(void)
 }
 
 #endif
+

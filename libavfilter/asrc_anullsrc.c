@@ -54,15 +54,9 @@ static const AVOption anullsrc_options[]= {
     { NULL },
 };
 
-static const AVClass anullsrc_class = {
-    .class_name = "anullsrc",
-    .item_name  = av_default_item_name,
-    .option     = anullsrc_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(anullsrc);
 
-static int init(AVFilterContext *ctx, const char *args, void *opaque)
+static int init(AVFilterContext *ctx, const char *args)
 {
     ANullContext *null = ctx->priv;
     int ret;
@@ -97,7 +91,7 @@ static int config_props(AVFilterLink *outlink)
 
     chans_nb = av_get_channel_layout_nb_channels(null->channel_layout);
     av_get_channel_layout_string(buf, sizeof(buf), chans_nb, null->channel_layout);
-    av_log(outlink->src, AV_LOG_INFO,
+    av_log(outlink->src, AV_LOG_VERBOSE,
            "sample_rate:%d channel_layout:'%s' nb_samples:%d\n",
            null->sample_rate, buf, null->nb_samples);
 

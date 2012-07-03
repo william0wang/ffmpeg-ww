@@ -40,6 +40,7 @@
 
 #include <float.h>
 #include "libavcodec/avfft.h"
+#include "libavutil/audioconvert.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/eval.h"
@@ -947,7 +948,7 @@ static int yae_flush(ATempoContext *atempo,
     return atempo->position[1] == stop_here ? 0 : AVERROR(EAGAIN);
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     ATempoContext *atempo = ctx->priv;
 
@@ -1083,7 +1084,7 @@ static int request_frame(AVFilterLink *outlink)
 
     atempo->request_fulfilled = 0;
     do {
-        ret = avfilter_request_frame(ctx->inputs[0]);
+        ret = ff_request_frame(ctx->inputs[0]);
     }
     while (!atempo->request_fulfilled && ret >= 0);
 

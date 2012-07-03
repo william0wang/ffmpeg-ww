@@ -24,6 +24,7 @@
  * resampling audio filter
  */
 
+#include "libavutil/audioconvert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
@@ -40,7 +41,7 @@ typedef struct {
     int req_fullfilled;
 } AResampleContext;
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     AResampleContext *aresample = ctx->priv;
     int ret = 0;
@@ -112,7 +113,7 @@ static int query_formats(AVFilterContext *ctx)
     if(out_format != AV_SAMPLE_FMT_NONE) {
         out_formats = ff_make_format_list((int[]){ out_format, -1 });
     } else
-        out_formats = avfilter_make_all_formats(AVMEDIA_TYPE_AUDIO);
+        out_formats = ff_all_formats(AVMEDIA_TYPE_AUDIO);
     ff_formats_ref(out_formats, &outlink->in_formats);
 
     if(out_layout) {
@@ -160,7 +161,8 @@ static int config_output(AVFilterLink *outlink)
 
     av_get_channel_layout_string(inchl_buf,  sizeof(inchl_buf),  -1, inlink ->channel_layout);
     av_get_channel_layout_string(outchl_buf, sizeof(outchl_buf), -1, outlink->channel_layout);
-    av_log(ctx, AV_LOG_INFO, "chl:%s fmt:%s r:%"PRId64"Hz -> chl:%s fmt:%s r:%"PRId64"Hz\n",
+
+    av_log(ctx, AV_LOG_INFO, "chl:%s fmt:%s r:%dHz -> chl:%s fmt:%s r:%dHz\n",
            inchl_buf,  av_get_sample_fmt_name(inlink->format),  inlink->sample_rate,
            outchl_buf, av_get_sample_fmt_name(outlink->format), outlink->sample_rate);
     return 0;
@@ -211,7 +213,7 @@ static int request_frame(AVFilterLink *outlink)
 
     aresample->req_fullfilled = 0;
     do{
-        ret = avfilter_request_frame(ctx->inputs[0]);
+        ret = ff_request_frame(ctx->inputs[0]);
     }while(!aresample->req_fullfilled && ret>=0);
 
     if (ret == AVERROR_EOF) {

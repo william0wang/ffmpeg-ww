@@ -151,13 +151,7 @@ static const AVOption delogo_options[]= {
     {NULL},
 };
 
-static const AVClass delogo_class = {
-    .class_name = "delogo",
-    .item_name  = av_default_item_name,
-    .option     = delogo_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(delogo);
 
 static int query_formats(AVFilterContext *ctx)
 {
@@ -172,7 +166,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     DelogoContext *delogo = ctx->priv;
     int ret = 0;

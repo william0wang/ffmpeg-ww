@@ -25,6 +25,7 @@
  * sample format and channel layout conversion audio filter
  */
 
+#include "libavutil/audioconvert.h"
 #include "libavutil/avstring.h"
 #include "libswresample/swresample.h"
 #include "avfilter.h"
@@ -37,7 +38,7 @@ typedef struct {
     struct SwrContext *swr;
 } AConvertContext;
 
-static av_cold int init(AVFilterContext *ctx, const char *args0, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args0)
 {
     AConvertContext *aconvert = ctx->priv;
     char *arg, *ptr = NULL;
@@ -75,14 +76,14 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFilterChannelLayouts *layouts;
 
-    ff_formats_ref(avfilter_make_all_formats(AVMEDIA_TYPE_AUDIO),
+    ff_formats_ref(ff_all_formats(AVMEDIA_TYPE_AUDIO),
                          &inlink->out_formats);
     if (aconvert->out_sample_fmt != AV_SAMPLE_FMT_NONE) {
         formats = NULL;
         ff_add_format(&formats, aconvert->out_sample_fmt);
         ff_formats_ref(formats, &outlink->in_formats);
     } else
-        ff_formats_ref(avfilter_make_all_formats(AVMEDIA_TYPE_AUDIO),
+        ff_formats_ref(ff_all_formats(AVMEDIA_TYPE_AUDIO),
                              &outlink->in_formats);
 
     ff_channel_layouts_ref(ff_all_channel_layouts(),

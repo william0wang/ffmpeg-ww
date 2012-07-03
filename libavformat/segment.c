@@ -36,8 +36,8 @@ typedef struct {
     AVFormatContext *avf;
     char *format;          /**< Set by a private option. */
     char *list;            /**< Set by a private option. */
+    int   list_size;       /**< Set by a private option. */
     float time;            /**< Set by a private option. */
-    int  size;             /**< Set by a private option. */
     int  wrap;             /**< Set by a private option. */
     int64_t offset_time;
     int64_t recording_time;
@@ -47,15 +47,15 @@ typedef struct {
 
 static int segment_start(AVFormatContext *s)
 {
-    SegmentContext *c = s->priv_data;
-    AVFormatContext *oc = c->avf;
+    SegmentContext *seg = s->priv_data;
+    AVFormatContext *oc = seg->avf;
     int err = 0;
 
-    if (c->wrap)
-        c->number %= c->wrap;
+    if (seg->wrap)
+        seg->number %= seg->wrap;
 
     if (av_get_frame_filename(oc->filename, sizeof(oc->filename),
-                              s->filename, c->number++) < 0)
+                              s->filename, seg->number++) < 0)
         return AVERROR(EINVAL);
 
     if ((err = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
@@ -81,18 +81,26 @@ static int segment_start(AVFormatContext *s)
     return 0;
 
 fail:
+    av_log(oc, AV_LOG_ERROR, "Failure occurred when starting segment '%s'\n",
+           oc->filename);
     avio_close(oc->pb);
     av_freep(&oc->priv_data);
 
     return err;
 }
 
-static int segment_end(AVFormatContext *oc)
+static int segment_end(AVFormatContext *s)
 {
+    SegmentContext *seg = s->priv_data;
+    AVFormatContext *oc = seg->avf;
     int ret = 0;
 
     if (oc->oformat->write_trailer)
         ret = oc->oformat->write_trailer(oc);
+
+    if (ret < 0)
+        av_log(s, AV_LOG_ERROR, "Failure occurred when ending segment '%s'\n",
+               oc->filename);
 
     avio_close(oc->pb);
     if (oc->oformat->priv_class)
@@ -198,7 +206,7 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
         av_log(s, AV_LOG_DEBUG, "Next segment starts at %d %"PRId64"\n",
                pkt->stream_index, pkt->pts);
 
-        ret = segment_end(oc);
+        ret = segment_end(s);
 
         if (!ret)
             ret = segment_start(s);
@@ -209,7 +217,7 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
         if (seg->list) {
             avio_printf(seg->pb, "%s\n", oc->filename);
             avio_flush(seg->pb);
-            if (seg->size && !(seg->number % seg->size)) {
+            if (seg->list_size && !(seg->number % seg->list_size)) {
                 avio_close(seg->pb);
                 if ((ret = avio_open2(&seg->pb, seg->list, AVIO_FLAG_WRITE,
                                       &s->interrupt_callback, NULL)) < 0)
@@ -236,7 +244,7 @@ static int seg_write_trailer(struct AVFormatContext *s)
 {
     SegmentContext *seg = s->priv_data;
     AVFormatContext *oc = seg->avf;
-    int ret = segment_end(oc);
+    int ret = segment_end(s);
     if (seg->list)
         avio_close(seg->pb);
     oc->streams = NULL;
@@ -251,7 +259,7 @@ static const AVOption options[] = {
     { "segment_format",    "container format used for the segments",  OFFSET(format),  AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
     { "segment_time",      "segment length in seconds",               OFFSET(time),    AV_OPT_TYPE_FLOAT,  {.dbl = 2},     0, FLT_MAX, E },
     { "segment_list",      "output the segment list",                 OFFSET(list),    AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
-    { "segment_list_size", "maximum number of playlist entries",      OFFSET(size),    AV_OPT_TYPE_INT,    {.dbl = 5},     0, INT_MAX, E },
+    { "segment_list_size", "maximum number of playlist entries",      OFFSET(list_size), AV_OPT_TYPE_INT,  {.dbl = 5},     0, INT_MAX, E },
     { "segment_wrap",      "number after which the index wraps",      OFFSET(wrap),    AV_OPT_TYPE_INT,    {.dbl = 0},     0, INT_MAX, E },
     { NULL },
 };
@@ -263,7 +271,6 @@ static const AVClass seg_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-
 AVOutputFormat ff_segment_muxer = {
     .name           = "segment",
     .long_name      = NULL_IF_CONFIG_SMALL("segment muxer"),
@@ -273,4 +280,22 @@ AVOutputFormat ff_segment_muxer = {
     .write_packet   = seg_write_packet,
     .write_trailer  = seg_write_trailer,
     .priv_class     = &seg_class,
+};
+
+static const AVClass sseg_class = {
+    .class_name = "stream_segment muxer",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
+AVOutputFormat ff_stream_segment_muxer = {
+    .name           = "stream_segment,ssegment",
+    .long_name      = NULL_IF_CONFIG_SMALL("streaming segment muxer"),
+    .priv_data_size = sizeof(SegmentContext),
+    .flags          = AVFMT_NOFILE,
+    .write_header   = seg_write_header,
+    .write_packet   = seg_write_packet,
+    .write_trailer  = seg_write_trailer,
+    .priv_class     = &sseg_class,
 };

@@ -71,15 +71,9 @@ static const AVOption fade_options[] = {
     {NULL},
 };
 
-static const AVClass fade_class = {
-    .class_name = "fade",
-    .item_name  = av_default_item_name,
-    .option     = fade_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(fade);
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     FadeContext *fade = ctx->priv;
     int ret = 0;
@@ -132,7 +126,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     }
     fade->stop_frame = fade->start_frame + fade->nb_frames;
 
-    av_log(ctx, AV_LOG_INFO,
+    av_log(ctx, AV_LOG_VERBOSE,
            "type:%s start_frame:%d nb_frames:%d alpha:%d\n",
            fade->type, fade->start_frame, fade->nb_frames, fade->alpha);
 

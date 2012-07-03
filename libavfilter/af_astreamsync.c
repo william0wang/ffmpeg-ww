@@ -60,7 +60,7 @@ typedef struct {
 
 static const char *default_expr = "t1-t2";
 
-static av_cold int init(AVFilterContext *ctx, const char *args0, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args0)
 {
     AStreamSyncContext *as = ctx->priv;
     const char *expr = args0 ? args0 : default_expr;
@@ -157,7 +157,7 @@ static int request_frame(AVFilterLink *outlink)
             send_next(ctx);
         } else {
             as->eof |= 1 << as->next_out;
-            avfilter_request_frame(ctx->inputs[as->next_out]);
+            ff_request_frame(ctx->inputs[as->next_out]);
             if (as->eof & (1 << as->next_out))
                 as->next_out = !as->next_out;
         }

@@ -273,6 +273,7 @@ Optimization options (experts only):
   --disable-mipsdspr1      disable MIPS DSP ASE R1 optimizations
   --disable-mipsdspr2      disable MIPS DSP ASE R2 optimizations
   --disable-mipsfpu        disable floating point MIPS optimizations
+  --disable-fast-unaligned consider unaligned accesses slow
   --postproc-version=V     build libpostproc version V.
                            Where V can be '$ALT_PP_VER_MAJOR.$ALT_PP_VER_MINOR.$ALT_PP_VER_MICRO' or 'current'. [$postproc_version_default]
 
@@ -285,6 +286,7 @@ Developer options (useful when working on FFmpeg itself):
   --disable-stripping      disable stripping of executables and shared libraries
   --assert-level=level     0(default), 1 or 2, amount of assertion testing,
                            2 causes a slowdown at runtime.
+  --enable-memory-poisoning fill heap uninitialized allocated space with arbitrary data
   --valgrind=VALGRIND      run "make fate" tests through valgrind to detect memory
                            leaks and errors, using the specified valgrind binary.
                            Cannot be combined with --target-exec
@@ -1035,6 +1037,7 @@ CONFIG_LIST="
     doc
     dwt
     dxva2
+    fast_unaligned
     fastdiv
     fft
     fontconfig
@@ -1078,6 +1081,7 @@ CONFIG_LIST="
     lsp
     mdct
     memalign_hack
+    memory_poisoning
     mpegaudiodsp
     network
     nonfree
@@ -1192,6 +1196,7 @@ HAVE_LIST="
     dlfcn_h
     dlopen
     dos_paths
+    dxva_h
     ebp_available
     ebx_available
     exp2
@@ -1215,6 +1220,8 @@ HAVE_LIST="
     inet_aton
     inline_asm
     isatty
+    isinf
+    isnan
     jack_port_get_latency_range
     kbhit
     ldbrx
@@ -1239,6 +1246,7 @@ HAVE_LIST="
     memalign
     mkstemp
     mmap
+    nanosleep
     netinet_sctp_h
     PeekNamedPipe
     poll_h
@@ -1251,13 +1259,17 @@ HAVE_LIST="
     sdl_video_size
     setmode
     setrlimit
+    Sleep
     sndio_h
     socklen_t
     soundcard_h
     strerror_r
     strptime
     struct_addrinfo
+    struct_group_source_req
+    struct_ip_mreq_source
     struct_ipv6_mreq
+    struct_pollfd
     struct_rusage_ru_maxrss
     struct_sockaddr_in6
     struct_sockaddr_sa_len
@@ -1273,13 +1285,17 @@ HAVE_LIST="
     sys_resource_h
     sys_select_h
     sys_soundcard_h
+    sys_time_h
     sys_videoio_h
     termios_h
     threads
     trunc
     truncf
+    unistd_h
+    usleep
     vfp_args
     VirtualAlloc
+    windows_h
     winsock2_h
     xform_asm
     xmm_clobbers
@@ -1903,7 +1919,7 @@ AS_O='-o $@'
 CC_O='-o $@'
 CXX_O='-o $@'
 
-host_cflags='-D_ISOC99_SOURCE -O3 -g'
+host_cflags='-D_ISOC99_SOURCE -D_XOPEN_SOURCE=600 -O3 -g'
 host_libs='-lm'
 
 target_path='$(CURDIR)'
@@ -3109,8 +3125,11 @@ fi
 if enabled network; then
     check_type "sys/types.h sys/socket.h" socklen_t
     check_type netdb.h "struct addrinfo"
+    check_type netinet/in.h "struct group_source_req" -D_BSD_SOURCE
+    check_type netinet/in.h "struct ip_mreq_source" -D_BSD_SOURCE
     check_type netinet/in.h "struct ipv6_mreq" -D_DARWIN_C_SOURCE
     check_type netinet/in.h "struct sockaddr_in6"
+    check_type poll.h "struct pollfd"
     check_type "sys/types.h sys/socket.h" "struct sockaddr_storage"
     check_struct "sys/types.h sys/socket.h" "struct sockaddr" sa_len
     check_header netinet/sctp.h
@@ -3124,7 +3143,10 @@ if enabled network; then
             network_extralibs="-lws2_32"; }
         check_type ws2tcpip.h socklen_t
         check_type ws2tcpip.h "struct addrinfo"
+        check_type ws2tcpip.h "struct group_source_req"
+        check_type ws2tcpip.h "struct ip_mreq_source"
         check_type ws2tcpip.h "struct ipv6_mreq"
+        check_type winsock2.h "struct pollfd"
         check_type ws2tcpip.h "struct sockaddr_in6"
         check_type ws2tcpip.h "struct sockaddr_storage"
         check_struct winsock2.h "struct sockaddr" sa_len
@@ -3158,6 +3180,7 @@ check_func  strptime
 check_func  sched_getaffinity
 check_func  sysconf
 check_func  sysctl
+check_func  usleep
 check_func_headers conio.h kbhit
 check_func_headers windows.h PeekNamedPipe
 check_func_headers io.h setmode
@@ -3167,10 +3190,12 @@ check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h GetSystemTimeAsFileTime
 check_func_headers windows.h MapViewOfFile
+check_func_headers windows.h Sleep
 check_func_headers windows.h VirtualAlloc
 check_func_headers glob.h glob
 
 check_header dlfcn.h
+check_header dxva.h
 check_header dxva2api.h -D_WIN32_WINNT=0x0600
 check_header libcrystalhd/libcrystalhd_if.h
 check_header malloc.h
@@ -3179,9 +3204,12 @@ check_header sys/mman.h
 check_header sys/param.h
 check_header sys/resource.h
 check_header sys/select.h
+check_header sys/time.h
 check_header termios.h
+check_header unistd.h
 check_header vdpau/vdpau.h
 check_header vdpau/vdpau_x11.h
+check_header windows.h
 check_header X11/extensions/XvMClib.h
 check_header asm/types.h
 
@@ -3238,6 +3266,8 @@ enabled vaapi && require vaapi va/va.h vaInitialize -lva
 check_mathfunc cbrtf
 check_mathfunc exp2
 check_mathfunc exp2f
+check_mathfunc isinf
+check_mathfunc isnan
 check_mathfunc llrint
 check_mathfunc llrintf
 check_mathfunc log2
@@ -3798,7 +3828,7 @@ get_version LIBAVDEVICE libavdevice/avdevice.h
 get_version LIBAVFILTER libavfilter/version.h
 get_version LIBAVFORMAT libavformat/version.h
 get_version LIBAVRESAMPLE libavresample/version.h
-get_version LIBAVUTIL   libavutil/avutil.h
+get_version LIBAVUTIL   libavutil/version.h
 get_version LIBPOSTPROC libpostproc/postprocess.h
 get_version LIBSWRESAMPLE libswresample/swresample.h
 get_version LIBSWSCALE  libswscale/swscale.h

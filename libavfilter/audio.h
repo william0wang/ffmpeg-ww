@@ -63,12 +63,6 @@ AVFilterBufferRef *ff_null_get_audio_buffer(AVFilterLink *link, int perms,
 AVFilterBufferRef *ff_get_audio_buffer(AVFilterLink *link, int perms,
                                              int nb_samples);
 
-/** default handler for filter_samples() for audio inputs */
-void ff_default_filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref);
-
-/** filter_samples() handler for filters which simply pass audio along */
-void ff_null_filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref);
-
 /**
  * Send a buffer of audio samples to the next filter.
  *
@@ -78,5 +72,12 @@ void ff_null_filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref);
  *                   needs it or pass it on to the next filter.
  */
 void ff_filter_samples(AVFilterLink *link, AVFilterBufferRef *samplesref);
+
+/**
+ * Send a buffer of audio samples to the next link, without checking
+ * min_samples.
+ */
+void ff_filter_samples_framed(AVFilterLink *link,
+                              AVFilterBufferRef *samplesref);
 
 #endif /* AVFILTER_AUDIO_H */

@@ -4,7 +4,7 @@ since the last major version increase.
 The last version increases were:
 libavcodec:    2012-01-27
 libavdevice:   2011-04-18
-libavfilter:   2011-04-18
+libavfilter:   2012-06-22
 libavformat:   2012-01-27
 libavresample: 2012-04-24
 libpostproc:   2011-04-18
@@ -14,6 +14,15 @@ libavutil:     2011-04-18
 
 
 API changes, most recent first:
+
+2012-06-26 - xxxxxxx - lavu 51.63.100 - imgutils.h
+  Add functions to libavutil/imgutils.h:
+  av_image_get_buffer_size()
+  av_image_fill_arrays()
+  av_image_copy_to_buffer()
+
+2012-06-24 - xxxxxxx - lavu 51.62.100 - version.h
+  version moved from avutil.h to version.h
 
 2012-04-11 - xxxxxxx - lavu 51.58.100 - error.h
   Add av_make_error_string() and av_err2str() utilities to
@@ -37,6 +46,12 @@ API changes, most recent first:
 
 2012-03-26 - a67d9cf - lavfi 2.66.100
   Add avfilter_fill_frame_from_{audio_,}buffer_ref() functions.
+
+2012-06-22 - xxxxxxx - lavu 51.34.0
+  Add av_usleep()
+
+2012-06-20 - ae0a301 - lavu 51.33.0
+  Move av_gettime() to libavutil, add libavutil/time.h
 
 2012-xx-xx - xxxxxxx - lavr 0.0.3
   Add a parameter to avresample_build_matrix() for Dolby/DPLII downmixing.

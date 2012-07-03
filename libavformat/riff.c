@@ -308,6 +308,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_FLIC,         MKTAG('A', 'F', 'L', 'C') },
     { CODEC_ID_EXR,          MKTAG('e', 'x', 'r', ' ') },
     { CODEC_ID_MSS1,         MKTAG('M', 'S', 'S', '1') },
+    { CODEC_ID_MSA1,         MKTAG('M', 'S', 'A', '1') },
     { CODEC_ID_NONE,         0 }
 };
 
@@ -596,7 +597,9 @@ int ff_get_wav_header(AVIOContext *pb, AVCodecContext *codec, int size)
         cbSize = FFMIN(size, cbSize);
         if (cbSize >= 22 && id == 0xfffe) { /* WAVEFORMATEXTENSIBLE */
             ff_asf_guid subformat;
-            codec->bits_per_coded_sample = avio_rl16(pb);
+            int bps = avio_rl16(pb);
+            if (bps)
+                codec->bits_per_coded_sample = bps;
             codec->channel_layout = avio_rl32(pb); /* dwChannelMask */
             ff_get_guid(pb, &subformat);
             if (!memcmp(subformat + 4, (const uint8_t[]){FF_MEDIASUBTYPE_BASE_GUID}, 12)) {

@@ -207,13 +207,7 @@ static const AVOption drawtext_options[]= {
 {NULL},
 };
 
-static const AVClass drawtext_class = {
-    .class_name = "drawtext",
-    .item_name  = av_default_item_name,
-    .option     = drawtext_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(drawtext);
 
 #undef __FTERRORS_H__
 #define FT_ERROR_START_LIST {
@@ -385,7 +379,7 @@ static int load_font(AVFilterContext *ctx)
     return err;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     int err;
     DrawTextContext *dtext = ctx->priv;
@@ -394,7 +388,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     dtext->class = &drawtext_class;
     av_opt_set_defaults(dtext);
 
-    if ((err = (av_set_options_string(dtext, args, "=", ":"))) < 0) {
+    if ((err = av_set_options_string(dtext, args, "=", ":")) < 0) {
         av_log(ctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
         return err;
     }
@@ -517,16 +511,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_expr_free(dtext->x_pexpr); dtext->x_pexpr = NULL;
     av_expr_free(dtext->y_pexpr); dtext->y_pexpr = NULL;
     av_expr_free(dtext->draw_pexpr); dtext->draw_pexpr = NULL;
-
-    av_freep(&dtext->boxcolor_string);
-    av_freep(&dtext->expanded_text);
-    av_freep(&dtext->fontcolor_string);
-    av_freep(&dtext->fontfile);
-    av_freep(&dtext->shadowcolor_string);
-    av_freep(&dtext->text);
-    av_freep(&dtext->x_expr);
-    av_freep(&dtext->y_expr);
-    av_freep(&dtext->draw_expr);
+    av_opt_free(dtext);
 
     av_freep(&dtext->positions);
     dtext->nb_positions = 0;
@@ -589,7 +574,7 @@ static int command(AVFilterContext *ctx, const char *cmd, const char *arg, char 
         int ret;
         uninit(ctx);
         dtext->reinit = 1;
-        if ((ret = init(ctx, arg, NULL)) < 0)
+        if ((ret = init(ctx, arg)) < 0)
             return ret;
         return config_input(ctx->inputs[0]);
     }

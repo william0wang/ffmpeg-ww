@@ -48,7 +48,7 @@ typedef struct {
     double var_values[VAR_VARS_NB];
 } SetTBContext;
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     SetTBContext *settb = ctx->priv;
     av_strlcpy(settb->tb_expr, "intb", sizeof(settb->tb_expr));
@@ -88,7 +88,7 @@ static int config_output_props(AVFilterLink *outlink)
     }
 
     outlink->time_base = time_base;
-    av_log(outlink->src, AV_LOG_INFO, "tb:%d/%d -> tb:%d/%d\n",
+    av_log(outlink->src, AV_LOG_VERBOSE, "tb:%d/%d -> tb:%d/%d\n",
            inlink ->time_base.num, inlink ->time_base.den,
            outlink->time_base.num, outlink->time_base.den);
 

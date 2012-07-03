@@ -23,11 +23,13 @@
  * Audio silence detector
  */
 
+#include "libavutil/audioconvert.h"
 #include "libavutil/opt.h"
 #include "libavutil/timestamp.h"
 #include "audio.h"
 #include "formats.h"
 #include "avfilter.h"
+#include "internal.h"
 
 typedef struct {
     const AVClass *class;
@@ -48,15 +50,9 @@ static const AVOption silencedetect_options[] = {
     { NULL },
 };
 
-static const AVClass silencedetect_class = {
-    .class_name = "silencedetect",
-    .item_name  = av_default_item_name,
-    .option     = silencedetect_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-    .category   = AV_CLASS_CATEGORY_FILTER,
-};
+AVFILTER_DEFINE_CLASS(silencedetect);
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     int ret;
     char *tail;

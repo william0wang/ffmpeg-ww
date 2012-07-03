@@ -199,6 +199,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (QCP, qcp);
     REGISTER_DEMUXER  (R3D, r3d);
     REGISTER_MUXDEMUX (RAWVIDEO, rawvideo);
+    REGISTER_DEMUXER  (REALTEXT, realtext);
     REGISTER_DEMUXER  (RL2, rl2);
     REGISTER_MUXDEMUX (RM, rm);
     REGISTER_MUXDEMUX (ROQ, roq);
@@ -206,6 +207,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (RSO, rso);
     REGISTER_MUXDEMUX (RTP, rtp);
     REGISTER_MUXDEMUX (RTSP, rtsp);
+    REGISTER_DEMUXER  (SAMI, sami);
     REGISTER_MUXDEMUX (SAP, sap);
     REGISTER_DEMUXER  (SBG, sbg);
     REGISTER_DEMUXER  (SDP, sdp);
@@ -215,6 +217,7 @@ void av_register_all(void)
 #endif
     REGISTER_DEMUXER  (SEGAFILM, segafilm);
     REGISTER_MUXER    (SEGMENT, segment);
+    REGISTER_MUXER    (SEGMENT, stream_segment);
     REGISTER_DEMUXER  (SHORTEN, shorten);
     REGISTER_DEMUXER  (SIFF, siff);
     REGISTER_DEMUXER  (SMACKER, smacker);

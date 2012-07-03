@@ -53,7 +53,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     BlackFrameContext *blackframe = ctx->priv;
 
@@ -66,7 +66,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     if (args)
         sscanf(args, "%u:%u", &blackframe->bamount, &blackframe->bthresh);
 
-    av_log(ctx, AV_LOG_INFO, "bamount:%u bthresh:%u\n",
+    av_log(ctx, AV_LOG_VERBOSE, "bamount:%u bthresh:%u\n",
            blackframe->bamount, blackframe->bthresh);
 
     if (blackframe->bamount > 100 || blackframe->bthresh > 255) {
