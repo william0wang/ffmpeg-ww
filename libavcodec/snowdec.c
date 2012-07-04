@@ -365,7 +365,12 @@ static int decode_header(SnowContext *s){
 
 static av_cold int decode_init(AVCodecContext *avctx)
 {
-    ff_snow_common_init(avctx);
+    int ret;
+
+    if ((ret = ff_snow_common_init(avctx)) < 0) {
+        ff_snow_common_end(avctx->priv_data);
+        return ret;
+    }
 
     return 0;
 }
@@ -401,7 +406,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
     s->current_picture.pict_type= AV_PICTURE_TYPE_I; //FIXME I vs. P
     if(decode_header(s)<0)
         return -1;
-    ff_snow_common_init_after_header(avctx);
+    if ((res=ff_snow_common_init_after_header(avctx)) < 0)
+        return res;
 
     // realloc slice buffer for the case that spatial_decomposition_count changed
     ff_slice_buffer_destroy(&s->sb);
