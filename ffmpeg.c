@@ -1077,7 +1077,7 @@ static int configure_input_audio_filter(FilterGraph *fg, InputFilter *ifilter,
 
     snprintf(args, sizeof(args), "time_base=%d/%d:sample_rate=%d:sample_fmt=%s"
              ":channel_layout=0x%"PRIx64,
-             ist->st->time_base.num, ist->st->time_base.den,
+             1, ist->st->codec->sample_rate,
              ist->st->codec->sample_rate,
              av_get_sample_fmt_name(ist->st->codec->sample_fmt),
              ist->st->codec->channel_layout);
@@ -1570,10 +1570,10 @@ static void do_audio_out(AVFormatContext *s, OutputStream *ost,
     av_init_packet(&pkt);
     pkt.data = NULL;
     pkt.size = 0;
-#if 0
+
     if (!check_recording_time(ost))
         return;
-#endif
+
     if (frame->pts == AV_NOPTS_VALUE || audio_sync_method < 0)
         frame->pts = ost->sync_opts;
     ost->sync_opts = frame->pts + frame->nb_samples;
@@ -1681,6 +1681,8 @@ static void do_subtitle_out(AVFormatContext *s,
 
     for (i = 0; i < nb; i++) {
         ost->sync_opts = av_rescale_q(pts, ist->st->time_base, enc->time_base);
+        if (!check_recording_time(ost))
+            return;
 
         sub->pts = av_rescale_q(pts, ist->st->time_base, AV_TIME_BASE_Q);
         // start_display_time is required to be 0
@@ -1786,6 +1788,9 @@ duplicate_frame:
     pkt.size = 0;
 
     in_picture->pts = ost->sync_opts;
+
+    if (!check_recording_time(ost))
+        return;
 
     if (s->oformat->flags & AVFMT_RAWPICTURE &&
         enc->codec->id == CODEC_ID_RAWVIDEO) {
@@ -2242,13 +2247,6 @@ static int check_output_constraints(InputStream *ist, OutputStream *ost)
     if (of->start_time && ist->pts < of->start_time)
         return 0;
 
-    if (of->recording_time != INT64_MAX &&
-        av_compare_ts(ist->pts, AV_TIME_BASE_Q, of->recording_time + of->start_time,
-                      (AVRational){ 1, 1000000 }) >= 0) {
-        ost->is_past_recording_time = 1;
-        return 0;
-    }
-
     return 1;
 }
 
@@ -2264,6 +2262,12 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
     if ((!ost->frame_number && !(pkt->flags & AV_PKT_FLAG_KEY)) &&
         !ost->copy_initial_nonkeyframes)
         return;
+
+    if (of->recording_time != INT64_MAX &&
+        ist->pts >= of->recording_time + of->start_time) {
+        ost->is_past_recording_time = 1;
+        return;
+    }
 
     /* force the input stream PTS */
     if (ost->st->codec->codec_type == AVMEDIA_TYPE_AUDIO)
@@ -2447,6 +2451,10 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
             }
     }
 
+    if (decoded_frame->pts != AV_NOPTS_VALUE)
+        decoded_frame->pts = av_rescale_q(decoded_frame->pts,
+                                          ist->st->time_base,
+                                          (AVRational){1, ist->st->codec->sample_rate});
     for (i = 0; i < ist->nb_filters; i++)
         av_buffersrc_add_frame(ist->filters[i]->filter, decoded_frame, 0);
 
@@ -2800,12 +2808,17 @@ static void parse_forced_key_frames(char *kf, OutputStream *ost,
         av_log(NULL, AV_LOG_FATAL, "Could not allocate forced key frames array.\n");
         exit_program(1);
     }
+
     p = kf;
     for (i = 0; i < n; i++) {
         char *next = strchr(p, ',');
-        if (next) *next++ = 0;
+
+        if (next)
+            *next++ = 0;
+
         t = parse_time_or_die("force_key_frames", p, 1);
         ost->forced_kf_pts[i] = av_rescale_q(t, AV_TIME_BASE_Q, avctx->time_base);
+
         p = next;
     }
 }

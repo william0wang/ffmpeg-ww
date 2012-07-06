@@ -4,7 +4,8 @@ NAME    = avdevice
 FFLIBS  = avformat avcodec avutil
 FFLIBS-$(CONFIG_LAVFI_INDEV) += avfilter
 
-HEADERS = avdevice.h
+HEADERS = avdevice.h                                                    \
+          version.h                                                     \
 
 OBJS    = alldevices.o                                                  \
           avdevice.o                                                    \
@@ -20,6 +21,7 @@ OBJS-$(CONFIG_DSHOW_INDEV)               += dshow.o dshow_enummediatypes.o \
                                             dshow_pin.o dshow_common.o
 OBJS-$(CONFIG_DV1394_INDEV)              += dv1394.o
 OBJS-$(CONFIG_FBDEV_INDEV)               += fbdev.o
+OBJS-$(CONFIG_IEC61883_INDEV)            += iec61883.o
 OBJS-$(CONFIG_JACK_INDEV)                += jack_audio.o timefilter.o
 OBJS-$(CONFIG_LAVFI_INDEV)               += lavfi.o
 OBJS-$(CONFIG_OPENAL_INDEV)              += openal-dec.o

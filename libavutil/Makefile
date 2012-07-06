@@ -11,6 +11,7 @@ HEADERS = adler32.h                                                     \
           avstring.h                                                    \
           avutil.h                                                      \
           base64.h                                                      \
+          blowfish.h                                                    \
           bprint.h                                                      \
           bswap.h                                                       \
           common.h                                                      \
@@ -43,6 +44,7 @@ HEADERS = adler32.h                                                     \
           timecode.h                                                    \
           timestamp.h                                                   \
           version.h                                                     \
+          xtea.h                                                        \
 
 ARCH_HEADERS = bswap.h                                                  \
                intmath.h                                                \
@@ -57,6 +59,7 @@ OBJS = adler32.o                                                        \
        audioconvert.o                                                   \
        avstring.o                                                       \
        base64.o                                                         \
+       blowfish.o                                                       \
        bprint.o                                                         \
        cpu.o                                                            \
        crc.o                                                            \
@@ -89,11 +92,13 @@ OBJS = adler32.o                                                        \
        timecode.o                                                       \
        tree.o                                                           \
        utils.o                                                          \
+       xtea.o                                                           \
 
 TESTPROGS = adler32                                                     \
             aes                                                         \
             avstring                                                    \
             base64                                                      \
+            blowfish                                                    \
             bprint                                                      \
             cpu                                                         \
             crc                                                         \
@@ -112,6 +117,7 @@ TESTPROGS = adler32                                                     \
             rational                                                    \
             sha                                                         \
             tree                                                        \
+            xtea                                                        \
 
 TESTPROGS-$(HAVE_LZO1X_999_COMPRESS) += lzo
 
