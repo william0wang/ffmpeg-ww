@@ -26,6 +26,7 @@
  */
 
 #include "libavutil/imgutils.h"
+#include "libavutil/avassert.h"
 #include "avfilter.h"
 #include "internal.h"
 
@@ -80,7 +81,7 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     TInterlaceContext *tinterlace = ctx->priv;
     int i;
@@ -338,7 +339,7 @@ static int poll_frame(AVFilterLink *outlink)
             return ret;
         val = ff_poll_frame(inlink);
     }
-    assert(tinterlace->next);
+    av_assert0(tinterlace->next);
 
     return val;
 }

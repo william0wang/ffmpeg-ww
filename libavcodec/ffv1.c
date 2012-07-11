@@ -913,14 +913,10 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     if(s->version >= 2 && avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
         av_log(avctx, AV_LOG_ERROR, "Version 2 needed for requested features but version 2 is experimental and not enabled\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
-    s->ac= avctx->coder_type ? 2:0;
-
-    if(s->ac>1)
-        for(i=1; i<256; i++)
-            s->state_transition[i]=ver2_state[i];
+    s->ac= avctx->coder_type > 0 ? 2 : 0;
 
     s->plane_count=3;
     switch(avctx->pix_fmt){
@@ -946,11 +942,15 @@ static av_cold int encode_init(AVCodecContext *avctx)
         }
         if(s->bits_per_raw_sample <=8){
             av_log(avctx, AV_LOG_ERROR, "bits_per_raw_sample invalid\n");
-            return -1;
+            return AVERROR_INVALIDDATA;
+        }
+        if(!s->ac && avctx->coder_type == -1) {
+            av_log(avctx, AV_LOG_INFO, "bits_per_raw_sample > 8, forcing coder 1\n");
+            s->ac = 2;
         }
         if(!s->ac){
             av_log(avctx, AV_LOG_ERROR, "bits_per_raw_sample of more than 8 needs -coder 1 currently\n");
-            return -1;
+            return AVERROR_INVALIDDATA;
         }
         s->version= FFMAX(s->version, 1);
     case PIX_FMT_GRAY8:
@@ -979,7 +979,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "format not supported\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
     if (s->transparency) {
         av_log(avctx, AV_LOG_WARNING, "Storing alpha plane, this will require a recent FFV1 decoder to playback!\n");
@@ -988,6 +988,10 @@ static av_cold int encode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Invalid context model %d, valid values are 0 and 1\n", avctx->context_model);
         return AVERROR(EINVAL);
     }
+
+    if(s->ac>1)
+        for(i=1; i<256; i++)
+            s->state_transition[i]=ver2_state[i];
 
     for(i=0; i<256; i++){
         s->quant_table_count=2;
@@ -1066,7 +1070,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
                             s->rc_stat2[i][j][k][m]= strtol(p, &next, 0);
                             if(next==p){
                                 av_log(avctx, AV_LOG_ERROR, "2Pass file invalid at %d %d %d %d [%s]\n", i,j,k,m,p);
-                                return -1;
+                                return AVERROR_INVALIDDATA;
                             }
                             p=next;
                         }
@@ -1076,7 +1080,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
             gob_count= strtol(p, &next, 0);
             if(next==p || gob_count <0){
                 av_log(avctx, AV_LOG_ERROR, "2Pass file invalid\n");
-                return -1;
+                return AVERROR_INVALIDDATA;
             }
             p=next;
             while(*p=='\n' || *p==' ') p++;
@@ -2058,6 +2062,11 @@ static const AVClass class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
+static const AVCodecDefault ffv1_defaults[] = {
+    { "coder",                "-1" },
+    { NULL },
+};
+
 AVCodec ff_ffv1_encoder = {
     .name           = "ffv1",
     .type           = AVMEDIA_TYPE_VIDEO,
@@ -2067,6 +2076,7 @@ AVCodec ff_ffv1_encoder = {
     .encode2        = encode_frame,
     .close          = common_end,
     .capabilities   = CODEC_CAP_SLICE_THREADS,
+    .defaults       = ffv1_defaults,
     .pix_fmts       = (const enum PixelFormat[]){
         PIX_FMT_YUV420P, PIX_FMT_YUVA420P, PIX_FMT_YUVA422P, PIX_FMT_YUV444P,
         PIX_FMT_YUVA444P, PIX_FMT_YUV440P, PIX_FMT_YUV422P, PIX_FMT_YUV411P,

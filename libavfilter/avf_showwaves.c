@@ -57,7 +57,7 @@ static const AVOption showwaves_options[] = {
 
 AVFILTER_DEFINE_CLASS(showwaves);
 
-static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     ShowWavesContext *showwaves = ctx->priv;
     int err;
@@ -180,7 +180,7 @@ static int request_frame(AVFilterLink *outlink)
 
 #define MAX_INT16 ((1<<15) -1)
 
-static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
+static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -225,6 +225,7 @@ static void filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     }
 
     avfilter_unref_buffer(insamples);
+    return 0;
 }
 
 AVFilter avfilter_avf_showwaves = {
