@@ -1256,6 +1256,7 @@ HAVE_LIST="
     posix_memalign
     pthread_cancel
     rdtsc
+    rint
     round
     roundf
     rweflags
@@ -1467,6 +1468,7 @@ eac3_encoder_select="mdct ac3dsp"
 eamad_decoder_select="aandct"
 eatgq_decoder_select="aandct"
 eatqi_decoder_select="aandct"
+exr_decoder_select="zlib"
 ffv1_decoder_select="golomb"
 flac_decoder_select="golomb"
 flac_encoder_select="golomb lpc"
@@ -3286,6 +3288,7 @@ check_mathfunc log2
 check_mathfunc log2f
 check_mathfunc lrint
 check_mathfunc lrintf
+check_mathfunc rint
 check_mathfunc round
 check_mathfunc roundf
 check_mathfunc trunc
