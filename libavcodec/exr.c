@@ -34,6 +34,7 @@
 
 #include "avcodec.h"
 #include "bytestream.h"
+#include "mathops.h"
 #include "libavutil/imgutils.h"
 
 enum ExrCompr {
@@ -183,6 +184,42 @@ static void reorder_pixels(uint8_t *src, uint8_t *dst, int size)
     }
 }
 
+static int rle_uncompress(const uint8_t *src, int ssize, uint8_t *dst, int dsize)
+{
+    int8_t *d = (int8_t *)dst;
+    int8_t *s = (int8_t *)src;
+    int8_t *dend = d + dsize;
+    int count;
+
+    while (ssize > 0) {
+        count = *s++;
+
+        if (count < 0) {
+            count = -count;
+
+            if ((dsize -= count    ) < 0 ||
+                (ssize -= count + 1) < 0)
+                return -1;
+
+            while (count--)
+                *d++ = *s++;
+        } else {
+            count++;
+
+            if ((dsize -= count) < 0 ||
+                (ssize -= 2    ) < 0)
+                return -1;
+
+            while (count--)
+                *d++ = *s;
+
+            s++;
+        }
+    }
+
+    return dend != d;
+}
+
 static int decode_frame(AVCodecContext *avctx,
                         void *data,
                         int *data_size,
@@ -206,6 +243,8 @@ static int decode_frame(AVCodecContext *avctx,
     unsigned int ymax   = ~0;
     unsigned int xdelta = ~0;
 
+    int out_line_size;
+    int bxmin, axmax;
     int scan_lines_per_block;
     unsigned long scan_line_size;
     unsigned long uncompressed_size;
@@ -364,10 +403,10 @@ static int decode_frame(AVCodecContext *avctx,
             s->compr = *buf;
             switch (s->compr) {
             case EXR_RAW:
+            case EXR_RLE:
             case EXR_ZIP1:
             case EXR_ZIP16:
                 break;
-            case EXR_RLE:
             case EXR_PIZ:
             case EXR_B44:
             default:
@@ -429,6 +468,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     switch (s->compr) {
     case EXR_RAW:
+    case EXR_RLE:
     case EXR_ZIP1:
         scan_lines_per_block = 1;
         break;
@@ -452,6 +492,9 @@ static int decode_frame(AVCodecContext *avctx,
         avcodec_set_dimensions(avctx, w, h);
     }
 
+    bxmin = xmin * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
+    axmax = (avctx->width - (xmax + 1)) * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
+    out_line_size = avctx->width * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
     scan_line_size = xdelta * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components * FFMAX(2 * s->bits_per_color_id, 1);
     uncompressed_size = scan_line_size * scan_lines_per_block;
 
@@ -472,7 +515,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     // Zero out the start if ymin is not 0
     for (y = 0; y < ymin; y++) {
-        memset(ptr, 0, avctx->width * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components);
+        memset(ptr, 0, out_line_size);
         ptr += stride;
     }
 
@@ -493,7 +536,7 @@ static int decode_frame(AVCodecContext *avctx,
                 av_log(avctx, AV_LOG_WARNING, "Line offset for line %d is out of reach setting it to black\n", y);
                 for (i = 0; i < scan_lines_per_block && y + i <= ymax; i++, ptr += stride) {
                     ptr_x = (uint16_t *)ptr;
-                    memset(ptr_x, 0, avctx->width * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components);
+                    memset(ptr_x, 0, out_line_size);
                 }
             } else {
                 const uint8_t *red_channel_buffer, *green_channel_buffer, *blue_channel_buffer, *alpha_channel_buffer = 0;
@@ -503,7 +546,14 @@ static int decode_frame(AVCodecContext *avctx,
                         av_log(avctx, AV_LOG_ERROR, "error during zlib decompression\n");
                         return AVERROR(EINVAL);
                     }
+                } else if (s->compr == EXR_RLE && data_size < uncompressed_size) {
+                    if (rle_uncompress(avpkt->data + line_offset, data_size, s->tmp, uncompressed_size)) {
+                        av_log(avctx, AV_LOG_ERROR, "error during rle decompression\n");
+                        return AVERROR(EINVAL);
+                    }
+                }
 
+                if (s->compr != EXR_RAW && data_size < uncompressed_size) {
                     predictor(s->tmp, uncompressed_size);
                     reorder_pixels(s->tmp, s->uncompressed_data, uncompressed_size);
 
@@ -532,7 +582,7 @@ static int decode_frame(AVCodecContext *avctx,
                     ptr_x = (uint16_t *)ptr;
 
                     // Zero out the start if xmin is not 0
-                    memset(ptr_x, 0, xmin * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components);
+                    memset(ptr_x, 0, bxmin);
                     ptr_x += xmin * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
                     if (s->bits_per_color_id == 2) {
                         // 32-bit
@@ -555,7 +605,7 @@ static int decode_frame(AVCodecContext *avctx,
                     }
 
                     // Zero out the end if xmax+1 is not w
-                    memset(ptr_x, 0, (avctx->width - (xmax + 1)) * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components);
+                    memset(ptr_x, 0, axmax);
 
                     red_channel_buffer   += scan_line_size;
                     green_channel_buffer += scan_line_size;
@@ -569,7 +619,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     // Zero out the end if ymax+1 is not h
     for (y = ymax + 1; y < avctx->height; y++) {
-        memset(ptr, 0, avctx->width * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components);
+        memset(ptr, 0, out_line_size);
         ptr += stride;
     }
 
