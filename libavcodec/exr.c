@@ -35,6 +35,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "mathops.h"
+#include "thread.h"
 #include "libavutil/imgutils.h"
 
 enum ExrCompr {
@@ -51,13 +52,13 @@ typedef struct EXRContext {
     AVFrame picture;
     int compr;
     int bits_per_color_id;
-    int8_t channel_offsets[4]; // 0 = red, 1 = green, 2 = blue and 3 = alpha
+    int channel_offsets[4]; // 0 = red, 1 = green, 2 = blue and 3 = alpha
 
     uint8_t *uncompressed_data;
     int uncompressed_size;
 
     uint8_t *tmp;
-    int tmp_size;;
+    int tmp_size;
 } EXRContext;
 
 /**
@@ -290,12 +291,14 @@ static int decode_frame(AVCodecContext *avctx,
 
                 if (!strcmp(buf, "R"))
                     channel_index = 0;
-                if (!strcmp(buf, "G"))
+                else if (!strcmp(buf, "G"))
                     channel_index = 1;
-                if (!strcmp(buf, "B"))
+                else if (!strcmp(buf, "B"))
                     channel_index = 2;
-                if (!strcmp(buf, "A"))
+                else if (!strcmp(buf, "A"))
                     channel_index = 3;
+                else
+                    av_log(avctx, AV_LOG_WARNING, "Unsupported channel %.256s\n", buf);
 
                 while (bytestream_get_byte(&buf) && buf < channel_list_end)
                     continue; /* skip */
@@ -478,7 +481,7 @@ static int decode_frame(AVCodecContext *avctx,
     }
 
     if (s->picture.data[0])
-        avctx->release_buffer(avctx, &s->picture);
+        ff_thread_release_buffer(avctx, &s->picture);
     if (av_image_check_size(w, h, 0, avctx))
         return AVERROR_INVALIDDATA;
 
@@ -495,7 +498,7 @@ static int decode_frame(AVCodecContext *avctx,
     bxmin = xmin * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
     axmax = (avctx->width - (xmax + 1)) * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
     out_line_size = avctx->width * 2 * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components;
-    scan_line_size = xdelta * av_pix_fmt_descriptors[avctx->pix_fmt].nb_components * FFMAX(2 * s->bits_per_color_id, 1);
+    scan_line_size = xdelta * current_channel_offset;
     uncompressed_size = scan_line_size * scan_lines_per_block;
 
     if (s->compr != EXR_RAW) {
@@ -505,7 +508,7 @@ static int decode_frame(AVCodecContext *avctx,
             return AVERROR(ENOMEM);
     }
 
-    if ((ret = avctx->get_buffer(avctx, p)) < 0) {
+    if ((ret = ff_thread_get_buffer(avctx, p)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -542,7 +545,10 @@ static int decode_frame(AVCodecContext *avctx,
                 const uint8_t *red_channel_buffer, *green_channel_buffer, *blue_channel_buffer, *alpha_channel_buffer = 0;
 
                 if ((s->compr == EXR_ZIP1 || s->compr == EXR_ZIP16) && data_size < uncompressed_size) {
-                    if (uncompress(s->tmp, &uncompressed_size, avpkt->data + line_offset, data_size) != Z_OK) {
+                    unsigned long dest_len = uncompressed_size;
+
+                    if (uncompress(s->tmp, &dest_len, avpkt->data + line_offset, data_size) != Z_OK ||
+                        dest_len != uncompressed_size) {
                         av_log(avctx, AV_LOG_ERROR, "error during zlib decompression\n");
                         return AVERROR(EINVAL);
                     }
@@ -660,6 +666,6 @@ AVCodec ff_exr_decoder = {
     .init               = decode_init,
     .close              = decode_end,
     .decode             = decode_frame,
-    .capabilities       = CODEC_CAP_DR1,
+    .capabilities       = CODEC_CAP_DR1 | CODEC_CAP_FRAME_THREADS,
     .long_name          = NULL_IF_CONFIG_SMALL("OpenEXR image"),
 };

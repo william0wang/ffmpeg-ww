@@ -48,7 +48,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_H263P,        MKTAG('H', '2', '6', '3') },
     { CODEC_ID_H263I,        MKTAG('I', '2', '6', '3') }, /* intel h263 */
     { CODEC_ID_H261,         MKTAG('H', '2', '6', '1') },
-    { CODEC_ID_H263P,        MKTAG('U', '2', '6', '3') },
+    { CODEC_ID_H263,         MKTAG('U', '2', '6', '3') },
     { CODEC_ID_H263P,        MKTAG('v', 'i', 'v', '1') },
     { CODEC_ID_MPEG4,        MKTAG('F', 'M', 'P', '4') },
     { CODEC_ID_MPEG4,        MKTAG('D', 'I', 'V', 'X') },
@@ -91,6 +91,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_MPEG4,        MKTAG('X', 'V', 'I', 'X') },
     { CODEC_ID_MPEG4,        MKTAG('D', 'r', 'e', 'X') },
     { CODEC_ID_MPEG4,        MKTAG('Q', 'M', 'P', '4') }, /* QNAP Systems */
+    { CODEC_ID_MPEG4,        MKTAG('P', 'L', 'V', '1') }, /* Pelco DVR MPEG-4 */
     { CODEC_ID_MSMPEG4V3,    MKTAG('M', 'P', '4', '3') },
     { CODEC_ID_MSMPEG4V3,    MKTAG('D', 'I', 'V', '3') },
     { CODEC_ID_MSMPEG4V3,    MKTAG('M', 'P', 'G', '3') },
@@ -119,6 +120,8 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_DVVIDEO,      MKTAG('d', 'v', 'c', ' ') },
     { CODEC_ID_DVVIDEO,      MKTAG('d', 'v', 'c', 's') },
     { CODEC_ID_DVVIDEO,      MKTAG('d', 'v', 'h', '1') },
+    { CODEC_ID_DVVIDEO,      MKTAG('d', 'v', 'i', 's') },
+    { CODEC_ID_DVVIDEO,      MKTAG('p', 'd', 'v', 'c') },
     { CODEC_ID_DVVIDEO,      MKTAG('S', 'L', '2', '5') },
     { CODEC_ID_DVVIDEO,      MKTAG('S', 'L', 'D', 'V') },
     { CODEC_ID_MPEG1VIDEO,   MKTAG('m', 'p', 'g', '1') },
@@ -311,6 +314,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_MSS1,         MKTAG('M', 'S', 'S', '1') },
     { CODEC_ID_MSA1,         MKTAG('M', 'S', 'A', '1') },
     { CODEC_ID_TSCC2,        MKTAG('T', 'S', 'C', '2') },
+    { CODEC_ID_MTS2,         MKTAG('M', 'T', 'S', '2') },
     { CODEC_ID_NONE,         0 }
 };
 

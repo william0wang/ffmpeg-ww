@@ -1645,6 +1645,7 @@ static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream)
         print_int("nb_samples",         frame->nb_samples);
         break;
     }
+    show_tags(av_frame_get_metadata(frame));
 
     print_section_footer("frame");
 
@@ -1660,14 +1661,16 @@ static av_always_inline int get_decoded_frame(AVFormatContext *fmt_ctx,
     int ret = 0;
 
     *got_frame = 0;
-    switch (dec_ctx->codec_type) {
-    case AVMEDIA_TYPE_VIDEO:
-        ret = avcodec_decode_video2(dec_ctx, frame, got_frame, pkt);
-        break;
+    if (dec_ctx->codec) {
+        switch (dec_ctx->codec_type) {
+        case AVMEDIA_TYPE_VIDEO:
+            ret = avcodec_decode_video2(dec_ctx, frame, got_frame, pkt);
+            break;
 
-    case AVMEDIA_TYPE_AUDIO:
-        ret = avcodec_decode_audio4(dec_ctx, frame, got_frame, pkt);
-        break;
+        case AVMEDIA_TYPE_AUDIO:
+            ret = avcodec_decode_audio4(dec_ctx, frame, got_frame, pkt);
+            break;
+        }
     }
 
     return ret;

@@ -1106,7 +1106,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
     if(s->version>1){
         for(s->num_v_slices=2; s->num_v_slices<9; s->num_v_slices++){
             for(s->num_h_slices=s->num_v_slices; s->num_h_slices<2*s->num_v_slices; s->num_h_slices++){
-                if(avctx->slices == s->num_h_slices * s->num_v_slices && avctx->slices <= 64)
+                if(avctx->slices == s->num_h_slices * s->num_v_slices && avctx->slices <= 64 || !avctx->slices)
                     goto slices_ok;
             }
         }
@@ -2015,7 +2015,15 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
         if(f->ec){
             unsigned crc = av_crc(av_crc_get_table(AV_CRC_32_IEEE), 0, buf_p, v);
             if(crc){
-                av_log(f->avctx, AV_LOG_ERROR, "CRC mismatch %X!\n", crc);
+                int64_t ts = avpkt->pts != AV_NOPTS_VALUE ? avpkt->pts : avpkt->dts;
+                av_log(f->avctx, AV_LOG_ERROR, "CRC mismatch %X!", crc);
+                if(ts != AV_NOPTS_VALUE && avctx->pkt_timebase.num) {
+                    av_log(f->avctx, AV_LOG_ERROR, "at %f seconds\n",ts*av_q2d(avctx->pkt_timebase));
+                } else if(ts != AV_NOPTS_VALUE) {
+                    av_log(f->avctx, AV_LOG_ERROR, "at %"PRId64"\n", ts);
+                } else {
+                    av_log(f->avctx, AV_LOG_ERROR, "\n");
+                }
             }
         }
 

@@ -260,6 +260,7 @@ enum CodecID {
     CODEC_ID_MSS1,
     CODEC_ID_MSA1,
     CODEC_ID_TSCC2,
+    CODEC_ID_MTS2,
     CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
     CODEC_ID_ESCAPE130  = MKBETAG('E','1','3','0'),
     CODEC_ID_EXR        = MKBETAG('0','E','X','R'),
@@ -1312,6 +1313,15 @@ typedef struct AVFrame {
      * - decoding: Read by user.
      */
     int64_t pkt_duration;
+
+    /**
+     * metadata.
+     * Code outside libavcodec should access this field using:
+     * av_frame_get_metadata(frame)
+     * - encoding: Set by user.
+     * - decoding: Set by libavcodec.
+     */
+    AVDictionary *metadata;
 } AVFrame;
 
 /**
@@ -1320,15 +1330,17 @@ typedef struct AVFrame {
  * they should not be accessed directly outside libavcodec.
  */
 int64_t av_frame_get_best_effort_timestamp(const AVFrame *frame);
-int64_t av_frame_get_pkt_duration         (const AVFrame *frame);
-int64_t av_frame_get_pkt_pos              (const AVFrame *frame);
-int64_t av_frame_get_channel_layout       (const AVFrame *frame);
-int     av_frame_get_sample_rate          (const AVFrame *frame);
 void    av_frame_set_best_effort_timestamp(AVFrame *frame, int64_t val);
+int64_t av_frame_get_pkt_duration         (const AVFrame *frame);
 void    av_frame_set_pkt_duration         (AVFrame *frame, int64_t val);
+int64_t av_frame_get_pkt_pos              (const AVFrame *frame);
 void    av_frame_set_pkt_pos              (AVFrame *frame, int64_t val);
+int64_t av_frame_get_channel_layout       (const AVFrame *frame);
 void    av_frame_set_channel_layout       (AVFrame *frame, int64_t val);
+int     av_frame_get_sample_rate          (const AVFrame *frame);
 void    av_frame_set_sample_rate          (AVFrame *frame, int     val);
+AVDictionary *av_frame_get_metadata       (const AVFrame *frame);
+void          av_frame_set_metadata       (AVFrame *frame, AVDictionary *val);
 
 struct AVCodecInternal;
 
@@ -2947,6 +2959,15 @@ typedef struct AVCodecContext {
     uint64_t vbv_delay;
 
     /**
+     * Timebase in which pkt_dts/pts and AVPacket.dts/pts are.
+     * Code outside libavcodec should access this field using:
+     * avcodec_set_pkt_timebase(avctx)
+     * - encoding unused.
+     * - decodimg set by user
+     */
+    AVRational pkt_timebase;
+
+    /**
      * Current statistics for PTS correction.
      * - decoding: maintained and used by libavcodec, not intended to be used by user apps
      * - encoding: unused
@@ -2956,6 +2977,9 @@ typedef struct AVCodecContext {
     int64_t pts_correction_last_pts;       /// PTS of the last frame
     int64_t pts_correction_last_dts;       /// DTS of the last frame
 } AVCodecContext;
+
+AVRational av_codec_get_pkt_timebase         (const AVCodecContext *avctx);
+void       av_codec_set_pkt_timebase         (AVCodecContext *avctx, AVRational val);
 
 /**
  * AVProfile.
@@ -4389,7 +4413,10 @@ unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat pix_fmt);
 int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_pix_fmt,
                              int has_alpha);
 
+#if FF_API_FIND_BEST_PIX_FMT
 /**
+ * @deprecated use avcodec_find_best_pix_fmt2() instead.
+ *
  * Find the best pixel format to convert to given a certain source pixel
  * format.  When converting from one pixel format to another, information loss
  * may occur.  For example, when converting from RGB24 to GRAY, the color
@@ -4413,8 +4440,31 @@ int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_
  * @param[out] loss_ptr Combination of flags informing you what kind of losses will occur.
  * @return The best pixel format to convert to or -1 if none was found.
  */
+attribute_deprecated
 enum PixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum PixelFormat src_pix_fmt,
                               int has_alpha, int *loss_ptr);
+#endif /* FF_API_FIND_BEST_PIX_FMT */
+
+/**
+ * Find the best pixel format to convert to given a certain source pixel
+ * format.  When converting from one pixel format to another, information loss
+ * may occur.  For example, when converting from RGB24 to GRAY, the color
+ * information will be lost. Similarly, other losses occur when converting from
+ * some formats to other formats. avcodec_find_best_pix_fmt2() searches which of
+ * the given pixel formats should be used to suffer the least amount of loss.
+ * The pixel formats from which it chooses one, are determined by the
+ * pix_fmt_list parameter.
+ *
+ *
+ * @param[in] pix_fmt_list PIX_FMT_NONE terminated array of pixel formats to choose from
+ * @param[in] src_pix_fmt source pixel format
+ * @param[in] has_alpha Whether the source pixel format alpha channel is used.
+ * @param[out] loss_ptr Combination of flags informing you what kind of losses will occur.
+ * @return The best pixel format to convert to or -1 if none was found.
+ */
+enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_list,
+                                            enum PixelFormat src_pix_fmt,
+                                            int has_alpha, int *loss_ptr);
 
 /**
  * Find the best pixel format to convert to given a certain source pixel

@@ -128,7 +128,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (H261, h261);
     REGISTER_ENCDEC  (H263, h263);
     REGISTER_DECODER (H263I, h263i);
-    REGISTER_ENCODER (H263P, h263p);
+    REGISTER_ENCDEC  (H263P, h263p);
     REGISTER_DECODER (H264, h264);
     REGISTER_DECODER (H264_CRYSTALHD, h264_crystalhd);
     REGISTER_DECODER (H264_VDPAU, h264_vdpau);
@@ -174,6 +174,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (MSS1, mss1);
     REGISTER_ENCDEC  (MSVIDEO1, msvideo1);
     REGISTER_DECODER (MSZH, mszh);
+    REGISTER_DECODER (MTS2, mts2);
     REGISTER_DECODER (MXPEG, mxpeg);
     REGISTER_DECODER (NUV, nuv);
     REGISTER_DECODER (PAF_VIDEO, paf_video);
@@ -408,6 +409,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (DVDSUB, dvdsub);
     REGISTER_DECODER (JACOSUB, jacosub);
     REGISTER_DECODER (MICRODVD, microdvd);
+    REGISTER_DECODER (MOVTEXT, movtext);
     REGISTER_DECODER (PGSSUB, pgssub);
     REGISTER_DECODER (REALTEXT, realtext);
     REGISTER_DECODER (SAMI, sami);

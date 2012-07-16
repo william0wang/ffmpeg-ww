@@ -1190,6 +1190,7 @@ HAVE_LIST="
     clock_gettime
     closesocket
     cmov
+    CommandLineToArgvW
     cpuid
     dcbzl
     dev_bktr_ioctl_bt848_h
@@ -1255,6 +1256,7 @@ HAVE_LIST="
     nanosleep
     netinet_sctp_h
     PeekNamedPipe
+    pod2man
     poll_h
     posix_memalign
     pthread_cancel
@@ -1297,6 +1299,7 @@ HAVE_LIST="
     sys_time_h
     sys_videoio_h
     termios_h
+    texi2html
     threads
     trunc
     truncf
@@ -1784,7 +1787,7 @@ ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
 ffserver_extralibs='$ldl'
 
-doc_deps="texi2html"
+doc_deps_any="texi2html makeinfo pod2man"
 
 # tests
 
@@ -3179,7 +3182,8 @@ check_func nanosleep || { check_func nanosleep -lrt && add_extralibs -lrt; }
 check_func  clock_gettime || { check_func clock_gettime -lrt && add_extralibs -lrt; }
 check_func  fcntl
 check_func  fork
-check_func  getaddrinfo $network_extralibs
+check_func  getaddrinfo $network_extralibs ||
+    check_func_headers ws2tcpip.h getaddrinfo $network_extralibs
 check_func  gethrtime
 check_func  getopt
 check_func  getrusage
@@ -3204,6 +3208,7 @@ check_func_headers conio.h kbhit
 check_func_headers windows.h PeekNamedPipe
 check_func_headers io.h setmode
 check_func_headers lzo/lzo1x.h lzo1x_999_compress
+check_lib2 "windows.h shellapi.h" CommandLineToArgvW -lshell32
 check_lib2 "windows.h psapi.h" GetProcessMemoryInfo -lpsapi
 check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
@@ -3382,8 +3387,9 @@ else
 fi
 enabled sdl && add_cflags $sdl_cflags && add_extralibs $sdl_libs
 
-texi2html -version > /dev/null 2>&1 && enable texi2html || disable texi2html
+texi2html --help 2> /dev/null | grep -q 'init-file' && enable texi2html || disable texi2html
 makeinfo --version > /dev/null 2>&1 && enable makeinfo  || disable makeinfo
+pod2man --help > /dev/null 2>&1 && enable pod2man || disable pod2man
 
 check_header linux/fb.h
 check_header linux/videodev.h

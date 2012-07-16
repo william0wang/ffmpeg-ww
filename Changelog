@@ -18,6 +18,7 @@ version next:
 - RTSP listen mode
 - TechSmith Screen Codec 2 decoder
 - AAC encoding via libfdk-aac
+- Microsoft Expression Encoder Screen decoder
 - showwaves filter
 - LucasArts SMUSH playback support
 - SAMI demuxer and decoder
@@ -25,6 +26,9 @@ version next:
 - Heart Of Darkness PAF playback support
 - iec61883 device
 - asettb filter
+- new option: -progress
+- 3GPP Timed Text decoder
+- GeoTIFF decoder support
 
 
 version 0.11:
