@@ -36,6 +36,7 @@
 
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
+#include "libavutil/time.h"
 #include "libavcodec/avcodec.h"
 #include "avdevice.h"
 #include "libavformat/internal.h"
@@ -295,7 +296,7 @@ static const AVClass oss_demuxer_class = {
 
 AVInputFormat ff_oss_demuxer = {
     .name           = "oss",
-    .long_name      = NULL_IF_CONFIG_SMALL("Open Sound System capture"),
+    .long_name      = NULL_IF_CONFIG_SMALL("OSS (Open Sound System) capture"),
     .priv_data_size = sizeof(AudioData),
     .read_header    = audio_read_header,
     .read_packet    = audio_read_packet,
@@ -308,7 +309,7 @@ AVInputFormat ff_oss_demuxer = {
 #if CONFIG_OSS_OUTDEV
 AVOutputFormat ff_oss_muxer = {
     .name           = "oss",
-    .long_name      = NULL_IF_CONFIG_SMALL("Open Sound System playback"),
+    .long_name      = NULL_IF_CONFIG_SMALL("OSS (Open Sound System) playback"),
     .priv_data_size = sizeof(AudioData),
     /* XXX: we make the assumption that the soundcard accepts this format */
     /* XXX: find better solution with "preinit" method, needed also in

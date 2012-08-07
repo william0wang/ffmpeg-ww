@@ -37,6 +37,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/crc.h"
 #include "libavutil/opt.h"
+#include "libavutil/imgutils.h"
 
 #ifdef __INTEL_COMPILER
 #undef av_flatten
@@ -181,6 +182,7 @@ typedef struct FFV1Context{
     int flags;
     int picture_number;
     AVFrame picture;
+    AVFrame last_picture;
     int plane_count;
     int ac;                              ///< 1=range coder <-> 0=golomb rice
     int ac_byte_count;                   ///< number of bytes used for AC coding
@@ -196,6 +198,7 @@ typedef struct FFV1Context{
     int gob_count;
     int packed_at_lsb;
     int ec;
+    int slice_damaged;
     int key_frame_ok;
 
     int quant_table_count;
@@ -1364,6 +1367,8 @@ static av_cold int common_end(AVCodecContext *avctx){
 
     if (avctx->codec->decode && s->picture.data[0])
         avctx->release_buffer(avctx, &s->picture);
+    if (avctx->codec->decode && s->last_picture.data[0])
+        avctx->release_buffer(avctx, &s->last_picture);
 
     for(j=0; j<s->slice_count; j++){
         FFV1Context *fs= s->slice_context[j];
@@ -1605,8 +1610,10 @@ static int decode_slice(AVCodecContext *c, void *arg){
     if(f->version > 2){
         if(init_slice_state(f, fs) < 0)
             return AVERROR(ENOMEM);
-        if(decode_slice_header(f, fs) < 0)
+        if(decode_slice_header(f, fs) < 0) {
+            fs->slice_damaged = 1;
             return AVERROR_INVALIDDATA;
+        }
     }
     if(init_slice_state(f, fs) < 0)
         return AVERROR(ENOMEM);
@@ -1640,6 +1647,13 @@ static int decode_slice(AVCodecContext *c, void *arg){
             decode_plane(fs, p->data[3] + ps*x + y*p->linesize[3], width, height, p->linesize[3], 2);
     }else{
         decode_rgb_frame(fs, (uint32_t*)p->data[0] + ps*x + y*(p->linesize[0]/4), width, height, p->linesize[0]/4);
+    }
+    if(fs->ac && f->version > 2) {
+        int v = fs->c.bytestream_end - fs->c.bytestream - 3 - 5*f->ec;
+        if(v != -1 && v!= 0) {
+            av_log(f->avctx, AV_LOG_ERROR, "bytestream end mismatching by %d\n", v);
+            fs->slice_damaged = 1;
+        }
     }
 
     emms_c();
@@ -1893,6 +1907,8 @@ static int read_header(FFV1Context *f){
         fs->ac= f->ac;
         fs->packed_at_lsb= f->packed_at_lsb;
 
+        fs->slice_damaged = 0;
+
         if(f->version == 2){
             fs->slice_x     = get_symbol(c, state, 0)   *f->width ;
             fs->slice_y     = get_symbol(c, state, 0)   *f->height;
@@ -1988,7 +2004,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
         p->key_frame= 0;
     }
 
-    p->reference= 0;
+    p->reference= 3; //for error concealment
     if(avctx->get_buffer(avctx, p) < 0){
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
@@ -2024,19 +2040,42 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
                 } else {
                     av_log(f->avctx, AV_LOG_ERROR, "\n");
                 }
+                fs->slice_damaged = 1;
             }
         }
 
         if(i){
             ff_init_range_decoder(&fs->c, buf_p, v);
-        }
+        }else
+            fs->c.bytestream_end = (uint8_t *)(buf_p + v);
     }
 
     avctx->execute(avctx, decode_slice, &f->slice_context[0], NULL, f->slice_count, sizeof(void*));
+
+    for(i=f->slice_count-1; i>=0; i--){
+        FFV1Context *fs= f->slice_context[i];
+        int j;
+        if(fs->slice_damaged && f->last_picture.data[0]){
+            uint8_t *dst[4], *src[4];
+            for(j=0; j<4; j++){
+                int sh = (j==1 || j==2) ? f->chroma_h_shift : 0;
+                int sv = (j==1 || j==2) ? f->chroma_v_shift : 0;
+                dst[j] = f->picture     .data[j] + f->picture     .linesize[j]*
+                         (fs->slice_y>>sv) + (fs->slice_x>>sh);
+                src[j] = f->last_picture.data[j] + f->last_picture.linesize[j]*
+                         (fs->slice_y>>sv) + (fs->slice_x>>sh);
+            }
+            av_image_copy(dst, f->picture.linesize, (const uint8_t **)src, f->last_picture.linesize,
+                          avctx->pix_fmt, fs->slice_width, fs->slice_height);
+        }
+    }
+
     f->picture_number++;
 
     *picture= *p;
     *data_size = sizeof(AVFrame);
+
+    FFSWAP(AVFrame, f->picture, f->last_picture);
 
     return buf_size;
 }

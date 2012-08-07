@@ -420,8 +420,6 @@ reload:
     ret = ffurl_read(v->input, buf, buf_size);
     if (ret > 0)
         return ret;
-    if (ret < 0 && ret != AVERROR_EOF)
-        return ret;
     ffurl_close(v->input);
     v->input = NULL;
     v->cur_seq_no++;
@@ -526,6 +524,11 @@ static int hls_read_header(AVFormatContext *s)
         }
         v->ctx->pb       = &v->pb;
         ret = avformat_open_input(&v->ctx, v->segments[0]->url, in_fmt, NULL);
+        if (ret < 0)
+            goto fail;
+
+        v->ctx->ctx_flags &= ~AVFMTCTX_NOHEADER;
+        ret = avformat_find_stream_info(v->ctx, NULL);
         if (ret < 0)
             goto fail;
         v->stream_offset = stream_offset;
@@ -746,7 +749,7 @@ static int hls_probe(AVProbeData *p)
 
 AVInputFormat ff_hls_demuxer = {
     .name           = "hls,applehttp",
-    .long_name      = NULL_IF_CONFIG_SMALL("Apple HTTP Live Streaming format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Apple HTTP Live Streaming"),
     .priv_data_size = sizeof(HLSContext),
     .read_probe     = hls_probe,
     .read_header    = hls_read_header,

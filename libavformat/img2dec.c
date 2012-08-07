@@ -59,6 +59,7 @@ typedef struct {
     glob_t globstate;
 #endif
     int start_number;
+    int start_number_range;
 } VideoDemuxData;
 
 static const int sizes[][2] = {
@@ -108,15 +109,23 @@ static int is_glob(const char *path)
 #endif
 }
 
-/* return -1 if no image found */
+/**
+ * Get index range of image files matched by path.
+ *
+ * @param pfirst_index pointer to index updated with the first number in the range
+ * @param plast_index  pointer to index updated with the last number in the range
+ * @param path         path which has to be matched by the image files in the range
+ * @param start_index  minimum accepted value for the first index in the range
+ * @return -1 if no image file could be found
+ */
 static int find_image_range(int *pfirst_index, int *plast_index,
-                            const char *path, int max_start)
+                            const char *path, int start_index, int start_index_range)
 {
     char buf[1024];
     int range, last_index, range1, first_index;
 
     /* find the first image */
-    for (first_index = max_start; first_index < max_start + 5; first_index++) {
+    for (first_index = start_index; first_index < start_index + start_index_range; first_index++) {
         if (av_get_frame_filename(buf, sizeof(buf), path, first_index) < 0){
             *pfirst_index =
             *plast_index = 1;
@@ -127,7 +136,7 @@ static int find_image_range(int *pfirst_index, int *plast_index,
         if (avio_check(buf, AVIO_FLAG_READ) > 0)
             break;
     }
-    if (first_index == 5)
+    if (first_index == start_index + start_index_range)
         goto fail;
 
     /* find the last image */
@@ -253,8 +262,12 @@ static int read_header(AVFormatContext *s1)
 #endif
         } else {
             if (find_image_range(&first_index, &last_index, s->path,
-                                 s->start_number - 1) < 0)
+                                 s->start_number, s->start_number_range) < 0) {
+                av_log(s1, AV_LOG_ERROR,
+                       "Could find no file with with path '%s' and index in the range %d-%d\n",
+                       s->path, s->start_number, s->start_number + s->start_number_range - 1);
                 return AVERROR(ENOENT);
+            }
         }
         s->img_first = first_index;
         s->img_last = last_index;
@@ -373,11 +386,12 @@ static int read_close(struct AVFormatContext* s1)
 #define OFFSET(x) offsetof(VideoDemuxData, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
-    { "pixel_format", "", OFFSET(pixel_format), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
-    { "video_size",   "", OFFSET(video_size),   AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
-    { "framerate",    "", OFFSET(framerate),    AV_OPT_TYPE_STRING, {.str = "25"}, 0, 0, DEC },
-    { "loop",         "", OFFSET(loop),         AV_OPT_TYPE_INT,    {.dbl = 0},    0, 1, DEC },
-    { "start_number", "first number in the sequence", OFFSET(start_number), AV_OPT_TYPE_INT, {.dbl = 1}, 1, INT_MAX, DEC },
+    { "framerate",    "set the video framerate",             OFFSET(framerate),    AV_OPT_TYPE_STRING, {.str = "25"}, 0, 0, DEC },
+    { "loop",         "force loop over input file sequence", OFFSET(loop),         AV_OPT_TYPE_INT,    {.dbl = 0},    0, 1, DEC },
+    { "pixel_format", "set video pixel format",              OFFSET(pixel_format), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "start_number", "set first number in the sequence",    OFFSET(start_number), AV_OPT_TYPE_INT,    {.dbl = 0},    0, INT_MAX, DEC },
+    { "start_number_range", "set range for looking at the first sequence number", OFFSET(start_number_range), AV_OPT_TYPE_INT, {.dbl = 5}, 1, INT_MAX, DEC },
+    { "video_size",   "set video size",                      OFFSET(video_size),   AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { NULL },
 };
 

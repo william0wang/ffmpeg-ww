@@ -345,9 +345,11 @@ ff_rm_read_mdpr_codecdata (AVFormatContext *s, AVIOContext *pb,
         if ((ret = rm_read_extradata(pb, st->codec, codec_data_size - (avio_tell(pb) - codec_pos))) < 0)
             return ret;
 
-        av_reduce(&st->r_frame_rate.den, &st->r_frame_rate.num,
+        av_reduce(&st->avg_frame_rate.den, &st->avg_frame_rate.num,
                   0x10000, fps, (1 << 30) - 1);
-        st->avg_frame_rate = st->r_frame_rate;
+#if FF_API_R_FRAME_RATE
+        st->r_frame_rate = st->avg_frame_rate;
+#endif
     }
 
 skip:
@@ -475,7 +477,8 @@ static int rm_read_header(AVFormatContext *s)
             avio_rb32(pb); /* max packet size */
             avio_rb32(pb); /* avg packet size */
             avio_rb32(pb); /* nb packets */
-            avio_rb32(pb); /* duration */
+            duration = avio_rb32(pb); /* duration */
+            s->duration = av_rescale(duration, AV_TIME_BASE, 1000);
             avio_rb32(pb); /* preroll */
             indx_off = avio_rb32(pb); /* index offset */
             data_off = avio_rb32(pb); /* data offset */
@@ -499,6 +502,8 @@ static int rm_read_header(AVFormatContext *s)
             duration = avio_rb32(pb); /* duration */
             st->start_time = start_time;
             st->duration = duration;
+            if(duration>0)
+                s->duration = AV_NOPTS_VALUE;
             get_str8(pb, buf, sizeof(buf)); /* desc */
             get_str8(pb, buf, sizeof(buf)); /* mimetype */
             st->codec->codec_type = AVMEDIA_TYPE_DATA;
@@ -984,7 +989,7 @@ static int64_t rm_read_dts(AVFormatContext *s, int stream_index,
 
 AVInputFormat ff_rm_demuxer = {
     .name           = "rm",
-    .long_name      = NULL_IF_CONFIG_SMALL("RealMedia format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("RealMedia"),
     .priv_data_size = sizeof(RMDemuxContext),
     .read_probe     = rm_probe,
     .read_header    = rm_read_header,

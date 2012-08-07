@@ -79,6 +79,14 @@ Go to @url{http://lame.sourceforge.net/} and follow the
 instructions for installing the library.
 Then pass @code{--enable-libmp3lame} to configure to enable it.
 
+@section TwoLAME
+
+FFmpeg can make use of the TwoLAME library for MP2 encoding.
+
+Go to @url{http://www.twolame.org/} and follow the
+instructions for installing the library.
+Then pass @code{--enable-libtwolame} to configure to enable it.
+
 @section libvpx
 
 FFmpeg can make use of the libvpx library for VP8 encoding.
@@ -361,7 +369,7 @@ library:
 @item True Audio                @tab   @tab X
 @item VC-1 test bitstream       @tab X @tab X
 @item WAV                       @tab X @tab X
-@item WavPack                   @tab   @tab X
+@item WavPack                   @tab X @tab X
 @item WebM                      @tab X @tab X
 @item Windows Televison (WTV)   @tab X @tab X
 @item Wing Commander III movie  @tab   @tab X
@@ -501,6 +509,7 @@ following image formats are supported:
 @item Delphine Software International CIN video  @tab     @tab  X
     @tab Codec used in Delphine Software International games.
 @item Discworld II BMV Video @tab     @tab  X
+@item Canopus Lossless Codec @tab     @tab  X
 @item Cinepak                @tab     @tab  X
 @item Cirrus Logic AccuPak   @tab  X  @tab  X
     @tab fourcc: CLJR
@@ -796,6 +805,7 @@ following image formats are supported:
     @tab Only versions 3.97-3.99 are supported.
 @item MP1 (MPEG audio layer 1)  @tab     @tab IX
 @item MP2 (MPEG audio layer 2)  @tab IX  @tab IX
+    @tab libtwolame can be used alternatively for encoding.
 @item MP3 (MPEG audio layer 3)  @tab  E  @tab IX
     @tab encoding supported through external library LAME, ADU MP3 and MP3onMP4 also supported
 @item MPEG-4 Audio Lossless Coding (ALS)  @tab     @tab  X
@@ -885,7 +895,8 @@ performance on systems without hardware floating point support).
 @item RealText         @tab   @tab X @tab   @tab X
 @item SAMI             @tab   @tab X @tab   @tab X
 @item SubRip (SRT)     @tab X @tab X @tab X @tab X
-@item 3GPP Timed Text  @tab   @tab   @tab   @tab X
+@item SubViewer        @tab   @tab X @tab   @tab X
+@item 3GPP Timed Text  @tab   @tab   @tab X @tab X
 @item XSUB             @tab   @tab   @tab X @tab X
 @end multitable
 
@@ -904,10 +915,11 @@ performance on systems without hardware floating point support).
 @item MMST         @tab X
 @item pipe         @tab X
 @item RTMP         @tab X
-@item RTMPE        @tab E
-@item RTMPS        @tab E
-@item RTMPT        @tab E
-@item RTMPTE       @tab E
+@item RTMPE        @tab X
+@item RTMPS        @tab X
+@item RTMPT        @tab X
+@item RTMPTE       @tab X
+@item RTMPTS       @tab X
 @item RTP          @tab X
 @item SCTP         @tab X
 @item TCP          @tab X
@@ -926,13 +938,17 @@ performance on systems without hardware floating point support).
 @item Name              @tab Input  @tab Output
 @item ALSA              @tab X      @tab X
 @item BKTR              @tab X      @tab
+@item caca              @tab        @tab X
 @item DV1394            @tab X      @tab
+@item Lavfi virtual device @tab X   @tab
 @item Linux framebuffer @tab X      @tab
 @item JACK              @tab X      @tab
 @item LIBCDIO           @tab X
 @item LIBDC1394         @tab X      @tab
+@item OpenAL            @tab X
 @item OSS               @tab X      @tab X
 @item Pulseaudio        @tab X      @tab
+@item SDL               @tab        @tab X
 @item Video4Linux2      @tab X      @tab
 @item VfW capture       @tab X      @tab
 @item X11 grabbing      @tab X      @tab

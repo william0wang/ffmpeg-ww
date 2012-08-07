@@ -1248,6 +1248,7 @@ static int avi_read_idx1(AVFormatContext *s, int size)
     unsigned last_pos= -1;
     unsigned last_idx= -1;
     int64_t idx1_pos, first_packet_pos = 0, data_offset = 0;
+    int anykey = 0;
 
     nb_index_entries = size / 16;
     if (nb_index_entries <= 0)
@@ -1299,6 +1300,14 @@ static int avi_read_idx1(AVFormatContext *s, int size)
         }
         ast->cum_len += get_duration(ast, len);
         last_pos= pos;
+        anykey |= flags&AVIIF_INDEX;
+    }
+    if (!anykey) {
+        for (index = 0; index < s->nb_streams; index++) {
+            st = s->streams[index];
+            if (st->nb_index_entries)
+                st->index_entries[0].flags |= AVINDEX_KEYFRAME;
+        }
     }
     return 0;
 }
@@ -1367,16 +1376,19 @@ static int avi_load_index(AVFormatContext *s)
     AVIOContext *pb = s->pb;
     uint32_t tag, size;
     int64_t pos= avio_tell(pb);
+    int64_t next;
     int ret = -1;
 
     if (avio_seek(pb, avi->movi_end, SEEK_SET) < 0)
         goto the_end; // maybe truncated file
     av_dlog(s, "movi_end=0x%"PRIx64"\n", avi->movi_end);
     for(;;) {
-        if (url_feof(pb))
-            break;
         tag = avio_rl32(pb);
         size = avio_rl32(pb);
+        if (url_feof(pb))
+            break;
+        next = avio_tell(pb) + size + (size & 1);
+
         av_dlog(s, "tag=%c%c%c%c size=0x%x\n",
                  tag        & 0xff,
                 (tag >>  8) & 0xff,
@@ -1388,11 +1400,15 @@ static int avi_load_index(AVFormatContext *s)
             avi_read_idx1(s, size) >= 0) {
             avi->index_loaded=2;
             ret = 0;
-            break;
-        }
+        }else if(tag == MKTAG('L', 'I', 'S', 'T')) {
+            uint32_t tag1 = avio_rl32(pb);
 
-        size += (size & 1);
-        if (avio_skip(pb, size) < 0)
+            if (tag1 == MKTAG('I', 'N', 'F', 'O'))
+                ff_read_riff_info(s, size - 4);
+        }else if(!ret)
+            break;
+
+        if (avio_seek(pb, next, SEEK_SET) < 0)
             break; // something is wrong here
     }
  the_end:
@@ -1553,7 +1569,7 @@ static int avi_probe(AVProbeData *p)
 
 AVInputFormat ff_avi_demuxer = {
     .name           = "avi",
-    .long_name      = NULL_IF_CONFIG_SMALL("AVI format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("AVI (Audio Video Interleaved)"),
     .priv_data_size = sizeof(AVIContext),
     .read_probe     = avi_probe,
     .read_header    = avi_read_header,

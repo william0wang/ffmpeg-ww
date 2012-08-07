@@ -439,8 +439,8 @@ static int ea_read_header(AVFormatContext *s)
         st->duration = st->nb_frames = ea->nb_frames;
         if (ea->time_base.num)
             avpriv_set_pts_info(st, 64, ea->time_base.num, ea->time_base.den);
-        st->r_frame_rate = st->avg_frame_rate = (AVRational){ea->time_base.den,
-                                                             ea->time_base.num};
+        st->r_frame_rate =
+        st->avg_frame_rate = av_inv_q(ea->time_base);
     }
 
     if (ea->audio_codec) {
@@ -617,7 +617,7 @@ get_video_packet:
 
 AVInputFormat ff_ea_demuxer = {
     .name           = "ea",
-    .long_name      = NULL_IF_CONFIG_SMALL("Electronic Arts Multimedia Format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Electronic Arts Multimedia"),
     .priv_data_size = sizeof(EaDemuxContext),
     .read_probe     = ea_probe,
     .read_header    = ea_read_header,

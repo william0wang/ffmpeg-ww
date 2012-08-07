@@ -24,6 +24,8 @@
 #include "libavcodec/x86/dsputil_mmx.h"
 #include "libavfilter/yadif.h"
 
+#if HAVE_INLINE_ASM
+
 DECLARE_ASM_CONST(16, const xmm_reg, pb_1) = {0x0101010101010101ULL, 0x0101010101010101ULL};
 DECLARE_ASM_CONST(16, const xmm_reg, pw_1) = {0x0001000100010001ULL, 0x0001000100010001ULL};
 
@@ -43,19 +45,22 @@ DECLARE_ASM_CONST(16, const xmm_reg, pw_1) = {0x0001000100010001ULL, 0x000100010
 #undef COMPILE_TEMPLATE_SSE
 #endif
 
-#if HAVE_MMX
+#if HAVE_MMXEXT
 #undef RENAME
-#define RENAME(a) a ## _mmx
+#define RENAME(a) a ## _mmx2
 #include "yadif_template.c"
 #endif
+
+#endif /* HAVE_INLINE_ASM */
 
 av_cold void ff_yadif_init_x86(YADIFContext *yadif)
 {
     int cpu_flags = av_get_cpu_flags();
 
-#if HAVE_MMX
-    if (cpu_flags & AV_CPU_FLAG_MMX)
-        yadif->filter_line = yadif_filter_line_mmx;
+#if HAVE_INLINE_ASM
+#if HAVE_MMXEXT
+    if (cpu_flags & AV_CPU_FLAG_MMXEXT)
+        yadif->filter_line = yadif_filter_line_mmx2;
 #endif
 #if HAVE_SSE
     if (cpu_flags & AV_CPU_FLAG_SSE2)
@@ -65,4 +70,5 @@ av_cold void ff_yadif_init_x86(YADIFContext *yadif)
     if (cpu_flags & AV_CPU_FLAG_SSSE3)
         yadif->filter_line = yadif_filter_line_ssse3;
 #endif
+#endif /* HAVE_INLINE_ASM */
 }

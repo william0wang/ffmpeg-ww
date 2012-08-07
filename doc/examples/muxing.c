@@ -203,12 +203,6 @@ static AVStream *add_video_stream(AVFormatContext *oc, enum CodecID codec_id)
 
     c = st->codec;
 
-    /* find the video encoder */
-    codec = avcodec_find_encoder(codec_id);
-    if (!codec) {
-        fprintf(stderr, "codec not found\n");
-        exit(1);
-    }
     avcodec_get_context_defaults3(c, codec);
 
     c->codec_id = codec_id;
@@ -245,21 +239,9 @@ static AVStream *add_video_stream(AVFormatContext *oc, enum CodecID codec_id)
 
 static AVFrame *alloc_picture(enum PixelFormat pix_fmt, int width, int height)
 {
-    AVFrame *picture;
-    uint8_t *picture_buf;
-    int size;
-
-    picture = avcodec_alloc_frame();
-    if (!picture)
-        return NULL;
-    size        = avpicture_get_size(pix_fmt, width, height);
-    picture_buf = av_malloc(size);
-    if (!picture_buf) {
-        av_free(picture);
-        return NULL;
-    }
-    avpicture_fill((AVPicture *)picture, picture_buf,
-                   pix_fmt, width, height);
+    AVFrame *picture = avcodec_alloc_frame();
+    if (!picture || avpicture_alloc((AVPicture *)picture, pix_fmt, width, height) < 0)
+        av_freep(&picture);
     return picture;
 }
 

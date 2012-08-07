@@ -96,23 +96,23 @@ static int config_props(AVFilterLink *outlink)
  * buffers are fed to start_frame in the order they were obtained from
  * get_buffer (think B-frames). */
 
-static void start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
+static int start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
 {
     AVFilterContext *ctx  = inlink->dst;
     TileContext *tile    = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
 
     if (tile->current)
-        return;
+        return 0;
     outlink->out_buf = ff_get_video_buffer(outlink, AV_PERM_WRITE,
                                                  outlink->w, outlink->h);
     avfilter_copy_buffer_ref_props(outlink->out_buf, picref);
     outlink->out_buf->video->w = outlink->w;
     outlink->out_buf->video->h = outlink->h;
-    ff_start_frame(outlink, outlink->out_buf);
+    return 0;
 }
 
-static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
+static int draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
 {
     AVFilterContext *ctx  = inlink->dst;
     TileContext *tile    = ctx->priv;
@@ -126,18 +126,18 @@ static void draw_slice(AVFilterLink *inlink, int y, int h, int slice_dir)
                        x0, y0 + y, 0, y, inlink->cur_buf->video->w, h);
     /* TODO if tile->w == 1 && slice_dir is always 1, we could draw_slice
      * immediately. */
+    return 0;
 }
 
-static void draw_blank_frame(AVFilterContext *ctx)
+static void draw_blank_frame(AVFilterContext *ctx, AVFilterBufferRef *out_buf)
 {
     TileContext *tile    = ctx->priv;
     AVFilterLink *inlink  = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
     unsigned x0 = inlink->w * (tile->current % tile->w);
     unsigned y0 = inlink->h * (tile->current / tile->w);
 
     ff_fill_rectangle(&tile->draw, &tile->blank,
-                      outlink->out_buf->data, outlink->out_buf->linesize,
+                      out_buf->data, out_buf->linesize,
                       x0, y0, inlink->w, inlink->h);
     tile->current++;
 }
@@ -145,22 +145,26 @@ static void end_last_frame(AVFilterContext *ctx)
 {
     TileContext *tile    = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
+    AVFilterBufferRef *out_buf = outlink->out_buf;
 
+    outlink->out_buf = NULL;
+    ff_start_frame(outlink, out_buf);
     while (tile->current < tile->w * tile->h)
-        draw_blank_frame(ctx);
-    ff_draw_slice(outlink, 0, outlink->out_buf->video->h, 1);
+        draw_blank_frame(ctx, out_buf);
+    ff_draw_slice(outlink, 0, out_buf->video->h, 1);
     ff_end_frame(outlink);
     tile->current = 0;
 }
 
-static void end_frame(AVFilterLink *inlink)
+static int end_frame(AVFilterLink *inlink)
 {
     AVFilterContext *ctx  = inlink->dst;
     TileContext *tile    = ctx->priv;
 
-    avfilter_unref_buffer(inlink->cur_buf);
+    avfilter_unref_bufferp(&inlink->cur_buf);
     if (++tile->current == tile->w * tile->h)
         end_last_frame(ctx);
+    return 0;
 }
 
 static int request_frame(AVFilterLink *outlink)

@@ -322,7 +322,7 @@ static int mxf_get_d10_aes3_packet(AVIOContext *pb, AVStream *st, AVPacket *pkt,
     data_ptr = pkt->data;
     end_ptr = pkt->data + length;
     buf_ptr = pkt->data + 4; /* skip SMPTE 331M header */
-    for (; buf_ptr + st->codec->channels*4 < end_ptr; ) {
+    for (; buf_ptr + st->codec->channels*4 <= end_ptr; ) {
         for (i = 0; i < st->codec->channels; i++) {
             uint32_t sample = bytestream_get_le32(&buf_ptr);
             if (st->codec->bits_per_coded_sample == 24)
@@ -410,12 +410,14 @@ static int mxf_read_primer_pack(void *arg, AVIOContext *pb, int tag, int size, U
                               item_len);
         return AVERROR_PATCHWELCOME;
     }
-    if (item_num > UINT_MAX / item_len)
+    if (item_num > 65536) {
+        av_log(mxf->fc, AV_LOG_ERROR, "item_num %d is too large\n", item_num);
         return AVERROR_INVALIDDATA;
-    mxf->local_tags_count = item_num;
-    mxf->local_tags = av_malloc(item_num*item_len);
+    }
+    mxf->local_tags = av_calloc(item_num, item_len);
     if (!mxf->local_tags)
         return AVERROR(ENOMEM);
+    mxf->local_tags_count = item_num;
     avio_read(pb, mxf->local_tags, item_num*item_len);
     return 0;
 }
@@ -585,9 +587,7 @@ static int mxf_read_content_storage(void *arg, AVIOContext *pb, int tag, int siz
     switch (tag) {
     case 0x1901:
         mxf->packages_count = avio_rb32(pb);
-        if (mxf->packages_count >= UINT_MAX / sizeof(UID))
-            return AVERROR_INVALIDDATA;
-        mxf->packages_refs = av_malloc(mxf->packages_count * sizeof(UID));
+        mxf->packages_refs = av_calloc(mxf->packages_count, sizeof(UID));
         if (!mxf->packages_refs)
             return AVERROR(ENOMEM);
         avio_skip(pb, 4); /* useless size of objects, always 16 according to specs */
@@ -625,9 +625,7 @@ static int mxf_read_material_package(void *arg, AVIOContext *pb, int tag, int si
     switch(tag) {
     case 0x4403:
         package->tracks_count = avio_rb32(pb);
-        if (package->tracks_count >= UINT_MAX / sizeof(UID))
-            return AVERROR_INVALIDDATA;
-        package->tracks_refs = av_malloc(package->tracks_count * sizeof(UID));
+        package->tracks_refs = av_calloc(package->tracks_count, sizeof(UID));
         if (!package->tracks_refs)
             return AVERROR(ENOMEM);
         avio_skip(pb, 4); /* useless size of objects, always 16 according to specs */
@@ -687,9 +685,7 @@ static int mxf_read_sequence(void *arg, AVIOContext *pb, int tag, int size, UID 
         break;
     case 0x1001:
         sequence->structural_components_count = avio_rb32(pb);
-        if (sequence->structural_components_count >= UINT_MAX / sizeof(UID))
-            return AVERROR_INVALIDDATA;
-        sequence->structural_components_refs = av_malloc(sequence->structural_components_count * sizeof(UID));
+        sequence->structural_components_refs = av_calloc(sequence->structural_components_count, sizeof(UID));
         if (!sequence->structural_components_refs)
             return AVERROR(ENOMEM);
         avio_skip(pb, 4); /* useless size of objects, always 16 according to specs */
@@ -705,9 +701,7 @@ static int mxf_read_source_package(void *arg, AVIOContext *pb, int tag, int size
     switch(tag) {
     case 0x4403:
         package->tracks_count = avio_rb32(pb);
-        if (package->tracks_count >= UINT_MAX / sizeof(UID))
-            return AVERROR_INVALIDDATA;
-        package->tracks_refs = av_malloc(package->tracks_count * sizeof(UID));
+        package->tracks_refs = av_calloc(package->tracks_count, sizeof(UID));
         if (!package->tracks_refs)
             return AVERROR(ENOMEM);
         avio_skip(pb, 4); /* useless size of objects, always 16 according to specs */
@@ -811,9 +805,7 @@ static int mxf_read_generic_descriptor(void *arg, AVIOContext *pb, int tag, int 
     switch(tag) {
     case 0x3F01:
         descriptor->sub_descriptors_count = avio_rb32(pb);
-        if (descriptor->sub_descriptors_count >= UINT_MAX / sizeof(UID))
-            return AVERROR_INVALIDDATA;
-        descriptor->sub_descriptors_refs = av_malloc(descriptor->sub_descriptors_count * sizeof(UID));
+        descriptor->sub_descriptors_refs = av_calloc(descriptor->sub_descriptors_count, sizeof(UID));
         if (!descriptor->sub_descriptors_refs)
             return AVERROR(ENOMEM);
         avio_skip(pb, 4); /* useless size of objects, always 16 according to specs */
@@ -2249,7 +2241,7 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
 
 AVInputFormat ff_mxf_demuxer = {
     .name           = "mxf",
-    .long_name      = NULL_IF_CONFIG_SMALL("Material eXchange Format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("MXF (Material eXchange Format)"),
     .priv_data_size = sizeof(MXFContext),
     .read_probe     = mxf_probe,
     .read_header    = mxf_read_header,

@@ -418,7 +418,6 @@ int ff_vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitCo
 
 static int decode_sequence_header_adv(VC1Context *v, GetBitContext *gb)
 {
-    int w, h;
     v->res_rtm_flag = 1;
     v->level = get_bits(gb, 3);
     if (v->level >= 5) {
@@ -437,9 +436,8 @@ static int decode_sequence_header_adv(VC1Context *v, GetBitContext *gb)
     v->bitrtq_postproc       = get_bits(gb, 5); //common
     v->postprocflag          = get_bits1(gb);   //common
 
-    w = (get_bits(gb, 12) + 1) << 1;
-    h = (get_bits(gb, 12) + 1) << 1;
-    avcodec_set_dimensions(v->s.avctx, w, h);
+    v->max_coded_width       = (get_bits(gb, 12) + 1) << 1;
+    v->max_coded_height      = (get_bits(gb, 12) + 1) << 1;
     v->broadcast             = get_bits1(gb);
     v->interlace             = get_bits1(gb);
     v->tfcntrflag            = get_bits1(gb);
@@ -528,6 +526,7 @@ static int decode_sequence_header_adv(VC1Context *v, GetBitContext *gb)
 int ff_vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContext *gb)
 {
     int i;
+    int w,h;
 
     av_log(avctx, AV_LOG_DEBUG, "Entry point: %08X\n", show_bits_long(gb, 32));
     v->broken_link    = get_bits1(gb);
@@ -551,10 +550,13 @@ int ff_vc1_decode_entry_point(AVCodecContext *avctx, VC1Context *v, GetBitContex
     }
 
     if(get_bits1(gb)){
-        int w = (get_bits(gb, 12)+1)<<1;
-        int h = (get_bits(gb, 12)+1)<<1;
-        avcodec_set_dimensions(avctx, w, h);
+        w = (get_bits(gb, 12)+1)<<1;
+        h = (get_bits(gb, 12)+1)<<1;
+    } else {
+        w = v->max_coded_width;
+        h = v->max_coded_height;
     }
+    avcodec_set_dimensions(avctx, w, h);
     if (v->extended_mv)
         v->extended_dmv = get_bits1(gb);
     if ((v->range_mapy_flag = get_bits1(gb))) {
@@ -1169,8 +1171,7 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
 
         if (v->field_mode) {
             int mvmode;
-            av_log(v->s.avctx, AV_LOG_ERROR, "B Fields do not work currently\n");
-            return -1;
+            av_log(v->s.avctx, AV_LOG_DEBUG, "B Fields\n");
             if (v->extended_dmv)
                 v->dmvrange = get_unary(gb, 0, 3);
             mvmode = get_unary(gb, 1, 3);

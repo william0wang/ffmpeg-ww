@@ -53,7 +53,7 @@ static const AVClass ilbc_dec_class = {
     .class_name = "libilbc",
     .item_name  = av_default_item_name,
     .option     = ilbc_dec_options,
-    .version    = LIBAVUTIL_VERSION_INT.
+    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 static av_cold int ilbc_decode_init(AVCodecContext *avctx)
@@ -114,7 +114,7 @@ AVCodec ff_libilbc_decoder = {
     .init           = ilbc_decode_init,
     .decode         = ilbc_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
-    .long_name      = NULL_IF_CONFIG_SMALL("Internet Low Bitrate Codec (iLBC)"),
+    .long_name      = NULL_IF_CONFIG_SMALL("iLBC (Internet Low Bitrate Codec)"),
     .priv_class     = &ilbc_dec_class,
 };
 
@@ -209,7 +209,7 @@ AVCodec ff_libilbc_encoder = {
     .close          = ilbc_encode_close,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_NONE },
-    .long_name      = NULL_IF_CONFIG_SMALL("Internet Low Bitrate Codec (iLBC)"),
+    .long_name      = NULL_IF_CONFIG_SMALL("iLBC (Internet Low Bitrate Codec)"),
     .defaults       = ilbc_encode_defaults,
     .priv_class     = &ilbc_enc_class,
 };

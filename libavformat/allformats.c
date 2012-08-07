@@ -229,6 +229,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (SPDIF, spdif);
     REGISTER_MUXDEMUX (SRT, srt);
     REGISTER_DEMUXER  (STR, str);
+    REGISTER_DEMUXER  (SUBVIEWER, subviewer);
     REGISTER_MUXDEMUX (SWF, swf);
     REGISTER_MUXER    (TG2, tg2);
     REGISTER_MUXER    (TGP, tgp);
@@ -252,7 +253,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (WSAUD, wsaud);
     REGISTER_DEMUXER  (WSVQA, wsvqa);
     REGISTER_MUXDEMUX (WTV, wtv);
-    REGISTER_DEMUXER  (WV, wv);
+    REGISTER_MUXDEMUX (WV, wv);
     REGISTER_DEMUXER  (XA, xa);
     REGISTER_DEMUXER  (XBIN, xbin);
     REGISTER_DEMUXER  (XMV, xmv);
@@ -272,6 +273,8 @@ void av_register_all(void)
     REGISTER_PROTOCOL (CACHE, cache);
     REGISTER_PROTOCOL (CONCAT, concat);
     REGISTER_PROTOCOL (CRYPTO, crypto);
+    REGISTER_PROTOCOL (FFRTMPCRYPT, ffrtmpcrypt);
+    REGISTER_PROTOCOL (FFRTMPHTTP, ffrtmphttp);
     REGISTER_PROTOCOL (FILE, file);
     REGISTER_PROTOCOL (GOPHER, gopher);
     REGISTER_PROTOCOL (HLS, hls);
@@ -283,8 +286,11 @@ void av_register_all(void)
     REGISTER_PROTOCOL (MD5,  md5);
     REGISTER_PROTOCOL (PIPE, pipe);
     REGISTER_PROTOCOL (RTMP, rtmp);
-    REGISTER_PROTOCOL (RTMPHTTP, rtmphttp);
+    REGISTER_PROTOCOL (RTMPE, rtmpe);
+    REGISTER_PROTOCOL (RTMPS, rtmps);
     REGISTER_PROTOCOL (RTMPT, rtmpt);
+    REGISTER_PROTOCOL (RTMPTE, rtmpte);
+    REGISTER_PROTOCOL (RTMPTS, rtmpts);
     REGISTER_PROTOCOL (RTP, rtp);
     REGISTER_PROTOCOL (SCTP, sctp);
     REGISTER_PROTOCOL (TCP, tcp);

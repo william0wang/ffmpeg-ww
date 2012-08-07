@@ -84,8 +84,12 @@ int main(int argc, char **argv)
             FUNC(4, 2, rgb32tobgr16),
             FUNC(4, 3, rgb32tobgr24),
             FUNC(4, 4, shuffle_bytes_2103), /* rgb32tobgr32 */
-            FUNC(6, 6, rgb48tobgr48_LL),
-            FUNC(6, 6, rgb48tobgr48_LB),
+            FUNC(6, 6, rgb48tobgr48_nobswap),
+            FUNC(6, 6, rgb48tobgr48_bswap),
+            FUNC(8, 6, rgb64to48_nobswap),
+            FUNC(8, 6, rgb64to48_bswap),
+            FUNC(8, 6, rgb64tobgr48_nobswap),
+            FUNC(8, 6, rgb64tobgr48_bswap),
             FUNC(0, 0, NULL)
         };
         int width;

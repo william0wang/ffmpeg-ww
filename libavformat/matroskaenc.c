@@ -475,6 +475,8 @@ static int mkv_write_codecprivate(AVFormatContext *s, AVIOContext *pb, AVCodecCo
             ret = ff_flac_write_header(dyn_cp, codec, 1);
         else if (codec->codec_id == CODEC_ID_H264)
             ret = ff_isom_write_avcc(dyn_cp, codec->extradata, codec->extradata_size);
+        else if (codec->codec_id == CODEC_ID_ALAC && (12 < codec->extradata_size))
+            ret = ff_isom_write_avcc(dyn_cp, codec->extradata + 12, codec->extradata_size - 12);
         else if (codec->extradata_size)
             avio_write(dyn_cp, codec->extradata, codec->extradata_size);
     } else if (codec->codec_type == AVMEDIA_TYPE_VIDEO) {
@@ -1307,20 +1309,14 @@ static int mkv_query_codec(enum CodecID codec_id, int std_compliance)
 #if CONFIG_MATROSKA_MUXER
 AVOutputFormat ff_matroska_muxer = {
     .name              = "matroska",
-    .long_name         = NULL_IF_CONFIG_SMALL("Matroska file format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("Matroska"),
     .mime_type         = "video/x-matroska",
     .extensions        = "mkv",
     .priv_data_size    = sizeof(MatroskaMuxContext),
-#if CONFIG_LIBVORBIS_ENCODER
-    .audio_codec       = CODEC_ID_VORBIS,
-#else
-    .audio_codec       = CODEC_ID_AC3,
-#endif
-#if CONFIG_LIBX264_ENCODER
-    .video_codec       = CODEC_ID_H264,
-#else
-    .video_codec       = CODEC_ID_MPEG4,
-#endif
+    .audio_codec       = CONFIG_LIBVORBIS_ENCODER ?
+                         CODEC_ID_VORBIS : CODEC_ID_AC3,
+    .video_codec       = CONFIG_LIBX264_ENCODER ?
+                         CODEC_ID_H264 : CODEC_ID_MPEG4,
     .write_header      = mkv_write_header,
     .write_packet      = mkv_write_packet,
     .write_trailer     = mkv_write_trailer,
@@ -1334,7 +1330,7 @@ AVOutputFormat ff_matroska_muxer = {
 #if CONFIG_WEBM_MUXER
 AVOutputFormat ff_webm_muxer = {
     .name              = "webm",
-    .long_name         = NULL_IF_CONFIG_SMALL("WebM file format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("WebM"),
     .mime_type         = "video/webm",
     .extensions        = "webm",
     .priv_data_size    = sizeof(MatroskaMuxContext),
@@ -1351,15 +1347,12 @@ AVOutputFormat ff_webm_muxer = {
 #if CONFIG_MATROSKA_AUDIO_MUXER
 AVOutputFormat ff_matroska_audio_muxer = {
     .name              = "matroska",
-    .long_name         = NULL_IF_CONFIG_SMALL("Matroska file format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("Matroska"),
     .mime_type         = "audio/x-matroska",
     .extensions        = "mka",
     .priv_data_size    = sizeof(MatroskaMuxContext),
-#if CONFIG_LIBVORBIS_ENCODER
-    .audio_codec       = CODEC_ID_VORBIS,
-#else
-    .audio_codec       = CODEC_ID_AC3,
-#endif
+    .audio_codec       = CONFIG_LIBVORBIS_ENCODER ?
+                         CODEC_ID_VORBIS : CODEC_ID_AC3,
     .video_codec       = CODEC_ID_NONE,
     .write_header      = mkv_write_header,
     .write_packet      = mkv_write_packet,

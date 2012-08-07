@@ -31,6 +31,7 @@
 #include "avio_internal.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/avstring.h"
+#include "libavutil/time.h"
 #include "url.h"
 
 #define SDP_MAX_SIZE 16384
@@ -234,7 +235,7 @@ static int rtsp_write_close(AVFormatContext *s)
 
 AVOutputFormat ff_rtsp_muxer = {
     .name              = "rtsp",
-    .long_name         = NULL_IF_CONFIG_SMALL("RTSP output format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("RTSP output"),
     .priv_data_size    = sizeof(RTSPState),
     .audio_codec       = CODEC_ID_AAC,
     .video_codec       = CODEC_ID_MPEG4,

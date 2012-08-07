@@ -521,6 +521,13 @@ static int planarRgbToRgbWrapper(SwsContext *c, const uint8_t *src[],
         || (x) == PIX_FMT_ABGR   \
         )
 
+#define isRGBA64(x) (                \
+           (x) == PIX_FMT_RGBA64LE   \
+        || (x) == PIX_FMT_RGBA64BE   \
+        || (x) == PIX_FMT_BGRA64LE   \
+        || (x) == PIX_FMT_BGRA64BE   \
+        )
+
 #define isRGB48(x) (                \
            (x) == PIX_FMT_RGB48LE   \
         || (x) == PIX_FMT_RGB48BE   \
@@ -542,10 +549,6 @@ static rgbConvFn findRgbConvFn(SwsContext *c)
     (((bpp + 7) >> 3) == 2 && \
      (!(av_pix_fmt_descriptors[fmt].flags & PIX_FMT_BE) != !HAVE_BIGENDIAN))
 
-    /* if this is non-native rgb444/555/565, don't handle it here. */
-    if (IS_NOT_NE(srcId, srcFormat) || IS_NOT_NE(dstId, dstFormat))
-        return NULL;
-
 #define CONV_IS(src, dst) (srcFormat == PIX_FMT_##src && dstFormat == PIX_FMT_##dst)
 
     if (isRGBA32(srcFormat) && isRGBA32(dstFormat)) {
@@ -565,11 +568,28 @@ static rgbConvFn findRgbConvFn(SwsContext *c)
         if      (CONV_IS(RGB48LE, BGR48LE)
               || CONV_IS(BGR48LE, RGB48LE)
               || CONV_IS(RGB48BE, BGR48BE)
-              || CONV_IS(BGR48BE, RGB48BE)) conv = rgb48tobgr48_LL;
+              || CONV_IS(BGR48BE, RGB48BE)) conv = rgb48tobgr48_nobswap;
         else if (CONV_IS(RGB48LE, BGR48BE)
               || CONV_IS(BGR48LE, RGB48BE)
               || CONV_IS(RGB48BE, BGR48LE)
-              || CONV_IS(BGR48BE, RGB48LE)) conv = rgb48tobgr48_LB;
+              || CONV_IS(BGR48BE, RGB48LE)) conv = rgb48tobgr48_bswap;
+    } else if (isRGBA64(srcFormat) && isRGB48(dstFormat)) {
+        if      (CONV_IS(RGBA64LE, BGR48LE)
+              || CONV_IS(BGRA64LE, RGB48LE)
+              || CONV_IS(RGBA64BE, BGR48BE)
+              || CONV_IS(BGRA64BE, RGB48BE)) conv = rgb64tobgr48_nobswap;
+        else if (CONV_IS(RGBA64LE, BGR48BE)
+              || CONV_IS(BGRA64LE, RGB48BE)
+              || CONV_IS(RGBA64BE, BGR48LE)
+              || CONV_IS(BGRA64BE, RGB48LE)) conv = rgb64tobgr48_bswap;
+        else if (CONV_IS(RGBA64LE, RGB48LE)
+              || CONV_IS(BGRA64LE, BGR48LE)
+              || CONV_IS(RGBA64BE, RGB48BE)
+              || CONV_IS(BGRA64BE, BGR48BE)) conv = rgb64to48_nobswap;
+        else if (CONV_IS(RGBA64LE, RGB48BE)
+              || CONV_IS(BGRA64LE, BGR48BE)
+              || CONV_IS(RGBA64BE, RGB48LE)
+              || CONV_IS(BGRA64BE, BGR48LE)) conv = rgb64to48_bswap;
     } else
     /* BGR -> BGR */
     if ((isBGRinInt(srcFormat) && isBGRinInt(dstFormat)) ||
@@ -632,6 +652,9 @@ static int rgbToRgbWrapper(SwsContext *c, const uint8_t *src[], int srcStride[],
     } else {
         const uint8_t *srcPtr = src[0];
               uint8_t *dstPtr = dst[0];
+        int src_bswap = IS_NOT_NE(c->srcFormatBpp, srcFormat);
+        int dst_bswap = IS_NOT_NE(c->dstFormatBpp, dstFormat);
+
         if ((srcFormat == PIX_FMT_RGB32_1 || srcFormat == PIX_FMT_BGR32_1) &&
             !isRGBA32(dstFormat))
             srcPtr += ALT32_CORR;
@@ -641,15 +664,23 @@ static int rgbToRgbWrapper(SwsContext *c, const uint8_t *src[], int srcStride[],
             dstPtr += ALT32_CORR;
 
         if (dstStride[0] * srcBpp == srcStride[0] * dstBpp && srcStride[0] > 0 &&
-            !(srcStride[0] % srcBpp))
+            !(srcStride[0] % srcBpp) && !dst_bswap && !src_bswap)
             conv(srcPtr, dstPtr + dstStride[0] * srcSliceY,
                  srcSliceH * srcStride[0]);
         else {
-            int i;
+            int i, j;
             dstPtr += dstStride[0] * srcSliceY;
 
             for (i = 0; i < srcSliceH; i++) {
-                conv(srcPtr, dstPtr, c->srcW * srcBpp);
+                if(src_bswap) {
+                    for(j=0; j<c->srcW; j++)
+                        ((uint16_t*)c->formatConvBuffer)[j] = av_bswap16(((uint16_t*)srcPtr)[j]);
+                    conv(c->formatConvBuffer, dstPtr, c->srcW * srcBpp);
+                }else
+                    conv(srcPtr, dstPtr, c->srcW * srcBpp);
+                if(dst_bswap)
+                    for(j=0; j<c->srcW; j++)
+                        ((uint16_t*)dstPtr)[j] = av_bswap16(((uint16_t*)dstPtr)[j]);
                 srcPtr += srcStride[0];
                 dstPtr += dstStride[0];
             }

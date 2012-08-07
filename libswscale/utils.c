@@ -37,6 +37,7 @@
 #include <windows.h>
 #endif
 
+#include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avutil.h"
 #include "libavutil/bswap.h"
@@ -598,7 +599,7 @@ fail:
     return ret;
 }
 
-#if HAVE_MMX2
+#if HAVE_MMXEXT && HAVE_INLINE_ASM
 static int initMMX2HScaler(int dstW, int xInc, uint8_t *filterCode,
                            int16_t *filter, int32_t *filterPos, int numSplits)
 {
@@ -761,7 +762,7 @@ static int initMMX2HScaler(int dstW, int xInc, uint8_t *filterCode,
 
     return fragmentPos + 1;
 }
-#endif /* HAVE_MMX2 */
+#endif /* HAVE_MMXEXT && HAVE_INLINE_ASM */
 
 static void getSubSampleFactors(int *h, int *v, enum PixelFormat format)
 {
@@ -856,7 +857,8 @@ SwsContext *sws_alloc_context(void)
     return c;
 }
 
-int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
+av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
+                             SwsFilter *dstFilter)
 {
     int i, j;
     int usesVFilter, usesHFilter;
@@ -996,6 +998,8 @@ int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
     c->chrDstW = -((-dstW) >> c->chrDstHSubSample);
     c->chrDstH = -((-dstH) >> c->chrDstVSubSample);
 
+    FF_ALLOC_OR_GOTO(c, c->formatConvBuffer, FFALIGN(srcW*2+78, 16) * 2, fail);
+
     /* unscaled special cases */
     if (unscaled && !usesHFilter && !usesVFilter &&
         (c->srcRange == c->dstRange || isAnyRGB(dstFormat))) {
@@ -1020,8 +1024,7 @@ int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
         c->srcBpc = 16;
     if (c->dstBpc == 16)
         dst_stride <<= 1;
-    FF_ALLOC_OR_GOTO(c, c->formatConvBuffer, FFALIGN(srcW*2+78, 16) * 2, fail);
-    if (HAVE_MMX2 && cpu_flags & AV_CPU_FLAG_MMX2 &&
+    if (HAVE_MMXEXT && HAVE_INLINE_ASM && cpu_flags & AV_CPU_FLAG_MMXEXT &&
         c->srcBpc == 8 && c->dstBpc <= 14) {
         c->canMMX2BeUsed = (dstW >= srcW && (dstW & 31) == 0 &&
                             (srcW & 15) == 0) ? 1 : 0;
@@ -1060,7 +1063,7 @@ int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
 
     /* precalculate horizontal scaler filter coefficients */
     {
-#if HAVE_MMX2
+#if HAVE_MMXEXT && HAVE_INLINE_ASM
 // can't downscale !!!
         if (c->canMMX2BeUsed && (flags & SWS_FAST_BILINEAR)) {
             c->lumMmx2FilterCodeSize = initMMX2HScaler(dstW, c->lumXInc, NULL,
@@ -1104,7 +1107,7 @@ int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
             mprotect(c->chrMmx2FilterCode, c->chrMmx2FilterCodeSize, PROT_EXEC | PROT_READ);
 #endif
         } else
-#endif /* HAVE_MMX2 */
+#endif /* HAVE_MMXEXT && HAVE_INLINE_ASM */
         {
             const int filterAlign =
                 (HAVE_MMX && cpu_flags & AV_CPU_FLAG_MMX) ? 4 :
@@ -1270,7 +1273,7 @@ int sws_init_context(SwsContext *c, SwsFilter *srcFilter, SwsFilter *dstFilter)
 #endif
                av_get_pix_fmt_name(dstFormat));
 
-        if (HAVE_MMX2 && cpu_flags & AV_CPU_FLAG_MMX2)
+        if (HAVE_MMXEXT && cpu_flags & AV_CPU_FLAG_MMXEXT)
             av_log(c, AV_LOG_INFO, "using MMX2\n");
         else if (HAVE_AMD3DNOW && cpu_flags & AV_CPU_FLAG_3DNOW)
             av_log(c, AV_LOG_INFO, "using 3DNOW\n");

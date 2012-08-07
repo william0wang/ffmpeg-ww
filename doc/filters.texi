@@ -43,8 +43,8 @@ enclosed in square brackets. In our example, that is @var{[T1]} and
 where video is input and output.
 
 Some filters take in input a list of parameters: they are specified
-after the filter name and an equal sign, and are separated each other
-by a semicolon.
+after the filter name and an equal sign, and are separated from each other
+by a colon.
 
 There exist so-called @var{source filters} that do not have an
 audio/video input, and @var{sink filters} that will not have audio/video
@@ -707,6 +707,13 @@ adding/dropping samples.
 @item max_comp
 Maximum compensation in samples per second.
 
+@item first_pts
+Assume the first pts should be this value.
+This allows for padding/trimming at the start of stream. By default, no
+assumption is made about the first frame's expected pts, so no padding or
+trimming is done. For example, this could be set to 0 to pad the beginning with
+silence if an audio stream starts after the video stream.
+
 @end table
 
 @section channelsplit
@@ -958,38 +965,6 @@ aevalsrc="0.1*sin(2*PI*(360-2.5/2)*t) : 0.1*sin(2*PI*(360+2.5/2)*t)"
 
 @end itemize
 
-@section amovie
-
-Read an audio stream from a movie container.
-
-It accepts the syntax: @var{movie_name}[:@var{options}] where
-@var{movie_name} is the name of the resource to read (not necessarily
-a file but also a device or a stream accessed through some protocol),
-and @var{options} is an optional sequence of @var{key}=@var{value}
-pairs, separated by ":".
-
-The description of the accepted options follows.
-
-@table @option
-
-@item format_name, f
-Specify the format assumed for the movie to read, and can be either
-the name of a container or an input device. If not specified the
-format is guessed from @var{movie_name} or by probing.
-
-@item seek_point, sp
-Specify the seek point in seconds, the frames will be output
-starting from this seek point, the parameter is evaluated with
-@code{av_strtod} so the numerical value may be suffixed by an IS
-postfix. Default value is "0".
-
-@item stream_index, si
-Specify the index of the audio stream to read. If the value is -1,
-the best suited audio stream will be automatically selected. Default
-value is "-1".
-
-@end table
-
 @section anullsrc
 
 Null audio source, return unprocessed audio frames. It is mainly useful
@@ -1058,6 +1033,67 @@ Channel layout of the audio data, in the form that can be accepted by
 
 All the parameters need to be explicitly defined.
 
+@section flite
+
+Synthesize a voice utterance using the libflite library.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-libflite}.
+
+Note that the flite library is not thread-safe.
+
+The source accepts parameters as a list of @var{key}=@var{value} pairs,
+separated by ":".
+
+The description of the accepted parameters follows.
+
+@table @option
+
+@item list_voices
+If set to 1, list the names of the available voices and exit
+immediately. Default value is 0.
+
+@item nb_samples, n
+Set the maximum number of samples per frame. Default value is 512.
+
+@item textfile
+Set the filename containing the text to speak.
+
+@item text
+Set the text to speak.
+
+@item voice, v
+Set the voice to use for the speech synthesis. Default value is
+@code{kal}. See also the @var{list_voices} option.
+@end table
+
+@section Examples
+
+@itemize
+@item
+Read from file @file{speech.txt}, and synthetize the text using the
+standard flite voice:
+@example
+flite=textfile=speech.txt
+@end example
+
+@item
+Read the specified text selecting the @code{slt} voice:
+@example
+flite=text='So fare thee well, poor devil of a Sub-Sub, whose commentator I am':voice=slt
+@end example
+
+@item
+Make @file{ffplay} speech the specified text, using @code{flite} and
+the @code{lavfi} device:
+@example
+ffplay -f lavfi flite='No more be grieved for which that thou hast done.'
+@end example
+@end itemize
+
+For more information about libflite, check:
+@url{http://www.speech.cs.cmu.edu/flite/}
+
 @c man end AUDIO SOURCES
 
 @chapter Audio Sinks
@@ -1100,6 +1136,31 @@ The configure output will show the video filters included in your
 build.
 
 Below is a description of the currently available video filters.
+
+@section alphaextract
+
+Extract the alpha component from the input as a grayscale video. This
+is especially useful with the @var{alphamerge} filter.
+
+@section alphamerge
+
+Add or replace the alpha component of the primary input with the
+grayscale value of a second input. This is intended for use with
+@var{alphaextract} to allow the transmission or storage of frame
+sequences that have alpha in a format that doesn't support an alpha
+channel.
+
+For example, to reconstruct full frames from a normal YUV-encoded video
+and a separate video created with @var{alphaextract}, you might use:
+@example
+movie=in_alpha.mkv [alpha]; [in][alpha] alphamerge [out]
+@end example
+
+Since this filter is designed for reconstruction, it operates on frame
+sequences without considering timestamps, and terminates when either
+input reaches end of stream. This will cause problems if your encoding
+pipeline drops frames. If you're trying to apply an image as an
+overlay to a video stream, consider the @var{overlay} filter instead.
 
 @section ass
 
@@ -2991,6 +3052,9 @@ the PTS of the first video frame
 @item INTERLACED
 tell if the current frame is interlaced
 
+@item TB
+the time base
+
 @item POS
 original position in the file of the frame, or undefined if undefined
 for the current frame
@@ -3571,110 +3635,78 @@ cellauto=p='@@@@ @@ @@@@':s=100x400:full=0:rule=18
 
 @end itemize
 
-@section color
+@section mandelbrot
 
-Provide an uniformly colored input.
+Generate a Mandelbrot set fractal, and progressively zoom towards the
+point specified with @var{start_x} and @var{start_y}.
 
-This source accepts list of options in the form of
-@var{key}=@var{value} pairs separated by ":".
-
-Alternatively, it accepts a string in the form
-@var{color}:@var{size}:@var{rate}, but this syntax is
-deprecated.
-
-Follows the description of the accepted parameters.
+This source accepts a list of options in the form of
+@var{key}=@var{value} pairs separated by ":". A description of the
+accepted options follows.
 
 @table @option
 
-@item color, c
-Specify the color of the source. It can be the name of a color (case
-insensitive match) or a 0xRRGGBB[AA] sequence, possibly followed by an
-alpha specifier. The default value is "black".
+@item end_pts
+Set the terminal pts value. Default value is 400.
 
-@item size, s
-Specify the size of the sourced video, it may be a string of the form
-@var{width}x@var{height}, or the name of a size abbreviation. The
-default value is "320x240".
+@item end_scale
+Set the terminal scale value.
+Must be a floating point value. Default value is 0.3.
+
+@item inner
+Set the inner coloring mode, that is the algorithm used to draw the
+Mandelbrot fractal internal region.
+
+It shall assume one of the following values:
+@table @option
+@item black
+Set black mode.
+@item conververgence
+Show time until convergence.
+@item mincol
+Set color based on point closest to the origin of the iterations.
+@item period
+Set period mode.
+@end table
+
+Default value is @var{mincol}.
+
+@item bailout
+Set the bailout value. Default value is 10.0.
+
+@item maxiter
+Set the maximum of iterations performed by the rendering
+algorithm. Default value is 7189.
+
+@item outer
+Set outer coloring mode.
+It shall assume one of following values:
+@table @option
+@item iteration_count
+Set iteration cound mode.
+@item normalized_iteration_count
+set normalized iteration count mode.
+@end table
+Default value is @var{normalized_iteration_count}.
 
 @item rate, r
-Specify the frame rate of the sourced video, as the number of frames
-generated per second. It has to be a string in the format
-@var{frame_rate_num}/@var{frame_rate_den}, an integer number, a float
-number or a valid video frame rate abbreviation. The default value is
-"25".
+Set frame rate, expressed as number of frames per second. Default
+value is "25".
 
+@item size, s
+Set frame size. Default value is "640x480".
+
+@item start_scale
+Set the initial scale value. Default value is 3.0.
+
+@item start_x
+Set the initial x position. Must be a floating point value between
+-100 and 100. Default value is -0.743643887037158704752191506114774.
+
+@item start_y
+Set the initial y position. Must be a floating point value between
+-100 and 100. Default value is -0.131825904205311970493132056385139.
 @end table
-
-For example the following graph description will generate a red source
-with an opacity of 0.2, with size "qcif" and a frame rate of 10
-frames per second, which will be overlayed over the source connected
-to the pad with identifier "in".
-
-@example
-"color=c=red@@0.2:s=qcif:r=10 [color]; [in][color] overlay [out]"
-@end example
-
-@section movie
-
-Read a video stream from a movie container.
-
-It accepts the syntax: @var{movie_name}[:@var{options}] where
-@var{movie_name} is the name of the resource to read (not necessarily
-a file but also a device or a stream accessed through some protocol),
-and @var{options} is an optional sequence of @var{key}=@var{value}
-pairs, separated by ":".
-
-The description of the accepted options follows.
-
-@table @option
-
-@item format_name, f
-Specifies the format assumed for the movie to read, and can be either
-the name of a container or an input device. If not specified the
-format is guessed from @var{movie_name} or by probing.
-
-@item seek_point, sp
-Specifies the seek point in seconds, the frames will be output
-starting from this seek point, the parameter is evaluated with
-@code{av_strtod} so the numerical value may be suffixed by an IS
-postfix. Default value is "0".
-
-@item stream_index, si
-Specifies the index of the video stream to read. If the value is -1,
-the best suited video stream will be automatically selected. Default
-value is "-1".
-
-@item loop
-Specifies how many times to read the video stream in sequence.
-If the value is less than 1, the stream will be read again and again.
-Default value is "1".
-
-Note that when the movie is looped the source timestamps are not
-changed, so it will generate non monotonically increasing timestamps.
-@end table
-
-This filter allows to overlay a second video on top of main input of
-a filtergraph as shown in this graph:
-@example
-input -----------> deltapts0 --> overlay --> output
-                                    ^
-                                    |
-movie --> scale--> deltapts1 -------+
-@end example
-
-Some examples follow:
-@example
-# skip 3.2 seconds from the start of the avi file in.avi, and overlay it
-# on top of the input labelled as "in".
-movie=in.avi:seek_point=3.2, scale=180:-1, setpts=PTS-STARTPTS [movie];
-[in] setpts=PTS-STARTPTS, [movie] overlay=16:16 [out]
-
-# read from a video4linux2 device, and overlay it on top of the input
-# labelled as "in"
-movie=/dev/video0:f=video4linux2, scale=180:-1, setpts=PTS-STARTPTS [movie];
-[in] setpts=PTS-STARTPTS, [movie] overlay=16:16 [out]
-
-@end example
 
 @section mptestsrc
 
@@ -3886,7 +3918,9 @@ ffplay -f lavfi life=s=300x200:mold=10:r=60:ratio=0.1:death_color=#C83232:life_c
 @end example
 @end itemize
 
-@section nullsrc, rgbtestsrc, testsrc
+@section color, nullsrc, rgbtestsrc, testsrc
+
+The @code{color} source provides an uniformly colored input.
 
 The @code{nullsrc} source returns unprocessed video frames. It is
 mainly useful to be employed in analysis / debugging tools, or as the
@@ -3904,6 +3938,12 @@ These sources accept an optional sequence of @var{key}=@var{value} pairs,
 separated by ":". The description of the accepted options follows.
 
 @table @option
+
+@item color, c
+Specify the color of the source, only used in the @code{color}
+source. It can be the name of a color (case insensitive match) or a
+0xRRGGBB[AA] sequence, possibly followed by an alpha specifier. The
+default value is "black".
 
 @item size, s
 Specify the size of the sourced video, it may be a string of the form
@@ -3948,6 +3988,13 @@ testsrc=duration=5.3:size=qcif:rate=10
 will generate a video with a duration of 5.3 seconds, with size
 176x144 and a frame rate of 10 frames per second.
 
+The following graph description will generate a red source
+with an opacity of 0.2, with size "qcif" and a frame rate of 10
+frames per second.
+@example
+color=c=red@@0.2:s=qcif:r=10
+@end example
+
 If the input content is to be ignored, @code{nullsrc} can be used. The
 following command generates noise in the luminance plane by employing
 the @code{mp=geq} filter:
@@ -3983,10 +4030,85 @@ tools.
 
 @c man end VIDEO SINKS
 
-@chapter Transmedia Filters
-@c man begin TRANSMEDIA FILTERS
+@chapter Multimedia Filters
+@c man begin MULTIMEDIA FILTERS
 
-Below is a description of the currently available transmedia filters.
+Below is a description of the currently available multimedia filters.
+
+@section concat
+
+Concatenate audio and video streams, joining them together one after the
+other.
+
+The filter works on segments of synchronized video and audio streams. All
+segments must have the same number of streams of each type, and that will
+also be the number of streams at output.
+
+The filter accepts the following named parameters:
+@table @option
+
+@item n
+Set the number of segments. Default is 2.
+
+@item v
+Set the number of output video streams, that is also the number of video
+streams in each segment. Default is 1.
+
+@item a
+Set the number of output audio streams, that is also the number of video
+streams in each segment. Default is 0.
+
+@end table
+
+The filter has @var{v}+@var{a} outputs: first @var{v} video outputs, then
+@var{a} audio outputs.
+
+There are @var{n}×(@var{v}+@var{a}) inputs: first the inputs for the first
+segment, in the same order as the outputs, then the inputs for the second
+segment, etc.
+
+Related streams do not always have exactly the same duration, for various
+reasons including codec frame size or sloppy authoring. For that reason,
+related synchronized streams (e.g. a video and its audio track) should be
+concatenated at once. The concat filter will use the duration of the longest
+stream in each segment (except the last one), and if necessary pad shorter
+audio streams with silence.
+
+For this filter to work correctly, all segments must start at timestamp 0.
+
+All corresponding streams must have the same parameters in all segments; the
+filtering system will automatically select a common pixel format for video
+streams, and a common sample format, sample rate and channel layout for
+audio streams, but other settings, such as resolution, must be converted
+explicitly by the user.
+
+Different frame rates are acceptable but will result in variable frame rate
+at output; be sure to configure the output file to handle it.
+
+Examples:
+@itemize
+@item
+Concatenate an opening, an episode and an ending, all in bilingual version
+(video in stream 0, audio in streams 1 and 2):
+@example
+ffmpeg -i opening.mkv -i episode.mkv -i ending.mkv -filter_complex \
+  '[0:0] [0:1] [0:2] [1:0] [1:1] [1:2] [2:0] [2:1] [2:2]
+   concat=n=3:v=1:a=2 [v] [a1] [a2]' \
+  -map '[v]' -map '[a1]' -map '[a2]' output.mkv
+@end example
+
+@item
+Concatenate two parts, handling audio and video separately, using the
+(a)movie sources, and adjusting the resolution:
+@example
+movie=part1.mp4, scale=512:288 [v1] ; amovie=part1.mp4 [a1] ;
+movie=part2.mp4, scale=512:288 [v2] ; amovie=part2.mp4 [a2] ;
+[v1] [v2] concat [outv] ; [a1] [a2] concat=v=0:a=1 [outa]
+@end example
+Note that a desync will happen at the stitch if the audio and video streams
+do not have exactly the same duration in the first file.
+
+@end itemize
 
 @section showwaves
 
@@ -4026,4 +4148,102 @@ aevalsrc=sin(1*2*PI*t)*sin(880*2*PI*t):cos(2*PI*200*t),asplit[out0],showwaves=r=
 @end example
 @end itemize
 
-@c man end TRANSMEDIA FILTERS
+@c man end MULTIMEDIA FILTERS
+
+@chapter Multimedia Sources
+@c man begin MULTIMEDIA SOURCES
+
+Below is a description of the currently available multimedia sources.
+
+@section amovie
+
+This is the same as @ref{src_movie} source, except it selects an audio
+stream by default.
+
+@anchor{src_movie}
+@section movie
+
+Read audio and/or video stream(s) from a movie container.
+
+It accepts the syntax: @var{movie_name}[:@var{options}] where
+@var{movie_name} is the name of the resource to read (not necessarily
+a file but also a device or a stream accessed through some protocol),
+and @var{options} is an optional sequence of @var{key}=@var{value}
+pairs, separated by ":".
+
+The description of the accepted options follows.
+
+@table @option
+
+@item format_name, f
+Specifies the format assumed for the movie to read, and can be either
+the name of a container or an input device. If not specified the
+format is guessed from @var{movie_name} or by probing.
+
+@item seek_point, sp
+Specifies the seek point in seconds, the frames will be output
+starting from this seek point, the parameter is evaluated with
+@code{av_strtod} so the numerical value may be suffixed by an IS
+postfix. Default value is "0".
+
+@item streams, s
+Specifies the streams to read. Several streams can be specified, separated
+by "+". The source will then have as many outputs, in the same order. The
+syntax is explained in the @ref{Stream specifiers} chapter. Two special
+names, "dv" and "da" specify respectively the default (best suited) video
+and audio stream. Default is "dv", or "da" if the filter is called as
+"amovie".
+
+@item stream_index, si
+Specifies the index of the video stream to read. If the value is -1,
+the best suited video stream will be automatically selected. Default
+value is "-1". Deprecated. If the filter is called "amovie", it will select
+audio instead of video.
+
+@item loop
+Specifies how many times to read the stream in sequence.
+If the value is less than 1, the stream will be read again and again.
+Default value is "1".
+
+Note that when the movie is looped the source timestamps are not
+changed, so it will generate non monotonically increasing timestamps.
+@end table
+
+This filter allows to overlay a second video on top of main input of
+a filtergraph as shown in this graph:
+@example
+input -----------> deltapts0 --> overlay --> output
+                                    ^
+                                    |
+movie --> scale--> deltapts1 -------+
+@end example
+
+Some examples follow.
+
+@itemize
+@item
+Skip 3.2 seconds from the start of the avi file in.avi, and overlay it
+on top of the input labelled as "in":
+@example
+movie=in.avi:seek_point=3.2, scale=180:-1, setpts=PTS-STARTPTS [movie];
+[in] setpts=PTS-STARTPTS, [movie] overlay=16:16 [out]
+@end example
+
+@item
+Read from a video4linux2 device, and overlay it on top of the input
+labelled as "in":
+@example
+movie=/dev/video0:f=video4linux2, scale=180:-1, setpts=PTS-STARTPTS [movie];
+[in] setpts=PTS-STARTPTS, [movie] overlay=16:16 [out]
+@end example
+
+@item
+Read the first video stream and the audio stream with id 0x81 from
+dvd.vob; the video is connected to the pad named "video" and the audio is
+connected to the pad named "audio":
+@example
+movie=dvd.vob:s=v:0+#0x81 [video] [audio]
+@end example
+@end itemize
+
+@c man end MULTIMEDIA SOURCES

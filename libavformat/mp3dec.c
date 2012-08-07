@@ -167,7 +167,7 @@ static int mp3_read_header(AVFormatContext *s)
 
     st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
     st->codec->codec_id = CODEC_ID_MP3;
-    st->need_parsing = AVSTREAM_PARSE_FULL;
+    st->need_parsing = AVSTREAM_PARSE_FULL_RAW;
     st->start_time = 0;
 
     // lcm of all mp3 sample rates
@@ -196,7 +196,6 @@ static int mp3_read_packet(AVFormatContext *s, AVPacket *pkt)
     MP3Context *mp3 = s->priv_data;
     int ret, size;
     int64_t pos;
-    //    AVStream *st = s->streams[0];
 
     size= MP3_PACKET_SIZE;
     pos = avio_tell(s->pb);
@@ -204,14 +203,14 @@ static int mp3_read_packet(AVFormatContext *s, AVPacket *pkt)
         size= FFMIN(size, mp3->filesize - pos);
 
     ret= av_get_packet(s->pb, pkt, size);
-
-    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
-    pkt->stream_index = 0;
     if (ret <= 0) {
         if(ret<0)
             return ret;
         return AVERROR_EOF;
     }
+
+    pkt->flags &= ~AV_PKT_FLAG_CORRUPT;
+    pkt->stream_index = 0;
 
     if (ret >= ID3v1_TAG_SIZE &&
         memcmp(&pkt->data[ret - ID3v1_TAG_SIZE], "TAG", 3) == 0)
@@ -235,7 +234,7 @@ static int read_seek(AVFormatContext *s, int stream_index, int64_t timestamp, in
 
 AVInputFormat ff_mp3_demuxer = {
     .name           = "mp3",
-    .long_name      = NULL_IF_CONFIG_SMALL("MPEG audio layer 2/3"),
+    .long_name      = NULL_IF_CONFIG_SMALL("MP2/3 (MPEG audio layer 2/3)"),
     .priv_data_size = sizeof(MP3Context),
     .read_probe     = mp3_read_probe,
     .read_header    = mp3_read_header,

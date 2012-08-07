@@ -31,7 +31,7 @@
 //#define DEBUG
 
 static const AVOption options[] = {
-    FF_RTP_FLAG_OPTS(RTPMuxContext, flags)
+    FF_RTP_FLAG_OPTS(RTPMuxContext, flags),
     { "payload_type", "Specify RTP payload type", offsetof(RTPMuxContext, payload_type), AV_OPT_TYPE_INT, {.dbl = -1 }, -1, 127, AV_OPT_FLAG_ENCODING_PARAM },
     { "ssrc", "Stream identifier", offsetof(RTPMuxContext, ssrc), AV_OPT_TYPE_INT, { 0 }, INT_MIN, INT_MAX, AV_OPT_FLAG_ENCODING_PARAM },
     { NULL },
@@ -546,7 +546,7 @@ static int rtp_write_trailer(AVFormatContext *s1)
 
 AVOutputFormat ff_rtp_muxer = {
     .name              = "rtp",
-    .long_name         = NULL_IF_CONFIG_SMALL("RTP output format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("RTP output"),
     .priv_data_size    = sizeof(RTPMuxContext),
     .audio_codec       = CODEC_ID_PCM_MULAW,
     .video_codec       = CODEC_ID_MPEG4,

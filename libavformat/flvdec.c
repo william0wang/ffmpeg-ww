@@ -52,6 +52,7 @@ typedef struct {
     } validate_index[2];
     int validate_next;
     int validate_count;
+    int searched_for_end;
 } FLVContext;
 
 static int flv_probe(AVProbeData *p)
@@ -65,11 +66,11 @@ static int flv_probe(AVProbeData *p)
     return 0;
 }
 
-static AVStream *create_stream(AVFormatContext *s, int tag, int codec_type){
+static AVStream *create_stream(AVFormatContext *s, int codec_type)
+{
     AVStream *st = avformat_new_stream(s, NULL);
     if (!st)
         return NULL;
-    st->id = tag;
     st->codec->codec_type = codec_type;
     if(s->nb_streams>=3 ||(   s->nb_streams==2
                            && s->streams[0]->codec->codec_type != AVMEDIA_TYPE_DATA
@@ -402,7 +403,7 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
             else if (!strcmp(key, "audiodatarate") && acodec && 0 <= (int)(num_val * 1024.0))
                 acodec->bit_rate = num_val * 1024.0;
             else if (!strcmp(key, "datastream")) {
-                AVStream *st = create_stream(s, 2, AVMEDIA_TYPE_DATA);
+                AVStream *st = create_stream(s, AVMEDIA_TYPE_DATA);
                 if (!st)
                     return AVERROR(ENOMEM);
                 st->codec->codec_id = CODEC_ID_TEXT;
@@ -509,11 +510,11 @@ static int flv_read_header(AVFormatContext *s)
         s->ctx_flags |= AVFMTCTX_NOHEADER;
 
     if(flags & FLV_HEADER_FLAG_HASVIDEO){
-        if(!create_stream(s, 0, AVMEDIA_TYPE_VIDEO))
+        if(!create_stream(s, AVMEDIA_TYPE_VIDEO))
             return AVERROR(ENOMEM);
     }
     if(flags & FLV_HEADER_FLAG_HASAUDIO){
-        if(!create_stream(s, 1, AVMEDIA_TYPE_AUDIO))
+        if(!create_stream(s, AVMEDIA_TYPE_AUDIO))
             return AVERROR(ENOMEM);
     }
     // Flag doesn't indicate whether or not there is script-data present. Must
@@ -617,7 +618,7 @@ static int flv_data_packet(AVFormatContext *s, AVPacket *pkt,
     }
 
     if (i == s->nb_streams) {
-        st = create_stream(s, 2, AVMEDIA_TYPE_DATA);
+        st = create_stream(s, AVMEDIA_TYPE_DATA);
         if (!st)
             goto out;
         st->codec->codec_id = CODEC_ID_TEXT;
@@ -727,7 +728,7 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
     }
     if(i == s->nb_streams){
         av_log(s, AV_LOG_WARNING, "Stream discovered after head already parsed\n");
-        st = create_stream(s, stream_type,
+        st = create_stream(s,
              (int[]){AVMEDIA_TYPE_VIDEO, AVMEDIA_TYPE_AUDIO, AVMEDIA_TYPE_DATA}[stream_type]);
     }
     av_dlog(s, "%d %X %d \n", stream_type, flags, st->discard);
@@ -744,19 +745,27 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
  }
 
     // if not streamed and no duration from metadata then seek to end to find the duration from the timestamps
-    if(s->pb->seekable && (!s->duration || s->duration==AV_NOPTS_VALUE)){
+    if(s->pb->seekable && (!s->duration || s->duration==AV_NOPTS_VALUE) && !flv->searched_for_end){
         int size;
         const int64_t pos= avio_tell(s->pb);
-        const int64_t fsize= avio_size(s->pb);
+        int64_t fsize= avio_size(s->pb);
+retry_duration:
         avio_seek(s->pb, fsize-4, SEEK_SET);
         size= avio_rb32(s->pb);
         avio_seek(s->pb, fsize-3-size, SEEK_SET);
         if(size == avio_rb24(s->pb) + 11){
             uint32_t ts = avio_rb24(s->pb);
             ts |= avio_r8(s->pb) << 24;
-            s->duration = ts * (int64_t)AV_TIME_BASE / 1000;
+            if(ts)
+                s->duration = ts * (int64_t)AV_TIME_BASE / 1000;
+            else if (fsize >= 8 && fsize - 8 >= size){
+                fsize -= size+4;
+                goto retry_duration;
+            }
         }
+
         avio_seek(s->pb, pos, SEEK_SET);
+        flv->searched_for_end = 1;
     }
 
     if(stream_type == FLV_STREAM_TYPE_AUDIO){
@@ -889,7 +898,7 @@ static const AVClass class = {
 
 AVInputFormat ff_flv_demuxer = {
     .name           = "flv",
-    .long_name      = NULL_IF_CONFIG_SMALL("FLV format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("FLV (Flash Video)"),
     .priv_data_size = sizeof(FLVContext),
     .read_probe     = flv_probe,
     .read_header    = flv_read_header,

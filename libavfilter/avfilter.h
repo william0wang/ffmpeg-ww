@@ -196,6 +196,9 @@ AVFilterBufferRef *avfilter_ref_buffer(AVFilterBufferRef *ref, int pmask);
  * buffer, the buffer itself is also automatically freed.
  *
  * @param ref reference to the buffer, may be NULL
+ *
+ * @note it is recommended to use avfilter_unref_bufferp() instead of this
+ * function
  */
 void avfilter_unref_buffer(AVFilterBufferRef *ref);
 
@@ -207,7 +210,6 @@ void avfilter_unref_buffer(AVFilterBufferRef *ref);
  * @param ref pointer to the buffer reference
  */
 void avfilter_unref_bufferp(AVFilterBufferRef **ref);
-
 
 #if FF_API_AVFILTERPAD_PUBLIC
 /**
@@ -258,9 +260,18 @@ struct AVFilterPad {
      * NULL, the filter layer will default to storing a reference to the
      * picture inside the link structure.
      *
+     * The reference given as argument is also available in link->cur_buf.
+     * It can be stored elsewhere or given away, but then clearing
+     * link->cur_buf is advised, as it is automatically unreferenced.
+     * The reference must not be unreferenced before end_frame(), as it may
+     * still be in use by the automatic copy mechanism.
+     *
      * Input video pads only.
+     *
+     * @return >= 0 on success, a negative AVERROR on error. picref will be
+     * unreferenced by the caller in case of error.
      */
-    void (*start_frame)(AVFilterLink *link, AVFilterBufferRef *picref);
+    int (*start_frame)(AVFilterLink *link, AVFilterBufferRef *picref);
 
     /**
      * Callback function to get a video buffer. If NULL, the filter system will
@@ -285,16 +296,20 @@ struct AVFilterPad {
      * in the link structure during start_frame().
      *
      * Input video pads only.
+     *
+     * @return >= 0 on success, a negative AVERROR on error.
      */
-    void (*end_frame)(AVFilterLink *link);
+    int (*end_frame)(AVFilterLink *link);
 
     /**
      * Slice drawing callback. This is where a filter receives video data
      * and should do its processing.
      *
      * Input video pads only.
+     *
+     * @return >= 0 on success, a negative AVERROR on error.
      */
-    void (*draw_slice)(AVFilterLink *link, int y, int height, int slice_dir);
+    int (*draw_slice)(AVFilterLink *link, int y, int height, int slice_dir);
 
     /**
      * Samples filtering callback. This is where a filter receives audio data
@@ -383,7 +398,7 @@ enum AVMediaType avfilter_pad_get_type(AVFilterPad *pads, int pad_idx);
 
 /** default handler for end_frame() for video inputs */
 attribute_deprecated
-void avfilter_default_end_frame(AVFilterLink *link);
+int  avfilter_default_end_frame(AVFilterLink *link);
 
 /**
  * Filter definition. This defines the pads a filter contains, and all the
@@ -569,7 +584,40 @@ struct AVFilterLink {
      */
     AVFilterBufferRef *src_buf;
 
+    /**
+     * The buffer reference to the frame sent across the link by the
+     * source filter, which is read by the destination filter. It is
+     * automatically set up by ff_start_frame().
+     *
+     * Depending on the permissions, it may either be the same as
+     * src_buf or an automatic copy of it.
+     *
+     * It is automatically freed by the filter system when calling
+     * ff_end_frame(). In case you save the buffer reference
+     * internally (e.g. if you cache it for later reuse), or give it
+     * away (e.g. if you pass the reference to the next filter) it
+     * must be set to NULL before calling ff_end_frame().
+     */
     AVFilterBufferRef *cur_buf;
+
+    /**
+     * The buffer reference to the frame which is sent to output by
+     * the source filter.
+     *
+     * If no start_frame callback is defined on a link,
+     * ff_start_frame() will automatically request a new buffer on the
+     * first output link of the destination filter. The reference to
+     * the buffer so obtained is stored in the out_buf field on the
+     * output link.
+     *
+     * It can also be set by the filter code in case the filter needs
+     * to access the output buffer later. For example the filter code
+     * may set it in a custom start_frame, and access it in
+     * draw_slice.
+     *
+     * It is automatically freed by the filter system in
+     * ff_end_frame().
+     */
     AVFilterBufferRef *out_buf;
 
     struct AVFilterPool *pool;
@@ -598,7 +646,7 @@ struct AVFilterLink {
      * Sources should set it to the best estimation of the real frame rate.
      * Filters should update it if necessary depending on their function.
      * Sinks can use it to set a default output frame rate.
-     * It is similar to the r_frae_rate field in AVStream.
+     * It is similar to the r_frame_rate field in AVStream.
      */
     AVRational frame_rate;
 
@@ -627,6 +675,15 @@ struct AVFilterLink {
      * called with more samples, it will split them.
      */
     int max_samples;
+
+    /**
+     * The buffer reference currently being received across the link by the
+     * destination filter. This is used internally by the filter system to
+     * allow automatic copying of buffers which do not have sufficient
+     * permissions for the destination. This should not be accessed directly
+     * by the filters.
+     */
+    AVFilterBufferRef *cur_buf_copy;
 };
 
 /**

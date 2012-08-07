@@ -93,6 +93,9 @@ struct AVFilterPad {
      * picture inside the link structure.
      *
      * Input video pads only.
+     *
+     * @return >= 0 on success, a negative AVERROR on error. picref will be
+     * unreferenced by the caller in case of error.
      */
     void (*start_frame)(AVFilterLink *link, AVFilterBufferRef *picref);
 
@@ -119,16 +122,20 @@ struct AVFilterPad {
      * in the link structure during start_frame().
      *
      * Input video pads only.
+     *
+     * @return >= 0 on success, a negative AVERROR on error.
      */
-    void (*end_frame)(AVFilterLink *link);
+    int (*end_frame)(AVFilterLink *link);
 
     /**
      * Slice drawing callback. This is where a filter receives video data
      * and should do its processing.
      *
      * Input video pads only.
+     *
+     * @return >= 0 on success, a negative AVERROR on error.
      */
-    void (*draw_slice)(AVFilterLink *link, int y, int height, int slice_dir);
+    int (*draw_slice)(AVFilterLink *link, int y, int height, int slice_dir);
 
     /**
      * Samples filtering callback. This is where a filter receives audio data
@@ -346,5 +353,16 @@ int ff_request_frame(AVFilterLink *link);
         .version    = LIBAVUTIL_VERSION_INT,    \
         .category   = AV_CLASS_CATEGORY_FILTER, \
     }
+
+AVFilterBufferRef *ff_copy_buffer_ref(AVFilterLink *outlink,
+                                      AVFilterBufferRef *ref);
+
+/**
+ * Find the index of a link.
+ *
+ * I.e. find i such that link == ctx->(in|out)puts[i]
+ */
+#define FF_INLINK_IDX(link)  ((int)((link)->dstpad - (link)->dst->input_pads))
+#define FF_OUTLINK_IDX(link) ((int)((link)->srcpad - (link)->src->output_pads))
 
 #endif /* AVFILTER_INTERNAL_H */

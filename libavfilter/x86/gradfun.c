@@ -23,10 +23,12 @@
 #include "libavutil/x86_cpu.h"
 #include "libavfilter/gradfun.h"
 
+#if HAVE_INLINE_ASM
+
 DECLARE_ALIGNED(16, static const uint16_t, pw_7f)[8] = {0x7F,0x7F,0x7F,0x7F,0x7F,0x7F,0x7F,0x7F};
 DECLARE_ALIGNED(16, static const uint16_t, pw_ff)[8] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 
-#if HAVE_MMX2
+#if HAVE_MMXEXT
 static void gradfun_filter_line_mmx2(uint8_t *dst, const uint8_t *src, const uint16_t *dc, int width, int thresh, const uint16_t *dithers)
 {
     intptr_t x;
@@ -164,12 +166,15 @@ static void gradfun_blur_line_sse2(uint16_t *dc, uint16_t *buf, const uint16_t *
 }
 #endif // HAVE_SSE
 
+#endif /* HAVE_INLINE_ASM */
+
 av_cold void ff_gradfun_init_x86(GradFunContext *gf)
 {
     int cpu_flags = av_get_cpu_flags();
 
-#if HAVE_MMX2
-    if (cpu_flags & AV_CPU_FLAG_MMX2)
+#if HAVE_INLINE_ASM
+#if HAVE_MMXEXT
+    if (cpu_flags & AV_CPU_FLAG_MMXEXT)
         gf->filter_line = gradfun_filter_line_mmx2;
 #endif
 #if HAVE_SSSE3
@@ -180,4 +185,5 @@ av_cold void ff_gradfun_init_x86(GradFunContext *gf)
     if (cpu_flags & AV_CPU_FLAG_SSE2)
         gf->blur_line = gradfun_blur_line_sse2;
 #endif
+#endif /* HAVE_INLINE_ASM */
 }

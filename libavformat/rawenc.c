@@ -60,7 +60,7 @@ AVOutputFormat ff_adx_muxer = {
 #if CONFIG_CAVSVIDEO_MUXER
 AVOutputFormat ff_cavsvideo_muxer = {
     .name              = "cavsvideo",
-    .long_name         = NULL_IF_CONFIG_SMALL("raw Chinese AVS video"),
+    .long_name         = NULL_IF_CONFIG_SMALL("raw Chinese AVS (Audio Video Standard) video"),
     .extensions        = "cavs",
     .audio_codec       = CODEC_ID_NONE,
     .video_codec       = CODEC_ID_CAVS,
@@ -174,7 +174,7 @@ AVOutputFormat ff_h263_muxer = {
 #if CONFIG_H264_MUXER
 AVOutputFormat ff_h264_muxer = {
     .name              = "h264",
-    .long_name         = NULL_IF_CONFIG_SMALL("raw H.264 video format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("raw H.264 video"),
     .extensions        = "h264",
     .audio_codec       = CODEC_ID_NONE,
     .video_codec       = CODEC_ID_H264,
@@ -186,7 +186,7 @@ AVOutputFormat ff_h264_muxer = {
 #if CONFIG_M4V_MUXER
 AVOutputFormat ff_m4v_muxer = {
     .name              = "m4v",
-    .long_name         = NULL_IF_CONFIG_SMALL("raw MPEG-4 video format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("raw MPEG-4 video"),
     .extensions        = "m4v",
     .audio_codec       = CODEC_ID_NONE,
     .video_codec       = CODEC_ID_MPEG4,
@@ -248,7 +248,7 @@ AVOutputFormat ff_mpeg2video_muxer = {
 #if CONFIG_RAWVIDEO_MUXER
 AVOutputFormat ff_rawvideo_muxer = {
     .name              = "rawvideo",
-    .long_name         = NULL_IF_CONFIG_SMALL("raw video format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("raw video"),
     .extensions        = "yuv,rgb",
     .audio_codec       = CODEC_ID_NONE,
     .video_codec       = CODEC_ID_RAWVIDEO,

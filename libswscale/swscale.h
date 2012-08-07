@@ -82,7 +82,10 @@ const char *swscale_license(void);
  * are only provided for API compatibility.
  */
 #define SWS_CPU_CAPS_MMX      0x80000000
+#define SWS_CPU_CAPS_MMXEXT   0x20000000
+#if LIBSWSCALE_VERSION_MAJOR < 3
 #define SWS_CPU_CAPS_MMX2     0x20000000
+#endif
 #define SWS_CPU_CAPS_3DNOW    0x40000000
 #define SWS_CPU_CAPS_ALTIVEC  0x10000000
 #define SWS_CPU_CAPS_BFIN     0x01000000
@@ -212,7 +215,13 @@ int sws_scale(struct SwsContext *c, const uint8_t *const srcSlice[],
               uint8_t *const dst[], const int dstStride[]);
 
 /**
- * @param inv_table the yuv2rgb coefficients, normally ff_yuv2rgb_coeffs[x]
+ * @param dstRange flag indicating the while-black range of the output (1=jpeg / 0=mpeg)
+ * @param srcRange flag indicating the while-black range of the input (1=jpeg / 0=mpeg)
+ * @param table the yuv2rgb coefficients describing the output yuv space, normally ff_yuv2rgb_coeffs[x]
+ * @param inv_table the yuv2rgb coefficients describing the input yuv space, normally ff_yuv2rgb_coeffs[x]
+ * @param brightness 16.16 fixed point brightness correction
+ * @param contrast 16.16 fixed point contrast correction
+ * @param saturation 16.16 fixed point saturation correction
  * @return -1 if not supported
  */
 int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],

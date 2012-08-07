@@ -24,6 +24,7 @@
 #include "libavutil/random_seed.h"
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
+#include "libavutil/time.h"
 #include "internal.h"
 #include "network.h"
 #include "os_support.h"
@@ -253,7 +254,7 @@ static int sap_write_packet(AVFormatContext *s, AVPacket *pkt)
 
 AVOutputFormat ff_sap_muxer = {
     .name              = "sap",
-    .long_name         = NULL_IF_CONFIG_SMALL("SAP output format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("SAP output"),
     .priv_data_size    = sizeof(struct SAPState),
     .audio_codec       = CODEC_ID_AAC,
     .video_codec       = CODEC_ID_MPEG4,

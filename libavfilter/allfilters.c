@@ -58,12 +58,14 @@ void avfilter_register_all(void)
     REGISTER_FILTER (RESAMPLE,    resample,    af);
 
     REGISTER_FILTER (AEVALSRC,    aevalsrc,    asrc);
-    REGISTER_FILTER (AMOVIE,      amovie,      asrc);
     REGISTER_FILTER (ANULLSRC,    anullsrc,    asrc);
+    REGISTER_FILTER (FLITE,       flite,       asrc);
 
     REGISTER_FILTER (ABUFFERSINK, abuffersink, asink);
     REGISTER_FILTER (ANULLSINK,   anullsink,   asink);
 
+    REGISTER_FILTER (ALPHAEXTRACT, alphaextract, vf);
+    REGISTER_FILTER (ALPHAMERGE,  alphamerge,  vf);
     REGISTER_FILTER (ASS,         ass,         vf);
     REGISTER_FILTER (BBOX,        bbox,        vf);
     REGISTER_FILTER (BLACKDETECT, blackdetect, vf);
@@ -124,7 +126,6 @@ void avfilter_register_all(void)
     REGISTER_FILTER (FREI0R,      frei0r_src,  vsrc);
     REGISTER_FILTER (LIFE,        life,        vsrc);
     REGISTER_FILTER (MANDELBROT,  mandelbrot,  vsrc);
-    REGISTER_FILTER (MOVIE,       movie,       vsrc);
     REGISTER_FILTER (MPTESTSRC,   mptestsrc,   vsrc);
     REGISTER_FILTER (NULLSRC,     nullsrc,     vsrc);
     REGISTER_FILTER (RGBTESTSRC,  rgbtestsrc,  vsrc);
@@ -133,8 +134,13 @@ void avfilter_register_all(void)
     REGISTER_FILTER (BUFFERSINK,  buffersink,  vsink);
     REGISTER_FILTER (NULLSINK,    nullsink,    vsink);
 
-    /* transmedia filters */
+    /* multimedia filters */
+    REGISTER_FILTER (CONCAT,      concat,      avf);
     REGISTER_FILTER (SHOWWAVES,   showwaves,   avf);
+
+    /* multimedia sources */
+    REGISTER_FILTER (AMOVIE,      amovie,      avsrc);
+    REGISTER_FILTER (MOVIE,       movie,       avsrc);
 
     /* those filters are part of public or internal API => registered
      * unconditionally */

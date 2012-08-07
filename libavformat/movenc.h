@@ -80,6 +80,7 @@ typedef struct MOVIndex {
     unsigned    timescale;
     uint64_t    time;
     int64_t     track_duration;
+    int         last_sample_is_subtitle_end;
     long        sample_count;
     long        sample_size;
     long        chunkCount;
@@ -142,6 +143,7 @@ typedef struct MOVMuxContext {
     int     mode;
     int64_t time;
     int     nb_streams;
+    int     nb_meta_tmcd;  ///< number of new created tmcd track based on metadata (aka not data copy)
     int     chapter_track; ///< qt chapter track number
     int64_t mdat_pos;
     uint64_t mdat_size;

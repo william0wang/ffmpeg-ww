@@ -215,7 +215,7 @@ static const AVClass wav_muxer_class = {
 
 AVOutputFormat ff_wav_muxer = {
     .name              = "wav",
-    .long_name         = NULL_IF_CONFIG_SMALL("WAV format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("WAV / WAVE (Waveform Audio)"),
     .mime_type         = "audio/x-wav",
     .extensions        = "wav",
     .priv_data_size    = sizeof(WAVContext),
@@ -289,7 +289,7 @@ static int wav_parse_fmt_tag(AVFormatContext *s, int64_t size, AVStream **st)
     ret = ff_get_wav_header(pb, (*st)->codec, size);
     if (ret < 0)
         return ret;
-    (*st)->need_parsing = AVSTREAM_PARSE_FULL;
+    (*st)->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
     avpriv_set_pts_info(*st, 64, 1, (*st)->codec->sample_rate);
 
@@ -480,6 +480,10 @@ static int wav_read_header(AVFormatContext *s)
                 return ret;
             break;
         case MKTAG('S','M','V','0'):
+            if (!got_fmt) {
+                av_log(s, AV_LOG_ERROR, "found no 'fmt ' tag before the 'SMV0' tag\n");
+                return AVERROR_INVALIDDATA;
+            }
             // SMV file, a wav file with video appended.
             if (size != MKTAG('0','2','0','0')) {
                 av_log(s, AV_LOG_ERROR, "Unknown SMV version found\n");
@@ -695,7 +699,7 @@ static const AVClass wav_demuxer_class = {
 };
 AVInputFormat ff_wav_demuxer = {
     .name           = "wav",
-    .long_name      = NULL_IF_CONFIG_SMALL("WAV format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("WAV / WAVE (Waveform Audio)"),
     .priv_data_size = sizeof(WAVContext),
     .read_probe     = wav_probe,
     .read_header    = wav_read_header,
@@ -767,7 +771,7 @@ static int w64_read_header(AVFormatContext *s)
         return ret;
     avio_skip(pb, FFALIGN(size, INT64_C(8)) - size);
 
-    st->need_parsing = AVSTREAM_PARSE_FULL;
+    st->need_parsing = AVSTREAM_PARSE_FULL_RAW;
 
     avpriv_set_pts_info(st, 64, 1, st->codec->sample_rate);
 
@@ -784,7 +788,7 @@ static int w64_read_header(AVFormatContext *s)
 
 AVInputFormat ff_w64_demuxer = {
     .name           = "w64",
-    .long_name      = NULL_IF_CONFIG_SMALL("Sony Wave64 format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Sony Wave64"),
     .priv_data_size = sizeof(WAVContext),
     .read_probe     = w64_probe,
     .read_header    = w64_read_header,

@@ -543,6 +543,7 @@ enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum 
         ~0, /* no loss first */
         ~FF_LOSS_ALPHA,
         ~FF_LOSS_RESOLUTION,
+        ~FF_LOSS_COLORSPACE,
         ~(FF_LOSS_COLORSPACE | FF_LOSS_RESOLUTION),
         ~FF_LOSS_COLORQUANT,
         ~FF_LOSS_DEPTH,
@@ -573,6 +574,19 @@ enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum 
     if (loss_ptr)
         *loss_ptr = avcodec_get_pix_fmt_loss(dst_pix_fmt, src_pix_fmt, has_alpha);
     return dst_pix_fmt;
+}
+
+enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_list,
+                                            enum PixelFormat src_pix_fmt,
+                                            int has_alpha, int *loss_ptr){
+    int i;
+
+    enum PixelFormat best = PIX_FMT_NONE;
+
+    for(i=0; pix_fmt_list[i] != PIX_FMT_NONE; i++)
+        best = avcodec_find_best_pix_fmt2(best, pix_fmt_list[i], src_pix_fmt, has_alpha, loss_ptr);
+
+    return best;
 }
 
 void av_picture_copy(AVPicture *dst, const AVPicture *src,

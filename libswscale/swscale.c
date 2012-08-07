@@ -544,7 +544,7 @@ static int swScale(SwsContext *c, const uint8_t *src[],
         if (!enough_lines)
             break;  // we can't output a dstY line so let's try with the next slice
 
-#if HAVE_MMX
+#if HAVE_MMX && HAVE_INLINE_ASM
         updateMMXDitherTables(c, dstY, lumBufIndex, chrBufIndex,
                               lastInLumBuf, lastInChrBuf);
 #endif
@@ -663,8 +663,8 @@ static int swScale(SwsContext *c, const uint8_t *src[],
     if (isPlanar(dstFormat) && isALPHA(dstFormat) && !alpPixBuf)
         fillPlane(dst[3], dstStride[3], dstW, dstY - lastDstY, lastDstY, 255);
 
-#if HAVE_MMX2
-    if (av_get_cpu_flags() & AV_CPU_FLAG_MMX2)
+#if HAVE_MMXEXT && HAVE_INLINE_ASM
+    if (av_get_cpu_flags() & AV_CPU_FLAG_MMXEXT)
         __asm__ volatile ("sfence" ::: "memory");
 #endif
     emms_c();

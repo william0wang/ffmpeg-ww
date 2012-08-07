@@ -40,6 +40,7 @@ void avdevice_register_all(void)
     /* devices */
     REGISTER_INOUTDEV (ALSA, alsa);
     REGISTER_INDEV    (BKTR, bktr);
+    REGISTER_OUTDEV   (CACA, caca);
     REGISTER_INDEV    (DSHOW, dshow);
     REGISTER_INDEV    (DV1394, dv1394);
     REGISTER_INDEV    (FBDEV, fbdev);
@@ -54,7 +55,7 @@ void avdevice_register_all(void)
     REGISTER_INDEV    (V4L2, v4l2);
 //    REGISTER_INDEV    (V4L, v4l
     REGISTER_INDEV    (VFWCAP, vfwcap);
-    REGISTER_INDEV    (X11_GRAB_DEVICE, x11_grab_device);
+    REGISTER_INDEV    (X11GRAB, x11grab);
 
     /* external libraries */
     REGISTER_INDEV    (LIBCDIO, libcdio);

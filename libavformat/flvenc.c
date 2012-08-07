@@ -205,9 +205,9 @@ static int flv_write_header(AVFormatContext *s)
         FLVStreamContext *sc;
         switch (enc->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
-            if (s->streams[i]->r_frame_rate.den &&
-                s->streams[i]->r_frame_rate.num) {
-                framerate = av_q2d(s->streams[i]->r_frame_rate);
+            if (s->streams[i]->avg_frame_rate.den &&
+                s->streams[i]->avg_frame_rate.num) {
+                framerate = av_q2d(s->streams[i]->avg_frame_rate);
             } else {
                 framerate = 1 / av_q2d(s->streams[i]->codec->time_base);
             }
@@ -566,15 +566,11 @@ static int flv_write_packet(AVFormatContext *s, AVPacket *pkt)
 
 AVOutputFormat ff_flv_muxer = {
     .name           = "flv",
-    .long_name      = NULL_IF_CONFIG_SMALL("FLV format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("FLV (Flash Video)"),
     .mime_type      = "video/x-flv",
     .extensions     = "flv",
     .priv_data_size = sizeof(FLVContext),
-#if CONFIG_LIBMP3LAME
-    .audio_codec    = CODEC_ID_MP3,
-#else // CONFIG_LIBMP3LAME
-    .audio_codec    = CODEC_ID_ADPCM_SWF,
-#endif // CONFIG_LIBMP3LAME
+    .audio_codec    = CONFIG_LIBMP3LAME ? CODEC_ID_MP3 : CODEC_ID_ADPCM_SWF,
     .video_codec    = CODEC_ID_FLV1,
     .write_header   = flv_write_header,
     .write_packet   = flv_write_packet,

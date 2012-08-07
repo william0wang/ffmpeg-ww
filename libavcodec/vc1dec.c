@@ -36,7 +36,6 @@
 #include "vc1acdata.h"
 #include "msmpeg4data.h"
 #include "unary.h"
-#include "simple_idct.h"
 #include "mathops.h"
 #include "vdpau_internal.h"
 #include "libavutil/avassert.h"
@@ -1050,9 +1049,10 @@ static void vc1_mc_4mv_chroma4(VC1Context *v)
         if ((edges&8) && s->mb_y == (s->mb_height - 1))        \
             mquant = v->altpq;                                 \
         if (!mquant || mquant > 31) {                          \
-            av_log(v->s.avctx, AV_LOG_ERROR, "invalid mquant %d\n", mquant);   \
-            mquant = 1;                                \
-        }                                              \
+            av_log(v->s.avctx, AV_LOG_ERROR,                   \
+                   "Overriding invalid mquant %d\n", mquant);  \
+            mquant = 1;                                        \
+        }                                                      \
     }
 
 /**
@@ -1882,8 +1882,8 @@ static void vc1_interp_mc(VC1Context *v)
     }
 
     if (v->rangeredfrm || s->h_edge_pos < 22 || v_edge_pos < 22
-        || (unsigned)(src_x - s->mspel) > s->h_edge_pos - (mx & 3) - 16 - s->mspel * 3
-        || (unsigned)(src_y - s->mspel) > v_edge_pos    - (my & 3) - 16 - s->mspel * 3) {
+        || (unsigned)(src_x - 1) > s->h_edge_pos - (mx & 3) - 16 - 3
+        || (unsigned)(src_y - 1) > v_edge_pos    - (my & 3) - 16 - 3) {
         uint8_t *uvbuf = s->edge_emu_buffer + 19 * s->linesize;
 
         srcY -= s->mspel * (1 + s->linesize);
@@ -1977,20 +1977,6 @@ static av_always_inline int scale_mv(int value, int bfrac, int inv, int qs)
         return 2 * ((value * n + B_FRACTION_DEN - 1) / (2 * B_FRACTION_DEN));
     return (value * n + B_FRACTION_DEN/2) / B_FRACTION_DEN;
 #endif
-}
-
-static av_always_inline int scale_mv_intfi(int value, int bfrac, int inv,
-                                           int qs, int qs_last)
-{
-    int n = bfrac;
-
-    if (inv)
-        n -= 256;
-    n <<= !qs_last;
-    if (!qs)
-        return (value * n + 255) >> 9;
-    else
-        return (value * n + 128) >> 8;
 }
 
 /** Reconstruct motion vector for B-frame and do motion compensation
@@ -2246,14 +2232,14 @@ static inline void vc1_pred_b_mv_intfi(VC1Context *v, int n, int *dmv_x, int *dm
     if (v->bmvtype == BMV_TYPE_DIRECT) {
         int total_opp, k, f;
         if (s->next_picture.f.mb_type[mb_pos + v->mb_off] != MB_TYPE_INTRA) {
-            s->mv[0][0][0] = scale_mv_intfi(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][0],
-                                            v->bfraction, 0, s->quarter_sample, v->qs_last);
-            s->mv[0][0][1] = scale_mv_intfi(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][1],
-                                            v->bfraction, 0, s->quarter_sample, v->qs_last);
-            s->mv[1][0][0] = scale_mv_intfi(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][0],
-                                            v->bfraction, 1, s->quarter_sample, v->qs_last);
-            s->mv[1][0][1] = scale_mv_intfi(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][1],
-                                            v->bfraction, 1, s->quarter_sample, v->qs_last);
+            s->mv[0][0][0] = scale_mv(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][0],
+                                      v->bfraction, 0, s->quarter_sample);
+            s->mv[0][0][1] = scale_mv(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][1],
+                                      v->bfraction, 0, s->quarter_sample);
+            s->mv[1][0][0] = scale_mv(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][0],
+                                      v->bfraction, 1, s->quarter_sample);
+            s->mv[1][0][1] = scale_mv(s->next_picture.f.motion_val[1][s->block_index[0] + v->blocks_off][1],
+                                      v->bfraction, 1, s->quarter_sample);
 
             total_opp = v->mv_f_next[0][s->block_index[0] + v->blocks_off]
                       + v->mv_f_next[0][s->block_index[1] + v->blocks_off]
@@ -4654,7 +4640,7 @@ static void vc1_decode_p_blocks(VC1Context *v)
         if (s->mb_y != s->start_mb_y) ff_draw_horiz_band(s, (s->mb_y - 1) * 16, 16);
         s->first_slice_line = 0;
     }
-    if (apply_loop_filter) {
+    if (apply_loop_filter && v->fcm == PROGRESSIVE) {
         s->mb_x = 0;
         ff_init_block_index(s);
         for (; s->mb_x < s->mb_width; s->mb_x++) {
@@ -4944,15 +4930,17 @@ static void vc1_draw_sprites(VC1Context *v, SpriteData* sd)
                 int      iline  = s->current_picture.f.linesize[plane];
                 int      ycoord = yoff[sprite] + yadv[sprite] * row;
                 int      yline  = ycoord >> 16;
+                int      next_line;
                 ysub[sprite] = ycoord & 0xFFFF;
                 if (sprite) {
                     iplane = s->last_picture.f.data[plane];
                     iline  = s->last_picture.f.linesize[plane];
                 }
+                next_line = FFMIN(yline + 1, (v->sprite_height >> !!plane) - 1) * iline;
                 if (!(xoff[sprite] & 0xFFFF) && xadv[sprite] == 1 << 16) {
                         src_h[sprite][0] = iplane + (xoff[sprite] >> 16) +  yline      * iline;
                     if (ysub[sprite])
-                        src_h[sprite][1] = iplane + (xoff[sprite] >> 16) + FFMIN(yline + 1, (v->sprite_height>>!!plane)-1) * iline;
+                        src_h[sprite][1] = iplane + (xoff[sprite] >> 16) + next_line;
                 } else {
                     if (sr_cache[sprite][0] != yline) {
                         if (sr_cache[sprite][1] == yline) {
@@ -4964,7 +4952,9 @@ static void vc1_draw_sprites(VC1Context *v, SpriteData* sd)
                         }
                     }
                     if (ysub[sprite] && sr_cache[sprite][1] != yline + 1) {
-                        v->vc1dsp.sprite_h(v->sr_rows[sprite][1], iplane + FFMIN(yline + 1, (v->sprite_height>>!!plane)-1) * iline, xoff[sprite], xadv[sprite], width);
+                        v->vc1dsp.sprite_h(v->sr_rows[sprite][1],
+                                           iplane + next_line, xoff[sprite],
+                                           xadv[sprite], width);
                         sr_cache[sprite][1] = yline + 1;
                     }
                     src_h[sprite][0] = v->sr_rows[sprite][0];
@@ -5338,7 +5328,7 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
             *data_size = sizeof(AVFrame);
         }
 
-        return 0;
+        return buf_size;
     }
 
     if (s->avctx->codec->capabilities&CODEC_CAP_HWACCEL_VDPAU) {
@@ -5581,8 +5571,10 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
         mb_height = s->mb_height >> v->field_mode;
         for (i = 0; i <= n_slices; i++) {
             if (i > 0 &&  slices[i - 1].mby_start >= mb_height) {
-                if(v->field_mode <= 0) {
-                    av_log(v->s.avctx, AV_LOG_ERROR, "invalid end_mb_y %d\n", slices[i - 1].mby_start);
+                if (v->field_mode <= 0) {
+                    av_log(v->s.avctx, AV_LOG_ERROR, "Slice %d starts beyond "
+                           "picture boundary (%d >= %d)\n", i,
+                           slices[i - 1].mby_start, mb_height);
                     continue;
                 }
                 v->second_field = 1;
@@ -5597,13 +5589,13 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
                 v->pic_header_flag = 0;
                 if (v->field_mode && i == n_slices1 + 2) {
                     if (ff_vc1_parse_frame_header_adv(v, &s->gb) < 0) {
-                        av_log(v->s.avctx, AV_LOG_ERROR, "slice header damaged\n");
+                        av_log(v->s.avctx, AV_LOG_ERROR, "Field header damaged\n");
                         continue;
                     }
                 } else if (get_bits1(&s->gb)) {
                     v->pic_header_flag = 1;
                     if (ff_vc1_parse_frame_header_adv(v, &s->gb) < 0) {
-                        av_log(v->s.avctx, AV_LOG_ERROR, "slice header damaged\n");
+                        av_log(v->s.avctx, AV_LOG_ERROR, "Slice header damaged\n");
                         continue;
                     }
                 }
@@ -5638,7 +5630,8 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
 //      return -1;
         if(s->error_occurred && s->pict_type == AV_PICTURE_TYPE_B)
             goto err;
-        ff_er_frame_end(s);
+        if(!v->field_mode)
+            ff_er_frame_end(s);
     }
 
     ff_MPV_frame_end(s);

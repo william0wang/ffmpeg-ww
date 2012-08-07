@@ -650,15 +650,11 @@ static int avi_write_trailer(AVFormatContext *s)
 
 AVOutputFormat ff_avi_muxer = {
     .name              = "avi",
-    .long_name         = NULL_IF_CONFIG_SMALL("AVI format"),
+    .long_name         = NULL_IF_CONFIG_SMALL("AVI (Audio Video Interleaved)"),
     .mime_type         = "video/x-msvideo",
     .extensions        = "avi",
     .priv_data_size    = sizeof(AVIContext),
-#if CONFIG_LIBMP3LAME_ENCODER
-    .audio_codec       = CODEC_ID_MP3,
-#else
-    .audio_codec       = CODEC_ID_AC3,
-#endif
+    .audio_codec       = CONFIG_LIBMP3LAME ? CODEC_ID_MP3 : CODEC_ID_AC3,
     .video_codec       = CODEC_ID_MPEG4,
     .write_header      = avi_write_header,
     .write_packet      = avi_write_packet,

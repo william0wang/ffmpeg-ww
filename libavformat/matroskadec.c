@@ -656,8 +656,9 @@ static int ebml_read_num(MatroskaDemuxContext *matroska, AVIOContext *pb,
             av_log(matroska->ctx, AV_LOG_ERROR,
                    "Read error at pos. %"PRIu64" (0x%"PRIx64")\n",
                    pos, pos);
+            return pb->error ? pb->error : AVERROR(EIO);
         }
-        return AVERROR(EIO); /* EOS or actual I/O error */
+        return AVERROR_EOF;
     }
 
     /* get the length of the EBML number */
@@ -944,7 +945,10 @@ static int ebml_parse_elem(MatroskaDemuxContext *matroska,
                      return ebml_parse_nest(matroska, syntax->def.n, data);
     case EBML_PASS:  return ebml_parse_id(matroska, syntax->def.n, id, data);
     case EBML_STOP:  return 1;
-    default:         return avio_skip(pb,length)<0 ? AVERROR(EIO) : 0;
+    default:
+        if(ffio_limit(pb, length) != length)
+            return AVERROR(EIO);
+        return avio_skip(pb,length)<0 ? AVERROR(EIO) : 0;
     }
     if (res == AVERROR_INVALIDDATA)
         av_log(matroska->ctx, AV_LOG_ERROR, "Invalid element\n");
@@ -1576,6 +1580,18 @@ static int matroska_read_header(AVFormatContext *s)
                    && (track->codec_priv.data != NULL)) {
             fourcc = AV_RL32(track->codec_priv.data);
             codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
+        } else if (codec_id == CODEC_ID_ALAC && track->codec_priv.size && track->codec_priv.size < INT_MAX-12) {
+            /* Only ALAC's magic cookie is stored in Matroska's track headers.
+               Create the "atom size", "tag", and "tag version" fields the
+               decoder expects manually. */
+            extradata_size = 12 + track->codec_priv.size;
+            extradata = av_mallocz(extradata_size);
+            if (extradata == NULL)
+                return AVERROR(ENOMEM);
+            AV_WB32(extradata, extradata_size);
+            memcpy(&extradata[4], "alac", 4);
+            AV_WB32(&extradata[8], 0);
+            memcpy(&extradata[12], track->codec_priv.data, track->codec_priv.size);
         } else if (codec_id == CODEC_ID_PCM_S16BE) {
             switch (track->audio.bitdepth) {
             case  8:  codec_id = CODEC_ID_PCM_U8;     break;
@@ -1704,9 +1720,11 @@ static int matroska_read_header(AVFormatContext *s)
                       255);
             st->need_parsing = AVSTREAM_PARSE_HEADERS;
             if (track->default_duration) {
-                av_reduce(&st->r_frame_rate.num, &st->r_frame_rate.den,
+                av_reduce(&st->avg_frame_rate.num, &st->avg_frame_rate.den,
                           1000000000, track->default_duration, 30000);
-                st->avg_frame_rate = st->r_frame_rate;
+#if FF_API_R_FRAME_RATE
+                st->r_frame_rate = st->avg_frame_rate;
+#endif
             }
 
             /* export stereo mode flag as metadata tag */
@@ -2302,7 +2320,7 @@ static int matroska_read_close(AVFormatContext *s)
 
 AVInputFormat ff_matroska_demuxer = {
     .name           = "matroska,webm",
-    .long_name      = NULL_IF_CONFIG_SMALL("Matroska/WebM file format"),
+    .long_name      = NULL_IF_CONFIG_SMALL("Matroska / WebM"),
     .priv_data_size = sizeof(MatroskaDemuxContext),
     .read_probe     = matroska_probe,
     .read_header    = matroska_read_header,

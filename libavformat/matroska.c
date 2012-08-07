@@ -24,6 +24,7 @@
 const CodecTags ff_mkv_codec_tags[]={
     {"A_AAC"            , CODEC_ID_AAC},
     {"A_AC3"            , CODEC_ID_AC3},
+    {"A_ALAC"           , CODEC_ID_ALAC},
     {"A_DTS"            , CODEC_ID_DTS},
     {"A_EAC3"           , CODEC_ID_EAC3},
     {"A_FLAC"           , CODEC_ID_FLAC},
@@ -31,6 +32,7 @@ const CodecTags ff_mkv_codec_tags[]={
     {"A_MPEG/L2"        , CODEC_ID_MP2},
     {"A_MPEG/L1"        , CODEC_ID_MP2},
     {"A_MPEG/L3"        , CODEC_ID_MP3},
+    {"A_OPUS",            CODEC_ID_OPUS},
     {"A_PCM/FLOAT/IEEE" , CODEC_ID_PCM_F32LE},
     {"A_PCM/FLOAT/IEEE" , CODEC_ID_PCM_F64LE},
     {"A_PCM/INT/BIG"    , CODEC_ID_PCM_S16BE},

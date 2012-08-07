@@ -261,6 +261,7 @@ enum CodecID {
     CODEC_ID_MSA1,
     CODEC_ID_TSCC2,
     CODEC_ID_MTS2,
+    CODEC_ID_CLLC,
     CODEC_ID_Y41P       = MKBETAG('Y','4','1','P'),
     CODEC_ID_ESCAPE130  = MKBETAG('E','1','3','0'),
     CODEC_ID_EXR        = MKBETAG('0','E','X','R'),
@@ -420,6 +421,7 @@ enum CodecID {
     CODEC_ID_SONIC       = MKBETAG('S','O','N','C'),
     CODEC_ID_SONIC_LS    = MKBETAG('S','O','N','L'),
     CODEC_ID_PAF_AUDIO   = MKBETAG('P','A','F','A'),
+    CODEC_ID_OPUS        = MKBETAG('O','P','U','S'),
 
     /* subtitle codecs */
     CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
@@ -437,6 +439,7 @@ enum CodecID {
     CODEC_ID_JACOSUB    = MKBETAG('J','S','U','B'),
     CODEC_ID_SAMI       = MKBETAG('S','A','M','I'),
     CODEC_ID_REALTEXT   = MKBETAG('R','T','X','T'),
+    CODEC_ID_SUBVIEWER  = MKBETAG('S','u','b','V'),
 
     /* other specific kind of codecs (generally used for attachments) */
     CODEC_ID_FIRST_UNKNOWN = 0x18000,           ///< A dummy ID pointing at the start of various fake codecs.
@@ -1322,6 +1325,28 @@ typedef struct AVFrame {
      * - decoding: Set by libavcodec.
      */
     AVDictionary *metadata;
+
+    /**
+     * decode error flags of the frame, set to a combination of
+     * FF_DECODE_ERROR_xxx flags if the decoder produced a frame, but there
+     * were errors during the decoding.
+     * Code outside libavcodec should access this field using:
+     * av_frame_get_decode_error_flags(frame)
+     * - encoding: unused
+     * - decoding: set by libavcodec, read by user.
+     */
+    int decode_error_flags;
+#define FF_DECODE_ERROR_INVALID_BITSTREAM   1
+#define FF_DECODE_ERROR_MISSING_REFERENCE   2
+
+    /**
+     * number of audio channels, only used for audio.
+     * Code outside libavcodec should access this field using:
+     * av_frame_get_channels(frame)
+     * - encoding: unused
+     * - decoding: Read by user.
+     */
+    int64_t channels;
 } AVFrame;
 
 /**
@@ -1337,10 +1362,14 @@ int64_t av_frame_get_pkt_pos              (const AVFrame *frame);
 void    av_frame_set_pkt_pos              (AVFrame *frame, int64_t val);
 int64_t av_frame_get_channel_layout       (const AVFrame *frame);
 void    av_frame_set_channel_layout       (AVFrame *frame, int64_t val);
+int     av_frame_get_channels             (const AVFrame *frame);
+void    av_frame_set_channels             (AVFrame *frame, int     val);
 int     av_frame_get_sample_rate          (const AVFrame *frame);
 void    av_frame_set_sample_rate          (AVFrame *frame, int     val);
 AVDictionary *av_frame_get_metadata       (const AVFrame *frame);
 void          av_frame_set_metadata       (AVFrame *frame, AVDictionary *val);
+int     av_frame_get_decode_error_flags   (const AVFrame *frame);
+void    av_frame_set_decode_error_flags   (AVFrame *frame, int     val);
 
 struct AVCodecInternal;
 
