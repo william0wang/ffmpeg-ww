@@ -2187,6 +2187,17 @@ a float number which specifies chroma temporal strength, defaults to
 @var{luma_tmp}*@var{chroma_spatial}/@var{luma_spatial}
 @end table
 
+@section hue
+
+Modify the hue and/or the saturation of the input.
+
+This filter accepts the optional parameters: @var{hue}:@var{saturation}.
+
+@var{hue} must be a float number that specifies the hue angle as a
+number of degrees, and defaults to 0.0.
+@var{saturation} must be a float number that specifies the saturation
+in the [-10,10] range, and defaults to 1.0.
+
 @section idet
 
 Interlaceing detect filter. This filter tries to detect if the input is
@@ -3032,9 +3043,11 @@ Mark the frame as top-field-first.
 Mark the frame as progressive.
 @end table
 
-@section setpts
+@section asetpts, setpts
 
-Change the PTS (presentation timestamp) of the input video frames.
+Change the PTS (presentation timestamp) of the input frames.
+
+@code{asetpts} works on audio frames, @code{setpts} on video frames.
 
 Accept in input an expression evaluated through the eval API, which
 can contain the following constants:
@@ -3045,6 +3058,16 @@ the presentation timestamp in input
 
 @item N
 the count of the input frame, starting from 0.
+
+@item NB_CONSUMED_SAMPLES
+the number of consumed samples, not including the current frame (only
+audio)
+
+@item NB_SAMPLES
+the number of samples in the current frame (only audio)
+
+@item SAMPLE_RATE
+audio sample rate
 
 @item STARTPTS
 the PTS of the first video frame
@@ -3084,6 +3107,9 @@ setpts=N/(25*TB)
 
 # fixed rate 25 fps with some jitter
 setpts='1/(25*TB) * (N + 0.05 * sin(N*2*PI/25))'
+
+# apply an offset of 10 seconds to the input PTS
+setpts=PTS+10/TB
 @end example
 
 @section settb, asettb
@@ -3661,7 +3687,7 @@ It shall assume one of the following values:
 @table @option
 @item black
 Set black mode.
-@item conververgence
+@item convergence
 Show time until convergence.
 @item mincol
 Set color based on point closest to the origin of the iterations.
@@ -3918,7 +3944,7 @@ ffplay -f lavfi life=s=300x200:mold=10:r=60:ratio=0.1:death_color=#C83232:life_c
 @end example
 @end itemize
 
-@section color, nullsrc, rgbtestsrc, testsrc
+@section color, nullsrc, rgbtestsrc, smptebars, testsrc
 
 The @code{color} source provides an uniformly colored input.
 
@@ -3929,6 +3955,9 @@ source for filters which ignore the input data.
 The @code{rgbtestsrc} source generates an RGB test pattern useful for
 detecting RGB vs BGR issues. You should see a red, green and blue
 stripe from top to bottom.
+
+The @code{smptebars} source generates a color bars pattern, based on
+the SMPTE Engineering Guideline EG 1-1990.
 
 The @code{testsrc} source generates a test video pattern, showing a
 color pattern, a scrolling gradient and a timestamp. This is mainly

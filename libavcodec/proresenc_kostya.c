@@ -254,24 +254,24 @@ static void get_slice_data(ProresContext *ctx, const uint16_t *src,
             ctx->dsp.fdct(esrc, elinesize, blocks);
             blocks += 64;
             if (blocks_per_mb > 2) {
-                ctx->dsp.fdct(src + 8, linesize, blocks);
+                ctx->dsp.fdct(esrc + 8, elinesize, blocks);
                 blocks += 64;
             }
-            ctx->dsp.fdct(src + linesize * 4, linesize, blocks);
+            ctx->dsp.fdct(esrc + elinesize * 4, elinesize, blocks);
             blocks += 64;
             if (blocks_per_mb > 2) {
-                ctx->dsp.fdct(src + linesize * 4 + 8, linesize, blocks);
+                ctx->dsp.fdct(esrc + elinesize * 4 + 8, elinesize, blocks);
                 blocks += 64;
             }
         } else {
             ctx->dsp.fdct(esrc, elinesize, blocks);
             blocks += 64;
-            ctx->dsp.fdct(src + linesize * 4, linesize, blocks);
+            ctx->dsp.fdct(esrc + elinesize * 4, elinesize, blocks);
             blocks += 64;
             if (blocks_per_mb > 2) {
-                ctx->dsp.fdct(src + 8, linesize, blocks);
+                ctx->dsp.fdct(esrc + 8, elinesize, blocks);
                 blocks += 64;
-                ctx->dsp.fdct(src + linesize * 4 + 8, linesize, blocks);
+                ctx->dsp.fdct(esrc + elinesize * 4 + 8, elinesize, blocks);
                 blocks += 64;
             }
         }
@@ -1018,7 +1018,7 @@ static const AVClass proresenc_class = {
 AVCodec ff_prores_kostya_encoder = {
     .name           = "prores_kostya",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_PRORES,
+    .id             = AV_CODEC_ID_PRORES,
     .priv_data_size = sizeof(ProresContext),
     .init           = encode_init,
     .close          = encode_close,

@@ -106,10 +106,9 @@ static int msrle_decode_frame(AVCodecContext *avctx,
             s->frame.palette_has_changed = 1;
             memcpy(s->pal, pal, AVPALETTE_SIZE);
         }
+        /* make the palette available */
+        memcpy(s->frame.data[1], s->pal, AVPALETTE_SIZE);
     }
-
-    /* make the palette available */
-    memcpy(s->frame.data[1], s->pal, AVPALETTE_SIZE);
 
     /* FIXME how to correctly detect RLE ??? */
     if (avctx->height * istride == avpkt->size) { /* assume uncompressed */
@@ -158,7 +157,7 @@ static av_cold int msrle_decode_end(AVCodecContext *avctx)
 AVCodec ff_msrle_decoder = {
     .name           = "msrle",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_MSRLE,
+    .id             = AV_CODEC_ID_MSRLE,
     .priv_data_size = sizeof(MsrleContext),
     .init           = msrle_decode_init,
     .close          = msrle_decode_end,

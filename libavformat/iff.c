@@ -29,6 +29,7 @@
  */
 
 #include "libavcodec/bytestream.h"
+#include "libavutil/avassert.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/dict.h"
 #include "avformat.h"
@@ -287,13 +288,13 @@ static int iff_read_header(AVFormatContext *s)
 
         switch (iff->svx8_compression) {
         case COMP_NONE:
-            st->codec->codec_id = CODEC_ID_PCM_S8_PLANAR;
+            st->codec->codec_id = AV_CODEC_ID_PCM_S8_PLANAR;
             break;
         case COMP_FIB:
-            st->codec->codec_id = CODEC_ID_8SVX_FIB;
+            st->codec->codec_id = AV_CODEC_ID_8SVX_FIB;
             break;
         case COMP_EXP:
-            st->codec->codec_id = CODEC_ID_8SVX_EXP;
+            st->codec->codec_id = AV_CODEC_ID_8SVX_EXP;
             break;
         default:
             av_log(s, AV_LOG_ERROR,
@@ -333,10 +334,10 @@ static int iff_read_header(AVFormatContext *s)
 
         switch (iff->bitmap_compression) {
         case BITMAP_RAW:
-            st->codec->codec_id = CODEC_ID_IFF_ILBM;
+            st->codec->codec_id = AV_CODEC_ID_IFF_ILBM;
             break;
         case BITMAP_BYTERUN1:
-            st->codec->codec_id = CODEC_ID_IFF_BYTERUN1;
+            st->codec->codec_id = AV_CODEC_ID_IFF_BYTERUN1;
             break;
         default:
             av_log(s, AV_LOG_ERROR,
@@ -375,7 +376,7 @@ static int iff_read_packet(AVFormatContext *s,
         bytestream_put_be16(&buf, 2);
         ret = avio_read(pb, buf, iff->body_size);
     } else {
-        av_abort();
+        av_assert0(0);
     }
 
     if(iff->sent_bytes == 0)

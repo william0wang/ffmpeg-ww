@@ -41,6 +41,10 @@ version next:
 - Canopus Lossless Codec decoder
 - bitmap subtitles in filters (experimental and temporary)
 - MP2 encoding via TwoLAME
+- bmp parser
+- smptebars source
+- asetpts filter
+- hue filter
 
 
 version 0.11:

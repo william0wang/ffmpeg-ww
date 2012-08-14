@@ -10,8 +10,9 @@ ifndef SUBDIR
 ifndef V
 Q      = @
 ECHO   = printf "$(1)\t%s\n" $(2)
-BRIEF  = CC CXX AS YASM AR LD HOSTCC STRIP CP
-SILENT = DEPCC DEPAS DEPHOSTCC DEPYASM RM RANLIB
+BRIEF  = CC CXX HOSTCC AS YASM AR LD STRIP CP
+SILENT = DEPCC DEPHOSTCC DEPAS DEPYASM RANLIB RM
+
 MSG    = $@
 M      = @$(call ECHO,$(TAG),$@);
 $(foreach VAR,$(BRIEF), \
@@ -29,7 +30,8 @@ CFLAGS     += $(ECFLAGS)
 CCFLAGS     = $(CPPFLAGS) $(CFLAGS)
 ASFLAGS    := $(CPPFLAGS) $(ASFLAGS)
 CXXFLAGS   += $(CPPFLAGS) $(CFLAGS)
-YASMFLAGS  += $(IFLAGS) -I$(SRC_PATH)/libavutil/x86/ -Pconfig.asm
+YASMFLAGS  += $(IFLAGS:%=%/) -I$(SRC_PATH)/libavutil/x86/ -Pconfig.asm
+
 HOSTCCFLAGS = $(IFLAGS) $(HOSTCFLAGS)
 LDFLAGS    := $(ALLFFLIBS:%=-Llib%) $(LDFLAGS)
 
@@ -54,8 +56,8 @@ COMPILE_S = $(call COMPILE,AS)
 %.o: %.S
 	$(COMPILE_S)
 
-%.ho: %.h
-	$(CC) $(CCFLAGS) -c $(CC_O) -x c $<
+%.h.c:
+	$(Q)echo '#include "$*.h"' >$@
 
 %.ver: %.v
 	$(Q)sed 's/$$MAJOR/$($(basename $(@F))_VERSION_MAJOR)/' $^ > $@
@@ -97,7 +99,9 @@ DEP_LIBS := $(foreach NAME,$(FFLIBS),lib$(NAME)/$($(CONFIG_SHARED:yes=S)LIBNAME)
 ALLHEADERS := $(subst $(SRC_DIR)/,$(SUBDIR),$(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/$(ARCH)/*.h))
 SKIPHEADERS += $(ARCH_HEADERS:%=$(ARCH)/%) $(SKIPHEADERS-)
 SKIPHEADERS := $(SKIPHEADERS:%=$(SUBDIR)%)
-checkheaders: $(filter-out $(SKIPHEADERS:.h=.ho),$(ALLHEADERS:.h=.ho))
+HOBJS        = $(filter-out $(SKIPHEADERS:.h=.h.o),$(ALLHEADERS:.h=.h.o))
+checkheaders: $(HOBJS)
+.SECONDARY:   $(HOBJS:.o=.c)
 
 alltools: $(TOOLS)
 
@@ -110,12 +114,13 @@ $(HOSTPROGS): %$(HOSTEXESUF): %.o
 $(OBJS):     | $(sort $(dir $(OBJS)))
 $(HOSTOBJS): | $(sort $(dir $(HOSTOBJS)))
 $(TESTOBJS): | $(sort $(dir $(TESTOBJS)))
+$(HOBJS):    | $(sort $(dir $(HOBJS)))
 $(TOOLOBJS): | tools
 
-OBJDIRS := $(OBJDIRS) $(dir $(OBJS) $(HOSTOBJS) $(TESTOBJS))
+OBJDIRS := $(OBJDIRS) $(dir $(OBJS) $(HOSTOBJS) $(TESTOBJS) $(HOBJS))
 
-CLEANSUFFIXES     = *.d *.o *~ *.ho *.map *.ver *.gcno *.gcda
+CLEANSUFFIXES     = *.d *.o *~ *.h.c *.map *.ver *.ho *.gcno *.gcda
 DISTCLEANSUFFIXES = *.pc
 LIBSUFFIXES       = *.a *.lib *.so *.so.* *.dylib *.dll *.def *.dll.a
 
--include $(wildcard $(OBJS:.o=.d) $(HOSTOBJS:.o=.d) $(TESTOBJS:.o=.d))
+-include $(wildcard $(OBJS:.o=.d) $(HOSTOBJS:.o=.d) $(TESTOBJS:.o=.d) $(HOBJS:.o=.d))

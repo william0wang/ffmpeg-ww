@@ -42,6 +42,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (ANULL,       anull,       af);
     REGISTER_FILTER (ARESAMPLE,   aresample,   af);
     REGISTER_FILTER (ASETNSAMPLES, asetnsamples, af);
+    REGISTER_FILTER (ASETPTS,     asetpts,     af);
     REGISTER_FILTER (ASETTB,      asettb,      af);
     REGISTER_FILTER (ASHOWINFO,   ashowinfo,   af);
     REGISTER_FILTER (ASPLIT,      asplit,      af);
@@ -88,6 +89,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (GRADFUN,     gradfun,     vf);
     REGISTER_FILTER (HFLIP,       hflip,       vf);
     REGISTER_FILTER (HQDN3D,      hqdn3d,      vf);
+    REGISTER_FILTER (HUE,         hue,         vf);
     REGISTER_FILTER (IDET,        idet,        vf);
     REGISTER_FILTER (LUT,         lut,         vf);
     REGISTER_FILTER (LUTRGB,      lutrgb,      vf);
@@ -129,6 +131,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (MPTESTSRC,   mptestsrc,   vsrc);
     REGISTER_FILTER (NULLSRC,     nullsrc,     vsrc);
     REGISTER_FILTER (RGBTESTSRC,  rgbtestsrc,  vsrc);
+    REGISTER_FILTER (SMPTEBARS,   smptebars,   vsrc);
     REGISTER_FILTER (TESTSRC,     testsrc,     vsrc);
 
     REGISTER_FILTER (BUFFERSINK,  buffersink,  vsink);

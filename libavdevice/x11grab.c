@@ -174,7 +174,12 @@ x11grab_read_header(AVFormatContext *s1)
     offset = strchr(dpyname, '+');
     if (offset) {
         sscanf(offset, "%d,%d", &x_off, &y_off);
-        x11grab->draw_mouse = !strstr(offset, "nomouse");
+        if (strstr(offset, "nomouse")) {
+            av_log(s1, AV_LOG_WARNING,
+                   "'nomouse' specification in argument is deprecated: "
+                   "use 'draw_mouse' option with value 0 instead\n");
+            x11grab->draw_mouse = 0;
+        }
         *offset= 0;
     }
 
@@ -310,7 +315,7 @@ x11grab_read_header(AVFormatContext *s1)
     x11grab->use_shm = use_shm;
 
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id = CODEC_ID_RAWVIDEO;
+    st->codec->codec_id = AV_CODEC_ID_RAWVIDEO;
     st->codec->width  = x11grab->width;
     st->codec->height = x11grab->height;
     st->codec->pix_fmt = input_pixfmt;
@@ -581,13 +586,16 @@ x11grab_read_close(AVFormatContext *s1)
 #define OFFSET(x) offsetof(struct x11grab, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
-    { "video_size", "A string describing frame size, such as 640x480 or hd720.", OFFSET(width), AV_OPT_TYPE_IMAGE_SIZE, {.str = "vga"}, 0, 0, DEC },
-    { "framerate", "", OFFSET(framerate), AV_OPT_TYPE_STRING, {.str = "ntsc"}, 0, 0, DEC },
-    { "draw_mouse", "Draw the mouse pointer.", OFFSET(draw_mouse), AV_OPT_TYPE_INT, { 1 }, 0, 1, DEC },
-    { "follow_mouse", "Move the grabbing region when the mouse pointer reaches within specified amount of pixels to the edge of region.",
-      OFFSET(follow_mouse), AV_OPT_TYPE_INT, { 0 }, -1, INT_MAX, DEC, "follow_mouse" },
-    { "centered", "Keep the mouse pointer at the center of grabbing region when following.", 0, AV_OPT_TYPE_CONST, { -1 }, INT_MIN, INT_MAX, DEC, "follow_mouse" },
-    { "show_region", "Show the grabbing region.", OFFSET(show_region), AV_OPT_TYPE_INT, { 0 }, 0, 1, DEC },
+    { "draw_mouse", "draw the mouse pointer", OFFSET(draw_mouse), AV_OPT_TYPE_INT, {1}, 0, 1, DEC },
+
+    { "follow_mouse", "move the grabbing region when the mouse pointer reaches within specified amount of pixels to the edge of region",
+      OFFSET(follow_mouse), AV_OPT_TYPE_INT, {0}, -1, INT_MAX, DEC, "follow_mouse" },
+    { "centered",     "keep the mouse pointer at the center of grabbing region when following",
+      0, AV_OPT_TYPE_CONST, {-1}, INT_MIN, INT_MAX, DEC, "follow_mouse" },
+
+    { "framerate",  "set video frame rate",      OFFSET(framerate),   AV_OPT_TYPE_STRING,     {.str = "ntsc"}, 0, 0, DEC },
+    { "show_region", "show the grabbing region", OFFSET(show_region), AV_OPT_TYPE_INT,        {0}, 0, 1, DEC },
+    { "video_size",  "set video frame size",     OFFSET(width),       AV_OPT_TYPE_IMAGE_SIZE, {.str = "vga"}, 0, 0, DEC },
     { NULL },
 };
 

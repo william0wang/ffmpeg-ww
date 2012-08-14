@@ -83,6 +83,21 @@ static av_always_inline av_const unsigned av_clip_uintp2_arm(int a, int p)
     return x;
 }
 
+#define av_sat_add32 av_sat_add32_arm
+static av_always_inline int av_sat_add32_arm(int a, int b)
+{
+    int r;
+    __asm__ ("qadd %0, %1, %2" : "=r"(r) : "r"(a), "r"(b));
+    return r;
+}
+
+#define av_sat_dadd32 av_sat_dadd32_arm
+static av_always_inline int av_sat_dadd32_arm(int a, int b)
+{
+    int r;
+    __asm__ ("qdadd %0, %1, %2" : "=r"(r) : "r"(a), "r"(b));
+    return r;
+}
 
 #else /* HAVE_ARMV6 */
 
@@ -97,6 +112,8 @@ static av_always_inline av_const int FASTDIV(int a, int b)
 
 #endif /* HAVE_ARMV6 */
 
+#if HAVE_ASM_MOD_Q
+
 #define av_clipl_int32 av_clipl_int32_arm
 static av_always_inline av_const int32_t av_clipl_int32_arm(int64_t a)
 {
@@ -106,9 +123,11 @@ static av_always_inline av_const int32_t av_clipl_int32_arm(int64_t a)
              "mvnne  %1, #1<<31             \n\t"
              "moveq  %0, %Q2                \n\t"
              "eorne  %0, %1,  %R2, asr #31  \n\t"
-             : "=r"(x), "=&r"(y) : "r"(a):"cc");
+             : "=r"(x), "=&r"(y) : "r"(a) : "cc");
     return x;
 }
+
+#endif /* HAVE_ASM_MOD_Q */
 
 #endif /* HAVE_INLINE_ASM */
 

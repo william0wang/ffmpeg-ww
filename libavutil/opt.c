@@ -59,7 +59,8 @@ const AVOption *av_next_option(void *obj, const AVOption *last)
 const AVOption *av_opt_next(void *obj, const AVOption *last)
 {
     AVClass *class = *(AVClass**)obj;
-    if (!last && class->option[0].name) return class->option;
+    if (!last && class->option && class->option[0].name)
+        return class->option;
     if (last && last[1].name)           return ++last;
     return NULL;
 }
@@ -633,6 +634,7 @@ static void opt_list(void *obj, void *av_log_obj, const char *unit,
         }
         av_log(av_log_obj, AV_LOG_INFO, "%c", (opt->flags & AV_OPT_FLAG_ENCODING_PARAM) ? 'E' : '.');
         av_log(av_log_obj, AV_LOG_INFO, "%c", (opt->flags & AV_OPT_FLAG_DECODING_PARAM) ? 'D' : '.');
+        av_log(av_log_obj, AV_LOG_INFO, "%c", (opt->flags & AV_OPT_FLAG_FILTERING_PARAM)? 'F' : '.');
         av_log(av_log_obj, AV_LOG_INFO, "%c", (opt->flags & AV_OPT_FLAG_VIDEO_PARAM   ) ? 'V' : '.');
         av_log(av_log_obj, AV_LOG_INFO, "%c", (opt->flags & AV_OPT_FLAG_AUDIO_PARAM   ) ? 'A' : '.');
         av_log(av_log_obj, AV_LOG_INFO, "%c", (opt->flags & AV_OPT_FLAG_SUBTITLE_PARAM) ? 'S' : '.');

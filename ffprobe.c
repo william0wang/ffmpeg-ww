@@ -457,10 +457,8 @@ static av_cold int default_init(WriterContext *wctx, const char *args, void *opa
     av_opt_set_defaults(def);
 
     if (args &&
-        (err = (av_set_options_string(def, args, "=", ":"))) < 0) {
-        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        (err = (av_set_options_string(def, args, "=", ":"))) < 0)
         return err;
-    }
 
     return 0;
 }
@@ -650,10 +648,8 @@ static av_cold int compact_init(WriterContext *wctx, const char *args, void *opa
     av_opt_set_defaults(compact);
 
     if (args &&
-        (err = (av_set_options_string(compact, args, "=", ":"))) < 0) {
-        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        (err = (av_set_options_string(compact, args, "=", ":"))) < 0)
         return err;
-    }
     if (strlen(compact->item_sep_str) != 1) {
         av_log(wctx, AV_LOG_ERROR, "Item separator '%s' specified, but must contain a single character\n",
                compact->item_sep_str);
@@ -808,10 +804,8 @@ static av_cold int flat_init(WriterContext *wctx, const char *args, void *opaque
     av_opt_set_defaults(flat);
 
     if (args &&
-        (err = (av_set_options_string(flat, args, "=", ":"))) < 0) {
-        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        (err = (av_set_options_string(flat, args, "=", ":"))) < 0)
         return err;
-    }
     if (strlen(flat->sep_str) != 1) {
         av_log(wctx, AV_LOG_ERROR, "Item separator '%s' specified, but must contain a single character\n",
                flat->sep_str);
@@ -966,10 +960,8 @@ static av_cold int ini_init(WriterContext *wctx, const char *args, void *opaque)
     ini->class = &ini_class;
     av_opt_set_defaults(ini);
 
-    if (args && (err = av_set_options_string(ini, args, "=", ":")) < 0) {
-        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+    if (args && (err = av_set_options_string(ini, args, "=", ":")) < 0)
         return err;
-    }
 
     return 0;
 }
@@ -1125,10 +1117,8 @@ static av_cold int json_init(WriterContext *wctx, const char *args, void *opaque
     av_opt_set_defaults(json);
 
     if (args &&
-        (err = (av_set_options_string(json, args, "=", ":"))) < 0) {
-        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        (err = (av_set_options_string(json, args, "=", ":"))) < 0)
         return err;
-    }
 
     json->item_sep       = json->compact ? ", " : ",\n";
     json->item_start_end = json->compact ? " "  : "\n";
@@ -1350,10 +1340,8 @@ static av_cold int xml_init(WriterContext *wctx, const char *args, void *opaque)
     av_opt_set_defaults(xml);
 
     if (args &&
-        (err = (av_set_options_string(xml, args, "=", ":"))) < 0) {
-        av_log(wctx, AV_LOG_ERROR, "Error parsing options string: '%s'\n", args);
+        (err = (av_set_options_string(xml, args, "=", ":"))) < 0)
         return err;
-    }
 
     if (xml->xsd_strict) {
         xml->fully_qualified = 1;
@@ -1923,7 +1911,7 @@ static int open_input_file(AVFormatContext **fmt_ctx_ptr, const char *filename)
         AVStream *stream = fmt_ctx->streams[i];
         AVCodec *codec;
 
-        if (stream->codec->codec_id == CODEC_ID_PROBE) {
+        if (stream->codec->codec_id == AV_CODEC_ID_PROBE) {
             av_log(NULL, AV_LOG_ERROR,
                    "Failed to probe codec for input stream %d\n",
                     stream->index);
@@ -1948,7 +1936,7 @@ static void close_input_file(AVFormatContext **ctx_ptr)
 
     /* close decoder for each stream */
     for (i = 0; i < fmt_ctx->nb_streams; i++)
-        if (fmt_ctx->streams[i]->codec->codec_id != CODEC_ID_NONE)
+        if (fmt_ctx->streams[i]->codec->codec_id != AV_CODEC_ID_NONE)
             avcodec_close(fmt_ctx->streams[i]->codec);
 
     avformat_close_input(ctx_ptr);

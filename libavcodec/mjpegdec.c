@@ -112,7 +112,7 @@ av_cold int ff_mjpeg_decode_init(AVCodecContext *avctx)
         s->interlace_polarity = 1;           /* bottom field first */
         av_log(avctx, AV_LOG_DEBUG, "bottom field first\n");
     }
-    if (avctx->codec->id == CODEC_ID_AMV)
+    if (avctx->codec->id == AV_CODEC_ID_AMV)
         s->flipped = 1;
 
     return 0;
@@ -1064,7 +1064,7 @@ static int mjpeg_decode_scan(MJpegDecodeContext *s, int nb_components, int Ah,
 
             if (s->restart_interval) {
                 s->restart_count--;
-                if(s->restart_count == 0 && s->avctx->codec_id == CODEC_ID_THP){
+                if(s->restart_count == 0 && s->avctx->codec_id == AV_CODEC_ID_THP){
                     align_get_bits(&s->gb);
                     for (i = 0; i < nb_components; i++) /* reset dc */
                         s->last_dc[i] = 1024;
@@ -1209,9 +1209,6 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s, const uint8_t *mb_bitmask,
     }else
         prev_shift = point_transform = 0;
 
-    for (i = 0; i < nb_components; i++)
-        s->last_dc[i] = 1024;
-
     if (nb_components > 1) {
         /* interleaved stream */
         s->mb_width  = (s->width  + s->h_max * block_size - 1) / (s->h_max * block_size);
@@ -1236,6 +1233,9 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s, const uint8_t *mb_bitmask,
     /* mjpeg-b can have padding bytes between sos and image data, skip them */
     for (i = s->mjpb_skiptosod; i > 0; i--)
         skip_bits(&s->gb, 8);
+next_field:
+    for (i = 0; i < nb_components; i++)
+        s->last_dc[i] = 1024;
 
     if (s->lossless) {
         av_assert0(s->picture_ptr == &s->picture);
@@ -1266,6 +1266,19 @@ int ff_mjpeg_decode_sos(MJpegDecodeContext *s, const uint8_t *mb_bitmask,
                 return -1;
         }
     }
+    if(s->interlaced && get_bits_left(&s->gb) > 32 && show_bits(&s->gb, 8) == 0xFF) {
+        GetBitContext bak= s->gb;
+        align_get_bits(&bak);
+        if(show_bits(&bak, 16) == 0xFFD1) {
+            av_log(s->avctx, AV_LOG_DEBUG, "AVRn ingterlaced picture\n");
+            s->gb = bak;
+            skip_bits(&s->gb, 16);
+            s->bottom_field ^= 1;
+
+            goto next_field;
+        }
+    }
+
     emms_c();
     return 0;
  out_of_range:
@@ -1509,7 +1522,7 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
             uint8_t x = *(src++);
 
             *(dst++) = x;
-            if (s->avctx->codec_id != CODEC_ID_THP) {
+            if (s->avctx->codec_id != AV_CODEC_ID_THP) {
                 if (x == 0xff) {
                     while (src < buf_end && x == 0xff)
                         x = *(src++);
@@ -1820,7 +1833,7 @@ static const AVClass mjpegdec_class = {
 AVCodec ff_mjpeg_decoder = {
     .name           = "mjpeg",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_MJPEG,
+    .id             = AV_CODEC_ID_MJPEG,
     .priv_data_size = sizeof(MJpegDecodeContext),
     .init           = ff_mjpeg_decode_init,
     .close          = ff_mjpeg_decode_end,
@@ -1835,7 +1848,7 @@ AVCodec ff_mjpeg_decoder = {
 AVCodec ff_thp_decoder = {
     .name           = "thp",
     .type           = AVMEDIA_TYPE_VIDEO,
-    .id             = CODEC_ID_THP,
+    .id             = AV_CODEC_ID_THP,
     .priv_data_size = sizeof(MJpegDecodeContext),
     .init           = ff_mjpeg_decode_init,
     .close          = ff_mjpeg_decode_end,

@@ -112,12 +112,19 @@ static void filter(AVFilterContext *ctx, AVFilterBufferRef *dstpic,
         int w = dstpic->video->w;
         int h = dstpic->video->h;
         int refs = yadif->cur->linesize[i];
+        int absrefs = FFABS(refs);
         int df = (yadif->csp->comp[i].depth_minus1 + 8) / 8;
 
         if (i == 1 || i == 2) {
         /* Why is this not part of the per-plane description thing? */
             w >>= yadif->csp->log2_chroma_w;
             h >>= yadif->csp->log2_chroma_h;
+        }
+
+        if(yadif->temp_line_size < absrefs) {
+            av_free(yadif->temp_line);
+            yadif->temp_line = av_mallocz(2*64 + 5*absrefs);
+            yadif->temp_line_size = absrefs;
         }
 
         for (y = 0; y < h; y++) {
@@ -127,7 +134,25 @@ static void filter(AVFilterContext *ctx, AVFilterBufferRef *dstpic,
                 uint8_t *next = &yadif->next->data[i][y*refs];
                 uint8_t *dst  = &dstpic->data[i][y*dstpic->linesize[i]];
                 int     mode  = y==1 || y+2==h ? 2 : yadif->mode;
-                yadif->filter_line(dst, prev, cur, next, w, y+1<h ? refs : -refs, y ? -refs : refs, parity ^ tff, mode);
+                int     prefs = y+1<h ? refs : -refs;
+                int     mrefs =     y ?-refs :  refs;
+
+                if(y<=1 || y+2>=h) {
+                    int j;
+                    uint8_t *tmp = yadif->temp_line + 64 + 2*absrefs;
+                    if(mode<2)
+                        memcpy(tmp+2*mrefs, cur+2*mrefs, w*df);
+                    memcpy(tmp+mrefs, cur+mrefs, w*df);
+                    memcpy(tmp      , cur      , w*df);
+                    if(prefs != mrefs) {
+                        memcpy(tmp+prefs, cur+prefs, w*df);
+                        if(mode<2)
+                            memcpy(tmp+2*prefs, cur+2*prefs, w*df);
+                    }
+                    cur = tmp;
+                }
+
+                yadif->filter_line(dst, prev, cur, next, w, prefs, mrefs, parity ^ tff, mode);
             } else {
                 memcpy(&dstpic->data[i][y*dstpic->linesize[i]],
                        &yadif->cur->data[i][y*refs], w*df);
@@ -136,24 +161,6 @@ static void filter(AVFilterContext *ctx, AVFilterBufferRef *dstpic,
     }
 
     emms_c();
-}
-
-static AVFilterBufferRef *get_video_buffer(AVFilterLink *link, int perms, int w, int h)
-{
-    AVFilterBufferRef *picref;
-    int width = FFALIGN(w, 32);
-    int height= FFALIGN(h+2, 32);
-    int i;
-
-    picref = ff_default_get_video_buffer(link, perms, width, height);
-
-    picref->video->w = w;
-    picref->video->h = h;
-
-    for (i = 0; i < 3; i++)
-        picref->data[i] += picref->linesize[i];
-
-    return picref;
 }
 
 static int return_frame(AVFilterContext *ctx, int is_second)
@@ -213,6 +220,11 @@ static int start_frame(AVFilterLink *link, AVFilterBufferRef *picref)
     YADIFContext *yadif = ctx->priv;
 
     av_assert0(picref);
+
+    if (picref->video->h < 3 || picref->video->w < 3) {
+        av_log(ctx, AV_LOG_ERROR, "Video of less than 3 columns or lines is not supported\n");
+        return AVERROR(EINVAL);
+    }
 
     if (yadif->frame_pending)
         return_frame(ctx, 1);
@@ -343,6 +355,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     if (yadif->prev) avfilter_unref_bufferp(&yadif->prev);
     if (yadif->cur ) avfilter_unref_bufferp(&yadif->cur );
     if (yadif->next) avfilter_unref_bufferp(&yadif->next);
+    av_freep(&yadif->temp_line); yadif->temp_line_size = 0;
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -430,7 +443,6 @@ AVFilter avfilter_vf_yadif = {
     .inputs    = (const AVFilterPad[]) {{ .name             = "default",
                                           .type             = AVMEDIA_TYPE_VIDEO,
                                           .start_frame      = start_frame,
-                                          .get_video_buffer = get_video_buffer,
                                           .draw_slice       = null_draw_slice,
                                           .end_frame        = end_frame,
                                           .rej_perms        = AV_PERM_REUSE2, },
