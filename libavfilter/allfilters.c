@@ -20,6 +20,7 @@
  */
 
 #include "avfilter.h"
+#include "config.h"
 
 
 #define REGISTER_FILTER(X,x,y) { \
@@ -56,6 +57,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (PAN,         pan,         af);
     REGISTER_FILTER (SILENCEDETECT, silencedetect, af);
     REGISTER_FILTER (VOLUME,      volume,      af);
+    REGISTER_FILTER (VOLUMEDETECT,volumedetect,af);
     REGISTER_FILTER (RESAMPLE,    resample,    af);
 
     REGISTER_FILTER (AEVALSRC,    aevalsrc,    asrc);
@@ -80,11 +82,13 @@ void avfilter_register_all(void)
     REGISTER_FILTER (DESHAKE,     deshake,     vf);
     REGISTER_FILTER (DRAWBOX,     drawbox,     vf);
     REGISTER_FILTER (DRAWTEXT,    drawtext,    vf);
+    REGISTER_FILTER (EDGEDETECT,  edgedetect,  vf);
     REGISTER_FILTER (FADE,        fade,        vf);
     REGISTER_FILTER (FIELDORDER,  fieldorder,  vf);
     REGISTER_FILTER (FIFO,        fifo,        vf);
     REGISTER_FILTER (FORMAT,      format,      vf);
     REGISTER_FILTER (FPS,         fps,         vf);
+    REGISTER_FILTER (FRAMESTEP,   framestep,   vf);
     REGISTER_FILTER (FREI0R,      frei0r,      vf);
     REGISTER_FILTER (GRADFUN,     gradfun,     vf);
     REGISTER_FILTER (HFLIP,       hflip,       vf);

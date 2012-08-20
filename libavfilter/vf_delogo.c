@@ -25,6 +25,7 @@
  * Ported from MPlayer libmpcodecs/vf_delogo.c.
  */
 
+#include "libavutil/common.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
@@ -139,15 +140,16 @@ typedef struct {
 }  DelogoContext;
 
 #define OFFSET(x) offsetof(DelogoContext, x)
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 
 static const AVOption delogo_options[]= {
-    {"x",    "set logo x position",       OFFSET(x),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX },
-    {"y",    "set logo y position",       OFFSET(y),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX },
-    {"w",    "set logo width",            OFFSET(w),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX },
-    {"h",    "set logo height",           OFFSET(h),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX },
-    {"band", "set delogo area band size", OFFSET(band), AV_OPT_TYPE_INT, {.dbl= 4}, -1, INT_MAX },
-    {"t",    "set delogo area band size", OFFSET(band), AV_OPT_TYPE_INT, {.dbl= 4}, -1, INT_MAX },
-    {"show", "show delogo area",          OFFSET(show), AV_OPT_TYPE_INT, {.dbl= 0},  0, 1       },
+    {"x",    "set logo x position",       OFFSET(x),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX, FLAGS},
+    {"y",    "set logo y position",       OFFSET(y),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX, FLAGS},
+    {"w",    "set logo width",            OFFSET(w),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX, FLAGS},
+    {"h",    "set logo height",           OFFSET(h),    AV_OPT_TYPE_INT, {.dbl=-1}, -1, INT_MAX, FLAGS},
+    {"band", "set delogo area band size", OFFSET(band), AV_OPT_TYPE_INT, {.dbl= 4}, -1, INT_MAX, FLAGS},
+    {"t",    "set delogo area band size", OFFSET(band), AV_OPT_TYPE_INT, {.dbl= 4}, -1, INT_MAX, FLAGS},
+    {"show", "show delogo area",          OFFSET(show), AV_OPT_TYPE_INT, {.dbl= 0},  0, 1, FLAGS},
     {NULL},
 };
 
@@ -256,8 +258,7 @@ AVFilter avfilter_vf_delogo = {
                                           .start_frame      = ff_inplace_start_frame,
                                           .draw_slice       = null_draw_slice,
                                           .end_frame        = end_frame,
-                                          .min_perms        = AV_PERM_WRITE | AV_PERM_READ,
-                                          .rej_perms        = AV_PERM_PRESERVE },
+                                          .min_perms        = AV_PERM_WRITE | AV_PERM_READ },
                                         { .name = NULL}},
     .outputs   = (const AVFilterPad[]) {{ .name             = "default",
                                           .type             = AVMEDIA_TYPE_VIDEO, },

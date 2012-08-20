@@ -114,6 +114,7 @@ typedef struct OptionsContext {
     uint64_t limit_filesize;
     float mux_preload;
     float mux_max_delay;
+    int shortest;
 
     int video_disable;
     int audio_disable;
@@ -158,6 +159,8 @@ typedef struct OptionsContext {
     int        nb_copy_initial_nonkeyframes;
     SpecifierOpt *filters;
     int        nb_filters;
+    SpecifierOpt *fix_sub_duration;
+    int        nb_fix_sub_duration;
 } OptionsContext;
 
 typedef struct InputFilter {
@@ -222,6 +225,14 @@ typedef struct InputStream {
     int      resample_sample_rate;
     int      resample_channels;
     uint64_t resample_channel_layout;
+
+    int fix_sub_duration;
+    struct { /* previous decoded subtitle and related variables */
+        int64_t pts;
+        int got_output;
+        int ret;
+        AVSubtitle subtitle;
+    } prev_sub;
 
     struct sub2video {
         int64_t last_pts;
@@ -322,6 +333,8 @@ typedef struct OutputFile {
     int64_t recording_time;  ///< desired length of the resulting file in microseconds == AV_TIME_BASE units
     int64_t start_time;      ///< start time in microseconds == AV_TIME_BASE units
     uint64_t limit_filesize; /* filesize limit expressed in bytes */
+
+    int shortest;
 } OutputFile;
 
 extern InputStream **input_streams;
@@ -355,7 +368,6 @@ extern int do_pkt_dump;
 extern int copy_ts;
 extern int copy_tb;
 extern int debug_ts;
-extern int opt_shortest;
 extern int exit_on_error;
 extern int print_stats;
 extern int qp_hist;

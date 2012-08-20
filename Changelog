@@ -45,6 +45,12 @@ version next:
 - smptebars source
 - asetpts filter
 - hue filter
+- ICO muxer
+- SubRip encoder and decoder without embedded timing
+- edge detection filter
+- framestep filter
+- ffmpeg -shortest option is now per-output file
+- volume measurement filter
 
 
 version 0.11:

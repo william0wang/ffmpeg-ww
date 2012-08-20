@@ -24,6 +24,7 @@
  */
 
 #include "libavutil/audioconvert.h"
+#include "libavutil/internal.h"
 #include "libavutil/opt.h"
 
 #include "audio.h"
@@ -40,8 +41,9 @@ typedef struct ChannelSplitContext {
 
 #define OFFSET(x) offsetof(ChannelSplitContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
+#define F AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption channelsplit_options[] = {
-    { "channel_layout", "Input channel layout.", OFFSET(channel_layout_str), AV_OPT_TYPE_STRING, { .str = "stereo" }, .flags = A },
+    { "channel_layout", "Input channel layout.", OFFSET(channel_layout_str), AV_OPT_TYPE_STRING, { .str = "stereo" }, .flags = A|F },
     { NULL },
 };
 
@@ -141,4 +143,5 @@ AVFilter avfilter_af_channelsplit = {
                                        .filter_samples = filter_samples, },
                                      { NULL }},
     .outputs = (const AVFilterPad[]){{ NULL }},
+    .priv_class = &channelsplit_class,
 };

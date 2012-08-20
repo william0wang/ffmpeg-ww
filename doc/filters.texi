@@ -690,6 +690,46 @@ volume=-12dB
 @end example
 @end itemize
 
+@section volumedetect
+
+Detect the volume of the input video.
+
+The filter has no parameters. The input is not modified. Statistics about
+the volume will be printed in the log when the input stream end is reached.
+
+In particular it will show the mean volume (root mean square), maximum
+volume (on a per-sample basis), and the beginning of an histogram of the
+registered volume values (from the maximum value to a cumulated 1/1000 of
+the samples).
+
+All volumes are in decibels relative to the maximum PCM value.
+
+Here is an excerpt of the output:
+@example
+[Parsed_volumedetect_0 @ 0xa23120] mean_volume: -27 dB
+[Parsed_volumedetect_0 @ 0xa23120] max_volume: -4 dB
+[Parsed_volumedetect_0 @ 0xa23120] histogram_4db: 6
+[Parsed_volumedetect_0 @ 0xa23120] histogram_5db: 62
+[Parsed_volumedetect_0 @ 0xa23120] histogram_6db: 286
+[Parsed_volumedetect_0 @ 0xa23120] histogram_7db: 1042
+[Parsed_volumedetect_0 @ 0xa23120] histogram_8db: 2551
+[Parsed_volumedetect_0 @ 0xa23120] histogram_9db: 4609
+[Parsed_volumedetect_0 @ 0xa23120] histogram_10db: 8409
+@end example
+
+It means that:
+@itemize
+@item
+The mean square energy is approximately -27 dB, or 10^-2.7.
+@item
+The largest sample is at -4 dB, or more precisely between -4 dB and -5 dB.
+@item
+There are 6 samples at -4 dB, 62 at -5 dB, 286 at -6 dB, etc.
+@end itemize
+
+In other words, raising the volume by +4 dB does not cause any clipping,
+raising it by +5 dB causes clipping for 6 samples, etc.
+
 @section asyncts
 Synchronize audio data with timestamps by squeezing/stretching it and/or
 dropping samples/adding silence when needed.
@@ -1929,6 +1969,33 @@ For more information about libfreetype, check:
 For more information about fontconfig, check:
 @url{http://freedesktop.org/software/fontconfig/fontconfig-user.html}.
 
+@section edgedetect
+
+Detect and draw edges. The filter uses the Canny Edge Detection algorithm.
+
+This filter accepts the following optional named parameters:
+
+@table @option
+@item low, high
+Set low and high threshold values used by the Canny thresholding
+algorithm.
+
+The high threshold selects the "strong" edge pixels, which are then
+connected through 8-connectivity with the "weak" edge pixels selected
+by the low threshold.
+
+@var{low} and @var{high} threshold values must be choosen in the range
+[0,1], and @var{low} should be lesser or equal to @var{high}.
+
+Default value for @var{low} is @code{20/255}, and default value for @var{high}
+is @code{50/255}.
+@end table
+
+Example:
+@example
+edgedetect=low=0.1:high=0.4
+@end example
+
 @section fade
 
 Apply fade-in/out effect to input video.
@@ -2056,6 +2123,13 @@ This filter accepts the following named parameters:
 Desired output framerate.
 
 @end table
+
+@section framestep
+
+Select one frame every N.
+
+This filter accepts in input a string representing a positive
+integer. Default argument is @code{1}.
 
 @anchor{frei0r}
 @section frei0r
@@ -2191,12 +2265,53 @@ a float number which specifies chroma temporal strength, defaults to
 
 Modify the hue and/or the saturation of the input.
 
-This filter accepts the optional parameters: @var{hue}:@var{saturation}.
+This filter accepts the following optional named options:
 
-@var{hue} must be a float number that specifies the hue angle as a
-number of degrees, and defaults to 0.0.
-@var{saturation} must be a float number that specifies the saturation
-in the [-10,10] range, and defaults to 1.0.
+@table @option
+@item h
+Specify the hue angle as a number of degrees. It accepts a float
+number or an expression, and defaults to 0.0.
+
+@item H
+Specify the hue angle as a number of degrees. It accepts a float
+number or an expression, and defaults to 0.0.
+
+@item s
+Specify the saturation in the [-10,10] range. It accepts a float number and
+defaults to 1.0.
+@end table
+
+The options can also be set using the syntax: @var{hue}:@var{saturation}
+
+In this case @var{hue} is expressed in degrees.
+
+Some examples follow:
+@itemize
+@item
+Set the hue to 90 degrees and the saturation to 1.0:
+@example
+hue=h=90:s=1
+@end example
+
+@item
+Same command but expressing the hue in radians:
+@example
+hue=H=PI/2:s=1
+@end example
+
+@item
+Same command without named options, hue must be expressed in degrees:
+@example
+hue=90:1
+@end example
+
+@item
+Note that "h:s" syntax does not support expressions for the values of
+h and s, so the following example will issue an error:
+@example
+hue=PI/2:1
+@end example
+@end itemize
 
 @section idet
 
@@ -2356,12 +2471,10 @@ The list of the currently supported filters follows:
 @item field
 @item fil
 @item fixpts
-@item framestep
 @item fspp
 @item geq
 @item harddup
 @item hqdn3d
-@item hue
 @item il
 @item ilpack
 @item ivtc

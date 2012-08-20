@@ -35,6 +35,7 @@
 
 #include <float.h>
 
+#include "libavutil/common.h"
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
@@ -49,9 +50,9 @@ typedef struct {
     const AVClass *class;
     int w, h;
     unsigned int nb_frame;
-    AVRational time_base;
+    AVRational time_base, frame_rate;
     int64_t pts, max_pts;
-    char *rate;                 ///< video frame rate
+    char *frame_rate_str;       ///< video frame rate
     char *duration;             ///< total duration of the generated video
     AVRational sar;             ///< sample aspect ratio
     int nb_decimals;
@@ -71,30 +72,31 @@ typedef struct {
 } TestSourceContext;
 
 #define OFFSET(x) offsetof(TestSourceContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption options[] = {
-    { "size",     "set video size",     OFFSET(w),        AV_OPT_TYPE_IMAGE_SIZE, {.str = "320x240"}, 0, 0 },
-    { "s",        "set video size",     OFFSET(w),        AV_OPT_TYPE_IMAGE_SIZE, {.str = "320x240"}, 0, 0 },
-    { "rate",     "set video rate",     OFFSET(rate),     AV_OPT_TYPE_STRING, {.str = "25"},      0, 0 },
-    { "r",        "set video rate",     OFFSET(rate),     AV_OPT_TYPE_STRING, {.str = "25"},      0, 0 },
-    { "duration", "set video duration", OFFSET(duration), AV_OPT_TYPE_STRING, {.str = NULL},      0, 0 },
-    { "d",        "set video duration", OFFSET(duration), AV_OPT_TYPE_STRING, {.str = NULL},      0, 0 },
-    { "sar",      "set video sample aspect ratio", OFFSET(sar), AV_OPT_TYPE_RATIONAL, {.dbl= 1},  0, INT_MAX },
+    { "size",     "set video size",     OFFSET(w),        AV_OPT_TYPE_IMAGE_SIZE, {.str = "320x240"}, 0, 0, FLAGS },
+    { "s",        "set video size",     OFFSET(w),        AV_OPT_TYPE_IMAGE_SIZE, {.str = "320x240"}, 0, 0, FLAGS },
+    { "rate",     "set video rate",     OFFSET(frame_rate_str), AV_OPT_TYPE_STRING, {.str = "25"}, 0, 0, FLAGS },
+    { "r",        "set video rate",     OFFSET(frame_rate_str), AV_OPT_TYPE_STRING, {.str = "25"}, 0, 0, FLAGS },
+    { "duration", "set video duration", OFFSET(duration), AV_OPT_TYPE_STRING, {.str = NULL},      0, 0, FLAGS },
+    { "d",        "set video duration", OFFSET(duration), AV_OPT_TYPE_STRING, {.str = NULL},      0, 0, FLAGS },
+    { "sar",      "set video sample aspect ratio", OFFSET(sar), AV_OPT_TYPE_RATIONAL, {.dbl= 1},  0, INT_MAX, FLAGS },
 
     /* only used by color */
-    { "color", "set color", OFFSET(color_str), AV_OPT_TYPE_STRING, {.str = NULL}, CHAR_MIN, CHAR_MAX },
-    { "c",     "set color", OFFSET(color_str), AV_OPT_TYPE_STRING, {.str = NULL}, CHAR_MIN, CHAR_MAX },
+    { "color", "set color", OFFSET(color_str), AV_OPT_TYPE_STRING, {.str = NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "c",     "set color", OFFSET(color_str), AV_OPT_TYPE_STRING, {.str = NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
 
     /* only used by testsrc */
-    { "decimals", "set number of decimals to show", OFFSET(nb_decimals), AV_OPT_TYPE_INT, {.dbl=0},  INT_MIN, INT_MAX },
-    { "n",        "set number of decimals to show", OFFSET(nb_decimals), AV_OPT_TYPE_INT, {.dbl=0},  INT_MIN, INT_MAX },
+    { "decimals", "set number of decimals to show", OFFSET(nb_decimals), AV_OPT_TYPE_INT, {.dbl=0},  INT_MIN, INT_MAX, FLAGS },
+    { "n",        "set number of decimals to show", OFFSET(nb_decimals), AV_OPT_TYPE_INT, {.dbl=0},  INT_MIN, INT_MAX, FLAGS },
     { NULL },
 };
 
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     TestSourceContext *test = ctx->priv;
-    AVRational frame_rate_q;
+    AVRational time_base;
     int64_t duration = -1;
     int ret = 0;
 
@@ -103,8 +105,8 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     if ((ret = (av_set_options_string(test, args, "=", ":"))) < 0)
         return ret;
 
-    if ((ret = av_parse_video_rate(&frame_rate_q, test->rate)) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid frame rate: '%s'\n", test->rate);
+    if ((ret = av_parse_video_rate(&test->frame_rate, test->frame_rate_str)) < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Invalid frame rate: '%s'\n", test->frame_rate_str);
         return ret;
     }
 
@@ -131,16 +133,15 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
         }
     }
 
-    test->time_base.num = frame_rate_q.den;
-    test->time_base.den = frame_rate_q.num;
+    test->time_base = av_inv_q(test->frame_rate);
     test->max_pts = duration >= 0 ?
         av_rescale_q(duration, AV_TIME_BASE_Q, test->time_base) : -1;
     test->nb_frame = 0;
     test->pts = 0;
 
     av_log(ctx, AV_LOG_VERBOSE, "size:%dx%d rate:%d/%d duration:%f sar:%d/%d\n",
-           test->w, test->h, frame_rate_q.num, frame_rate_q.den,
-           duration < 0 ? -1 : test->max_pts * av_q2d(test->time_base),
+           test->w, test->h, test->frame_rate.num, test->frame_rate.den,
+           duration < 0 ? -1 : test->max_pts * av_q2d(time_base),
            test->sar.num, test->sar.den);
     return 0;
 }
@@ -160,7 +161,8 @@ static int config_props(AVFilterLink *outlink)
     outlink->w = test->w;
     outlink->h = test->h;
     outlink->sample_aspect_ratio = test->sar;
-    outlink->time_base = test->time_base;
+    outlink->frame_rate = test->frame_rate;
+    outlink->time_base  = test->time_base;
 
     return 0;
 }
@@ -283,6 +285,8 @@ AVFilter avfilter_vsrc_color = {
         },
         { .name = NULL }
     },
+
+    .priv_class = &color_class,
 };
 
 #endif /* CONFIG_COLOR_FILTER */
@@ -316,6 +320,7 @@ AVFilter avfilter_vsrc_nullsrc = {
                                     .request_frame = request_frame,
                                     .config_props  = config_props, },
                                   { .name = NULL}},
+    .priv_class = &nullsrc_class,
 };
 
 #endif /* CONFIG_NULLSRC_FILTER */
@@ -536,6 +541,7 @@ AVFilter avfilter_vsrc_testsrc = {
                                           .request_frame = request_frame,
                                           .config_props  = config_props, },
                                         { .name = NULL }},
+    .priv_class = &testsrc_class,
 };
 
 #endif /* CONFIG_TESTSRC_FILTER */
@@ -649,6 +655,7 @@ AVFilter avfilter_vsrc_rgbtestsrc = {
                                           .request_frame = request_frame,
                                           .config_props  = rgbtest_config_props, },
                                         { .name = NULL }},
+    .priv_class = &rgbtestsrc_class,
 };
 
 #endif /* CONFIG_RGBTESTSRC_FILTER */
@@ -777,6 +784,8 @@ AVFilter avfilter_vsrc_smptebars = {
         },
         { .name = NULL }
     },
+
+    .priv_class = &smptebars_class,
 };
 
 #endif  /* CONFIG_SMPTEBARS_FILTER */

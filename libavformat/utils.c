@@ -571,7 +571,7 @@ static AVPacket *add_to_pktbuf(AVPacketList **packet_buffer, AVPacket *pkt,
     return &pktl->pkt;
 }
 
-static void queue_attached_pictures(AVFormatContext *s)
+void avformat_queue_attached_pictures(AVFormatContext *s)
 {
     int i;
     for (i = 0; i < s->nb_streams; i++)
@@ -646,7 +646,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
         goto fail;
     ff_id3v2_free_extra_meta(&id3v2_extra_meta);
 
-    queue_attached_pictures(s);
+    avformat_queue_attached_pictures(s);
 
     if (!(s->flags&AVFMT_FLAG_PRIV_OPT) && s->pb && !s->data_offset)
         s->data_offset = avio_tell(s->pb);
@@ -776,6 +776,9 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
             if(s->subtitle_codec_id)st->codec->codec_id= s->subtitle_codec_id;
             break;
         }
+        /* TODO: audio: time filter; video: frame reordering (pts != dts) */
+        if (s->use_wallclock_as_timestamps)
+            pkt->dts = pkt->pts = av_rescale_q(av_gettime(), AV_TIME_BASE_Q, st->time_base);
 
         if(!pktl && st->request_probe <= 0)
             return ret;
@@ -1985,7 +1988,7 @@ int av_seek_frame(AVFormatContext *s, int stream_index, int64_t timestamp, int f
     int ret = seek_frame_internal(s, stream_index, timestamp, flags);
 
     if (ret >= 0)
-        queue_attached_pictures(s);
+        avformat_queue_attached_pictures(s);
 
     return ret;
 }
@@ -2001,7 +2004,7 @@ int avformat_seek_file(AVFormatContext *s, int stream_index, int64_t min_ts, int
         ret = s->iformat->read_seek2(s, stream_index, min_ts, ts, max_ts, flags);
 
         if (ret >= 0)
-            queue_attached_pictures(s);
+            avformat_queue_attached_pictures(s);
         return ret;
     }
 
@@ -2309,6 +2312,10 @@ static int has_codec_parameters(AVStream *st, const char **errmsg_ptr)
         if (st->info->found_decoder >= 0 && avctx->pix_fmt == PIX_FMT_NONE)
             FAIL("unspecified pixel format");
         break;
+    case AVMEDIA_TYPE_SUBTITLE:
+        if (avctx->codec_id == AV_CODEC_ID_HDMV_PGS_SUBTITLE && !avctx->width)
+            FAIL("unspecified size");
+        break;
     case AVMEDIA_TYPE_DATA:
         if(avctx->codec_id == AV_CODEC_ID_NONE) return 1;
     }
@@ -2321,9 +2328,10 @@ static int has_codec_parameters(AVStream *st, const char **errmsg_ptr)
 /* returns 1 or 0 if or if not decoded data was returned, or a negative error */
 static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **options)
 {
-    AVCodec *codec;
+    const AVCodec *codec;
     int got_picture = 1, ret = 0;
     AVFrame picture;
+    AVSubtitle subtitle;
     AVPacket pkt = *avpkt;
 
     if (!avcodec_is_open(st->codec) && !st->info->found_decoder) {
@@ -2368,6 +2376,11 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt, AVDictionary **option
             break;
         case AVMEDIA_TYPE_AUDIO:
             ret = avcodec_decode_audio4(st->codec, &picture, &got_picture, &pkt);
+            break;
+        case AVMEDIA_TYPE_SUBTITLE:
+            ret = avcodec_decode_subtitle2(st->codec, &subtitle,
+                                           &got_picture, &pkt);
+            ret = pkt.size;
             break;
         default:
             break;
@@ -2495,7 +2508,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         av_log(ic, AV_LOG_DEBUG, "File position before avformat_find_stream_info() is %"PRId64"\n", avio_tell(ic->pb));
 
     for(i=0;i<ic->nb_streams;i++) {
-        AVCodec *codec;
+        const AVCodec *codec;
         AVDictionary *thread_opt = NULL;
         st = ic->streams[i];
 
@@ -3369,6 +3382,8 @@ int avformat_write_header(AVFormatContext *s, AVDictionary **options)
 
     if(s->oformat->write_header){
         ret = s->oformat->write_header(s);
+        if (ret >= 0 && s->pb && s->pb->error < 0)
+            ret = s->pb->error;
         if (ret < 0)
             goto fail;
     }
@@ -3493,8 +3508,12 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt)
     int ret;
 
     if (!pkt) {
-        if (s->oformat->flags & AVFMT_ALLOW_FLUSH)
-            return s->oformat->write_packet(s, pkt);
+        if (s->oformat->flags & AVFMT_ALLOW_FLUSH) {
+            ret = s->oformat->write_packet(s, pkt);
+            if (ret >= 0 && s->pb && s->pb->error < 0)
+                ret = s->pb->error;
+            return ret;
+        }
         return 1;
     }
 
@@ -3504,6 +3523,8 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt)
         return ret;
 
     ret= s->oformat->write_packet(s, pkt);
+    if (ret >= 0 && s->pb && s->pb->error < 0)
+        ret = s->pb->error;
 
     if (ret >= 0)
         s->streams[pkt->stream_index]->nb_frames++;

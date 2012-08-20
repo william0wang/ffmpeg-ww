@@ -593,6 +593,7 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         case AVMEDIA_TYPE_SUBTITLE:
             if(!ist->dec)
                 ist->dec = avcodec_find_decoder(dec->codec_id);
+            MATCH_PER_STREAM_OPT(fix_sub_duration, i, ist->fix_sub_duration, ic, st);
             break;
         case AVMEDIA_TYPE_ATTACHMENT:
         case AVMEDIA_TYPE_UNKNOWN:
@@ -1217,6 +1218,16 @@ static OutputStream *new_subtitle_stream(OptionsContext *o, AVFormatContext *oc,
 
     MATCH_PER_STREAM_OPT(copy_initial_nonkeyframes, i, ost->copy_initial_nonkeyframes, oc, st);
 
+    if (!ost->stream_copy) {
+        char *frame_size = NULL;
+
+        MATCH_PER_STREAM_OPT(frame_sizes, str, frame_size, oc, st);
+        if (frame_size && av_parse_video_size(&subtitle_enc->width, &subtitle_enc->height, frame_size) < 0) {
+            av_log(NULL, AV_LOG_FATAL, "Invalid frame size: %s.\n", frame_size);
+            exit_program(1);
+        }
+    }
+
     return ost;
 }
 
@@ -1602,6 +1613,7 @@ loop_end:
         oc->duration = o->recording_time;
     output_files[nb_output_files - 1]->start_time     = o->start_time;
     output_files[nb_output_files - 1]->limit_filesize = o->limit_filesize;
+    output_files[nb_output_files - 1]->shortest       = o->shortest;
     av_dict_copy(&output_files[nb_output_files - 1]->opts, format_opts, 0);
 
     /* check filename in case of an image number is expected */
@@ -2125,6 +2137,7 @@ static int opt_help(const char *opt, const char *arg)
     show_help_children(avformat_get_class(), flags);
     show_help_children(sws_get_class(), flags);
     show_help_children(swr_get_class(), AV_OPT_FLAG_AUDIO_PARAM);
+    show_help_children(avfilter_get_class(), AV_OPT_FLAG_FILTERING_PARAM);
 
     return 0;
 }
@@ -2198,7 +2211,7 @@ const OptionDef options[] = {
     { "adrift_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT, {(void*)&audio_drift_threshold}, "audio drift threshold", "threshold" },
     { "copyts", OPT_BOOL | OPT_EXPERT, {(void*)&copy_ts}, "copy timestamps" },
     { "copytb", HAS_ARG | OPT_INT | OPT_EXPERT, {(void*)&copy_tb}, "copy input stream time base when stream copying", "mode" },
-    { "shortest", OPT_BOOL | OPT_EXPERT, {(void*)&opt_shortest}, "finish encoding within shortest input" }, //
+    { "shortest", OPT_BOOL | OPT_EXPERT | OPT_OFFSET, {.off = OFFSET(shortest)}, "finish encoding within shortest input" },
     { "dts_delta_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT, {(void*)&dts_delta_threshold}, "timestamp discontinuity delta threshold", "threshold" },
     { "dts_error_threshold", HAS_ARG | OPT_FLOAT | OPT_EXPERT, {(void*)&dts_error_threshold}, "timestamp error delta threshold", "threshold" },
     { "xerror", OPT_BOOL, {(void*)&exit_on_error}, "exit on error", "error" },
@@ -2218,7 +2231,7 @@ const OptionDef options[] = {
     /* video options */
     { "vframes", HAS_ARG | OPT_VIDEO | OPT_FUNC2, {(void*)opt_video_frames}, "set the number of video frames to record", "number" },
     { "r", HAS_ARG | OPT_VIDEO | OPT_STRING | OPT_SPEC, {.off = OFFSET(frame_rates)}, "set frame rate (Hz value, fraction or abbreviation)", "rate" },
-    { "s", HAS_ARG | OPT_VIDEO | OPT_STRING | OPT_SPEC, {.off = OFFSET(frame_sizes)}, "set frame size (WxH or abbreviation)", "size" },
+    { "s", HAS_ARG | OPT_VIDEO | OPT_SUBTITLE | OPT_STRING | OPT_SPEC, {.off = OFFSET(frame_sizes)}, "set frame size (WxH or abbreviation)", "size" },
     { "aspect", HAS_ARG | OPT_VIDEO | OPT_STRING | OPT_SPEC, {.off = OFFSET(frame_aspect_ratios)}, "set aspect ratio (4:3, 16:9 or 1.3333, 1.7777)", "aspect" },
     { "pix_fmt", HAS_ARG | OPT_EXPERT | OPT_VIDEO | OPT_STRING | OPT_SPEC, {.off = OFFSET(frame_pix_fmts)}, "set pixel format", "format" },
     { "bits_per_raw_sample", OPT_INT | HAS_ARG | OPT_VIDEO, {(void*)&frame_bits_per_raw_sample}, "set the number of bits per raw sample", "number" },
@@ -2276,6 +2289,7 @@ const OptionDef options[] = {
     { "sn", OPT_BOOL | OPT_SUBTITLE | OPT_OFFSET, {.off = OFFSET(subtitle_disable)}, "disable subtitle" },
     { "scodec", HAS_ARG | OPT_SUBTITLE | OPT_FUNC2, {(void*)opt_subtitle_codec}, "force subtitle codec ('copy' to copy stream)", "codec" },
     { "stag", HAS_ARG | OPT_EXPERT | OPT_SUBTITLE | OPT_FUNC2, {(void*)opt_old2new}, "force subtitle tag/fourcc", "fourcc/tag" },
+    { "fix_sub_duration", OPT_BOOL | OPT_EXPERT | OPT_SUBTITLE | OPT_SPEC, {.off = OFFSET(fix_sub_duration)}, "fix subtitles duration" },
 
     /* grab options */
     { "vc", HAS_ARG | OPT_EXPERT | OPT_VIDEO | OPT_GRAB, {(void*)opt_video_channel}, "deprecated, use -channel", "channel" },

@@ -67,6 +67,7 @@ OBJS-$(CONFIG_PAN_FILTER)                    += af_pan.o
 OBJS-$(CONFIG_RESAMPLE_FILTER)               += af_resample.o
 OBJS-$(CONFIG_SILENCEDETECT_FILTER)          += af_silencedetect.o
 OBJS-$(CONFIG_VOLUME_FILTER)                 += af_volume.o
+OBJS-$(CONFIG_VOLUMEDETECT_FILTER)           += af_volumedetect.o
 
 OBJS-$(CONFIG_AEVALSRC_FILTER)               += asrc_aevalsrc.o
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
@@ -90,10 +91,12 @@ OBJS-$(CONFIG_DELOGO_FILTER)                 += vf_delogo.o
 OBJS-$(CONFIG_DESHAKE_FILTER)                += vf_deshake.o
 OBJS-$(CONFIG_DRAWBOX_FILTER)                += vf_drawbox.o
 OBJS-$(CONFIG_DRAWTEXT_FILTER)               += vf_drawtext.o
+OBJS-$(CONFIG_EDGEDETECT_FILTER)             += vf_edgedetect.o
 OBJS-$(CONFIG_FADE_FILTER)                   += vf_fade.o
 OBJS-$(CONFIG_FIELDORDER_FILTER)             += vf_fieldorder.o
 OBJS-$(CONFIG_FIFO_FILTER)                   += fifo.o
 OBJS-$(CONFIG_FORMAT_FILTER)                 += vf_format.o
+OBJS-$(CONFIG_FRAMESTEP_FILTER)              += vf_framestep.o
 OBJS-$(CONFIG_FPS_FILTER)                    += vf_fps.o
 OBJS-$(CONFIG_FREI0R_FILTER)                 += vf_frei0r.o
 OBJS-$(CONFIG_GRADFUN_FILTER)                += vf_gradfun.o
@@ -162,12 +165,10 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_field.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_fil.o
 #OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_filmdint.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_fixpts.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_framestep.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_fspp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_geq.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_harddup.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_hqdn3d.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_hue.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_il.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ilpack.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ivtc.o
@@ -209,3 +210,6 @@ OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
 TOOLS     = graph2dot
 TESTPROGS = drawutils filtfmts formats
+
+clean::
+	$(RM) $(CLEANSUFFIXES:%=libavfilter/libmpcodecs/%)

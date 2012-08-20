@@ -1354,7 +1354,9 @@ void ff_MPV_frame_end(MpegEncContext *s)
               s->unrestricted_mv &&
               s->current_picture.f.reference &&
               !s->intra_only &&
-              !(s->flags & CODEC_FLAG_EMU_EDGE)) {
+              !(s->flags & CODEC_FLAG_EMU_EDGE) &&
+              !s->avctx->lowres
+            ) {
         int hshift = av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_w;
         int vshift = av_pix_fmt_descriptors[s->avctx->pix_fmt].log2_chroma_h;
         s->dsp.draw_edges(s->current_picture.f.data[0], s->current_picture.f.linesize[0],
@@ -1595,8 +1597,8 @@ void ff_print_debug_info(MpegEncContext *s, AVFrame *pict)
         avcodec_get_chroma_sub_sample(s->avctx->pix_fmt,
                                       &h_chroma_shift, &v_chroma_shift);
         for (i = 0; i < 3; i++) {
-            size_t size= (i == 0) ? pict->linesize[i] * height:
-                         pict->linesize[i] * height >> v_chroma_shift;
+            size_t size= (i == 0) ? pict->linesize[i] * FFALIGN(height, 16):
+                         pict->linesize[i] * FFALIGN(height, 16) >> v_chroma_shift;
             s->visualization_buffer[i]= av_realloc(s->visualization_buffer[i], size);
             memcpy(s->visualization_buffer[i], pict->data[i], size);
             pict->data[i] = s->visualization_buffer[i];

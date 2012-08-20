@@ -25,6 +25,7 @@
 
 #include "libavutil/audioconvert.h"
 #include "libavutil/avstring.h"
+#include "libavutil/common.h"
 #include "libavutil/opt.h"
 
 #include "audio.h"
@@ -46,10 +47,11 @@ typedef struct AFormatContext {
 
 #define OFFSET(x) offsetof(AFormatContext, x)
 #define A AV_OPT_FLAG_AUDIO_PARAM
+#define F AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption aformat_options[] = {
-    { "sample_fmts",     "A comma-separated list of sample formats.",  OFFSET(formats_str),         AV_OPT_TYPE_STRING, .flags = A },
-    { "sample_rates",    "A comma-separated list of sample rates.",    OFFSET(sample_rates_str),    AV_OPT_TYPE_STRING, .flags = A },
-    { "channel_layouts", "A comma-separated list of channel layouts.", OFFSET(channel_layouts_str), AV_OPT_TYPE_STRING, .flags = A },
+    { "sample_fmts",     "A comma-separated list of sample formats.",  OFFSET(formats_str),         AV_OPT_TYPE_STRING, .flags = A|F },
+    { "sample_rates",    "A comma-separated list of sample rates.",    OFFSET(sample_rates_str),    AV_OPT_TYPE_STRING, .flags = A|F },
+    { "channel_layouts", "A comma-separated list of channel layouts.", OFFSET(channel_layouts_str), AV_OPT_TYPE_STRING, .flags = A|F },
     { NULL },
 };
 
@@ -137,4 +139,5 @@ AVFilter avfilter_af_aformat = {
     .outputs       = (const AVFilterPad[]) {{ .name            = "default",
                                               .type            = AVMEDIA_TYPE_AUDIO},
                                             { .name = NULL}},
+    .priv_class = &aformat_class,
 };

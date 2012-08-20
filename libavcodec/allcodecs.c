@@ -25,6 +25,7 @@
  */
 
 #include "avcodec.h"
+#include "config.h"
 
 #define REGISTER_HWACCEL(X,x) { \
           extern AVHWAccel ff_##x##_hwaccel; \
@@ -80,6 +81,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (AURA, aura);
     REGISTER_DECODER (AURA2, aura2);
     REGISTER_ENCDEC  (AVRP, avrp);
+    REGISTER_DECODER (AVRN, avrn);
     REGISTER_DECODER (AVS, avs);
     REGISTER_ENCDEC  (AVUI, avui);
     REGISTER_ENCDEC  (AYUV, ayuv);
@@ -415,6 +417,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (REALTEXT, realtext);
     REGISTER_DECODER (SAMI, sami);
     REGISTER_ENCDEC  (SRT, srt);
+    REGISTER_ENCDEC  (SUBRIP, subrip);
     REGISTER_DECODER (SUBVIEWER, subviewer);
     REGISTER_ENCDEC  (XSUB, xsub);
 

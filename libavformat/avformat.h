@@ -1100,6 +1100,14 @@ typedef struct AVFormatContext {
      */
     int max_chunk_size;
 
+    /**
+     * forces the use of wallclock timestamps as pts/dts of packets
+     * This has undefined results in the presence of B frames.
+     * - encoding: unused
+     * - decoding: Set by user via AVOptions (NO direct access)
+     */
+    int use_wallclock_as_timestamps;
+
     /*****************************************************************
      * All fields below this line are not part of the public API. They
      * may not be used outside of libavformat and can be changed and
@@ -2006,6 +2014,9 @@ AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *strea
  */
 int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,
                                     const char *spec);
+
+void avformat_queue_attached_pictures(AVFormatContext *s);
+
 
 /**
  * @}

@@ -32,6 +32,7 @@
 #include "internal.h"
 #include "libavutil/avassert.h"
 #include "libavutil/base64.h"
+#include "libavutil/common.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 
@@ -241,6 +242,13 @@ static av_cold int vp8_init(AVCodecContext *avctx)
                vpx_codec_err_to_string(res));
         return AVERROR(EINVAL);
     }
+
+    if(!avctx->bit_rate)
+        if(avctx->rc_max_rate || avctx->rc_buffer_size || avctx->rc_initial_buffer_occupancy) {
+            av_log( avctx, AV_LOG_ERROR, "Rate control parameters set without a bitrate\n");
+            return AVERROR(EINVAL);
+        }
+
     dump_enc_cfg(avctx, &enccfg);
 
     enccfg.g_w            = avctx->width;
@@ -258,12 +266,25 @@ static av_cold int vp8_init(AVCodecContext *avctx)
         enccfg.g_pass = VPX_RC_ONE_PASS;
 
     if (avctx->rc_min_rate == avctx->rc_max_rate &&
-        avctx->rc_min_rate == avctx->bit_rate)
+        avctx->rc_min_rate == avctx->bit_rate && avctx->bit_rate)
         enccfg.rc_end_usage = VPX_CBR;
     else if (ctx->crf)
         enccfg.rc_end_usage = VPX_CQ;
-    enccfg.rc_target_bitrate = av_rescale_rnd(avctx->bit_rate, 1, 1000,
-                                              AV_ROUND_NEAR_INF);
+
+    if (avctx->bit_rate) {
+        enccfg.rc_target_bitrate = av_rescale_rnd(avctx->bit_rate, 1, 1000,
+                                                AV_ROUND_NEAR_INF);
+    } else {
+        if (enccfg.rc_end_usage == VPX_CQ) {
+            enccfg.rc_target_bitrate = 1000000;
+        } else {
+            avctx->bit_rate = enccfg.rc_target_bitrate * 1000;
+            av_log(avctx, AV_LOG_WARNING,
+                   "Neither bitrate nor constrained quality specified, using default bitrate of %dkbit/sec\n",
+                   enccfg.rc_target_bitrate);
+        }
+    }
+
     if (avctx->qmin > 0)
         enccfg.rc_min_quantizer = avctx->qmin;
     if (avctx->qmax > 0)
@@ -272,8 +293,9 @@ static av_cold int vp8_init(AVCodecContext *avctx)
 
     //0-100 (0 => CBR, 100 => VBR)
     enccfg.rc_2pass_vbr_bias_pct           = round(avctx->qcompress * 100);
-    enccfg.rc_2pass_vbr_minsection_pct     =
-        avctx->rc_min_rate * 100LL / avctx->bit_rate;
+    if (avctx->bit_rate)
+        enccfg.rc_2pass_vbr_minsection_pct     =
+            avctx->rc_min_rate * 100LL / avctx->bit_rate;
     if (avctx->rc_max_rate)
         enccfg.rc_2pass_vbr_maxsection_pct =
             avctx->rc_max_rate * 100LL / avctx->bit_rate;

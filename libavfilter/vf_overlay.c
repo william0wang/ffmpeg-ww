@@ -29,6 +29,7 @@
 
 #include "avfilter.h"
 #include "formats.h"
+#include "libavutil/common.h"
 #include "libavutil/eval.h"
 #include "libavutil/avstring.h"
 #include "libavutil/opt.h"
@@ -95,11 +96,12 @@ typedef struct {
 } OverlayContext;
 
 #define OFFSET(x) offsetof(OverlayContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption overlay_options[] = {
-    { "x", "set the x expression", OFFSET(x_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX },
-    { "y", "set the y expression", OFFSET(y_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX },
-    {"rgb", "force packed RGB in input and output", OFFSET(allow_packed_rgb), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1 },
+    { "x", "set the x expression", OFFSET(x_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "y", "set the y expression", OFFSET(y_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    {"rgb", "force packed RGB in input and output", OFFSET(allow_packed_rgb), AV_OPT_TYPE_INT, {.dbl=0}, 0, 1, FLAGS },
     {NULL},
 };
 
@@ -621,20 +623,20 @@ AVFilter avfilter_vf_overlay = {
                                           .start_frame     = start_frame_main,
                                           .draw_slice      = draw_slice_main,
                                           .end_frame       = end_frame_main,
-                                          .min_perms       = AV_PERM_READ,
-                                          .rej_perms       = AV_PERM_REUSE2|AV_PERM_PRESERVE, },
+                                          .min_perms       = AV_PERM_READ | AV_PERM_WRITE | AV_PERM_PRESERVE },
                                         { .name            = "overlay",
                                           .type            = AVMEDIA_TYPE_VIDEO,
                                           .config_props    = config_input_overlay,
                                           .start_frame     = start_frame_over,
                                           .draw_slice      = null_draw_slice,
                                           .end_frame       = end_frame_over,
-                                          .min_perms       = AV_PERM_READ,
-                                          .rej_perms       = AV_PERM_REUSE2, },
+                                          .min_perms       = AV_PERM_READ | AV_PERM_PRESERVE },
                                         { .name = NULL}},
     .outputs   = (const AVFilterPad[]) {{ .name            = "default",
                                           .type            = AVMEDIA_TYPE_VIDEO,
+                                          .rej_perms       = AV_PERM_WRITE,
                                           .config_props    = config_output,
                                           .request_frame   = request_frame, },
                                         { .name = NULL}},
+    .priv_class = &overlay_class,
 };

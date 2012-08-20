@@ -25,7 +25,9 @@
  * Ported from MPlayer libmpcodecs/vf_hue.c.
  */
 
+#include <float.h>
 #include "libavutil/imgutils.h"
+#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 
 #include "avfilter.h"
@@ -33,8 +35,13 @@
 #include "internal.h"
 #include "video.h"
 
+#define HUE_DEFAULT_VAL 0
+#define SAT_DEFAULT_VAL 1
+
 typedef struct {
-    float    hue;
+    const    AVClass *class;
+    float    hue_deg; /* hue expressed in degrees */
+    float    hue; /* hue expressed in radians */
     float    saturation;
     int      hsub;
     int      vsub;
@@ -42,35 +49,78 @@ typedef struct {
     int32_t hue_cos;
 } HueContext;
 
+#define OFFSET(x) offsetof(HueContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+static const AVOption hue_options[] = {
+    { "h", "set the hue angle degrees", OFFSET(hue_deg), AV_OPT_TYPE_FLOAT,
+      { -FLT_MAX }, -FLT_MAX, FLT_MAX, FLAGS },
+    { "H", "set the hue angle radians", OFFSET(hue), AV_OPT_TYPE_FLOAT,
+      { -FLT_MAX }, -FLT_MAX, FLT_MAX, FLAGS },
+    { "s", "set the saturation value", OFFSET(saturation), AV_OPT_TYPE_FLOAT,
+      { SAT_DEFAULT_VAL }, -10, 10, FLAGS },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(hue);
+
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     HueContext *hue = ctx->priv;
-    float h = 0, s = 1;
-    int n;
+    int n, ret;
     char c1 = 0, c2 = 0;
+    char *equal;
+
+    hue->class = &hue_class;
+    av_opt_set_defaults(hue);
 
     if (args) {
-        n = sscanf(args, "%f%c%f%c", &h, &c1, &s, &c2);
-        if (n != 0 && n != 1 && (n != 3 || c1 != ':')) {
-            av_log(ctx, AV_LOG_ERROR,
-                   "Invalid syntax for argument '%s': "
-                   "must be in the form 'hue[:saturation]'\n", args);
-            return AVERROR(EINVAL);
+        /* named options syntax */
+        if (equal = strchr(args, '=')) {
+            if ((ret = av_set_options_string(hue, args, "=", ":")) < 0)
+                return ret;
+            if (hue->hue != -FLT_MAX && hue->hue_deg != -FLT_MAX) {
+                av_log(ctx, AV_LOG_ERROR,
+                       "H and h options are incompatible and cannot be specified "
+                       "at the same time\n");
+                return AVERROR(EINVAL);
+            }
+        /* compatibility h:s syntax */
+        } else {
+            n = sscanf(args, "%f%c%f%c", &hue->hue_deg, &c1, &hue->saturation, &c2);
+            if (n != 1 && (n != 3 || c1 != ':')) {
+                av_log(ctx, AV_LOG_ERROR,
+                       "Invalid syntax for argument '%s': "
+                       "must be in the form 'hue[:saturation]'\n", args);
+                return AVERROR(EINVAL);
+            }
+
+            if (hue->saturation < -10 || hue->saturation > 10) {
+                av_log(ctx, AV_LOG_ERROR,
+                       "Invalid value for saturation %0.1f: "
+                       "must be included between range -10 and +10\n", hue->saturation);
+                return AVERROR(EINVAL);
+            }
         }
     }
 
-    if (s < -10 || s > 10) {
-        av_log(ctx, AV_LOG_ERROR,
-               "Invalid value for saturation %0.1f: "
-               "must be included between range -10 and +10\n", s);
-        return AVERROR(EINVAL);
-    }
+    if (hue->saturation == -FLT_MAX)
+        hue->hue = SAT_DEFAULT_VAL;
+    if (hue->hue == -FLT_MAX)
+        hue->hue = HUE_DEFAULT_VAL;
+    if (hue->hue_deg != -FLT_MAX)
+        /* Convert angle from degrees to radians */
+        hue->hue = hue->hue_deg * M_PI / 180;
 
-    /* Convert angle from degree to radian */
-    hue->hue = h * M_PI / 180;
-    hue->saturation = s;
-
+    av_log(ctx, AV_LOG_VERBOSE, "hue:%f*PI hue_deg:%f saturation:%f\n",
+           hue->hue/M_PI, hue->hue*180/M_PI, hue->saturation);
     return 0;
+}
+
+static av_cold void uninit(AVFilterContext *ctx)
+{
+    HueContext *hue = ctx->priv;
+
+    av_opt_free(hue);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -180,6 +230,7 @@ AVFilter avfilter_vf_hue = {
     .priv_size = sizeof(HueContext),
 
     .init          = init,
+    .uninit        = uninit,
     .query_formats = query_formats,
 
     .inputs = (const AVFilterPad[]) {
@@ -198,5 +249,6 @@ AVFilter avfilter_vf_hue = {
             .type         = AVMEDIA_TYPE_VIDEO,
         },
         { .name = NULL }
-    }
+    },
+    .priv_class = &hue_class,
 };
