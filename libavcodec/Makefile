@@ -93,7 +93,7 @@ OBJS-$(CONFIG_AMRNB_DECODER)           += amrnbdec.o celp_filters.o   \
 OBJS-$(CONFIG_AMRWB_DECODER)           += amrwbdec.o celp_filters.o   \
                                           celp_math.o acelp_filters.o \
                                           acelp_vectors.o             \
-                                          acelp_pitch_delay.o lsp.o
+                                          acelp_pitch_delay.o
 OBJS-$(CONFIG_AMV_DECODER)             += sp5xdec.o mjpegdec.o mjpeg.o
 OBJS-$(CONFIG_AMV_ENCODER)             += mjpegenc.o mjpeg.o           \
                                           mpegvideo_enc.o motion_est.o \
@@ -432,7 +432,8 @@ OBJS-$(CONFIG_TTA_DECODER)             += tta.o
 OBJS-$(CONFIG_TWINVQ_DECODER)          += twinvq.o celp_math.o
 OBJS-$(CONFIG_TXD_DECODER)             += txd.o s3tc.o
 OBJS-$(CONFIG_ULTI_DECODER)            += ulti.o
-OBJS-$(CONFIG_UTVIDEO_DECODER)         += utvideodec.o
+OBJS-$(CONFIG_UTVIDEO_DECODER)         += utvideodec.o utvideo.o
+OBJS-$(CONFIG_UTVIDEO_ENCODER)         += utvideoenc.o utvideo.o
 OBJS-$(CONFIG_V210_DECODER)            += v210dec.o
 OBJS-$(CONFIG_V210_ENCODER)            += v210enc.o
 OBJS-$(CONFIG_V308_DECODER)            += v308dec.o

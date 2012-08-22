@@ -509,7 +509,7 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
         int64_t max = ost->st->cur_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
         if (ost->st->cur_dts && ost->st->cur_dts != AV_NOPTS_VALUE &&  max > pkt->dts) {
             av_log(s, max - pkt->dts > 2 || avctx->codec_type == AVMEDIA_TYPE_VIDEO ? AV_LOG_WARNING : AV_LOG_DEBUG,
-                   "st:%d PTS: %"PRId64" DTS: %"PRId64" < %"PRId64" invalid, cliping\n", pkt->stream_index, pkt->pts, pkt->dts, max);
+                   "st:%d PTS: %"PRId64" DTS: %"PRId64" < %"PRId64" invalid, clipping\n", pkt->stream_index, pkt->pts, pkt->dts, max);
             if(pkt->pts >= pkt->dts)
                 pkt->pts = FFMAX(pkt->pts, max);
             pkt->dts = max;
@@ -1419,8 +1419,7 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
     if (!*got_output || ret < 0) {
         if (!pkt->size) {
             for (i = 0; i < ist->nb_filters; i++)
-                av_buffersrc_add_ref(ist->filters[i]->filter, NULL,
-                                     AV_BUFFERSRC_FLAG_NO_COPY);
+                av_buffersrc_add_ref(ist->filters[i]->filter, NULL, 0);
         }
         return ret;
     }
@@ -1539,7 +1538,7 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
     if (!*got_output || ret < 0) {
         if (!pkt->size) {
             for (i = 0; i < ist->nb_filters; i++)
-                av_buffersrc_add_ref(ist->filters[i]->filter, NULL, AV_BUFFERSRC_FLAG_NO_COPY);
+                av_buffersrc_add_ref(ist->filters[i]->filter, NULL, 0);
         }
         return ret;
     }

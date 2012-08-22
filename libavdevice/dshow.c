@@ -46,7 +46,7 @@ struct dshow_ctx {
     HANDLE event;
     AVPacketList *pktl;
 
-    unsigned int curbufsize;
+    int64_t curbufsize;
     unsigned int video_frame_num;
 
     IMediaControl *control;
@@ -207,10 +207,10 @@ callback(void *priv_data, int index, uint8_t *buf, int buf_size, int64_t time)
 
 //    dump_videohdr(s, vdhdr);
 
-    if(shall_we_drop(s))
-        return;
-
     WaitForSingleObject(ctx->mutex, INFINITE);
+
+    if(shall_we_drop(s))
+        goto fail;
 
     pktl_next = av_mallocz(sizeof(AVPacketList));
     if(!pktl_next)

@@ -363,11 +363,13 @@ progress information is always "progress".
 
 @item -stdin
 Enable interaction on standard input. On by default unless standard input is
-used as an input.
+used as an input. To explicitly disable interaction you need to specify
+@code{-nostdin}.
 
-Useful, for example, if ffmpeg is in the background process group. Roughly
-the same result can be achieved with @code{ffmpeg ... < /dev/null} but it
-requires a shell.
+Disabling interaction on standard input is useful, for example, if
+ffmpeg is in the background process group. Roughly the same result can
+be achieved with @code{ffmpeg ... < /dev/null} but it requires a
+shell.
 
 @item -debug_ts (@emph{global})
 Print timestamp information. It is off by default. This option is
@@ -637,13 +639,6 @@ Note that this option will delay the output of all data until the next
 subtitle packet is decoded: it may increase memory consumption and latency a
 lot.
 
-@end table
-
-@section Audio/Video grab options
-
-@table @option
-@item -isync (@emph{global})
-Synchronize read on input.
 @end table
 
 @section Advanced options
