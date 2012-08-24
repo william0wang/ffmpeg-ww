@@ -205,6 +205,20 @@ static void audio_encode_example(const char *filename)
             av_free_packet(&pkt);
         }
     }
+
+    /* get the delayed frames */
+    for (got_output = 1; got_output; i++) {
+        ret = avcodec_encode_audio2(c, &pkt, NULL, &got_output);
+        if (ret < 0) {
+            fprintf(stderr, "error encoding frame\n");
+            exit(1);
+        }
+
+        if (got_output) {
+            fwrite(pkt.data, 1, pkt.size, f);
+            av_free_packet(&pkt);
+        }
+    }
     fclose(f);
 
     av_freep(&samples);
@@ -332,7 +346,6 @@ static void video_encode_example(const char *filename, int codec_id)
     }
 
     c = avcodec_alloc_context3(codec);
-    picture= avcodec_alloc_frame();
 
     /* put sample parameters */
     c->bit_rate = 400000;
@@ -360,6 +373,15 @@ static void video_encode_example(const char *filename, int codec_id)
         exit(1);
     }
 
+    picture = avcodec_alloc_frame();
+    if (!picture) {
+        fprintf(stderr, "Could not allocate video frame\n");
+        exit(1);
+    }
+    picture->format = c->pix_fmt;
+    picture->width  = c->width;
+    picture->height = c->height;
+
     /* the image can be allocated by any means and av_image_alloc() is
      * just the most convenient way if av_malloc() is to be used */
     ret = av_image_alloc(picture->data, picture->linesize, c->width, c->height,
@@ -368,10 +390,6 @@ static void video_encode_example(const char *filename, int codec_id)
         fprintf(stderr, "could not alloc raw picture buffer\n");
         exit(1);
     }
-
-    picture->format = c->pix_fmt;
-    picture->width  = c->width;
-    picture->height = c->height;
 
     /* encode 1 second of video */
     for(i=0;i<25;i++) {
@@ -483,8 +501,6 @@ static void video_decode_example(const char *outfilename, const char *filename)
     }
 
     c = avcodec_alloc_context3(codec);
-    picture= avcodec_alloc_frame();
-
     if(codec->capabilities&CODEC_CAP_TRUNCATED)
         c->flags|= CODEC_FLAG_TRUNCATED; /* we do not send complete frames */
 
@@ -503,6 +519,12 @@ static void video_decode_example(const char *outfilename, const char *filename)
     f = fopen(filename, "rb");
     if (!f) {
         fprintf(stderr, "could not open %s\n", filename);
+        exit(1);
+    }
+
+    picture = avcodec_alloc_frame();
+    if (!picture) {
+        fprintf(stderr, "Could not allocate video frame\n");
         exit(1);
     }
 

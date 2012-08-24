@@ -193,7 +193,8 @@ static void sub2video_push_ref(InputStream *ist, int64_t pts)
         av_buffersrc_add_ref(ist->filters[i]->filter,
                              avfilter_ref_buffer(ref, ~0),
                              AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
-                             AV_BUFFERSRC_FLAG_NO_COPY);
+                             AV_BUFFERSRC_FLAG_NO_COPY |
+                             AV_BUFFERSRC_FLAG_PUSH);
 }
 
 static void sub2video_update(InputStream *ist, AVSubtitle *sub, int64_t pts)
@@ -571,6 +572,18 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
     }
 }
 
+static void close_output_stream(OutputStream *ost)
+{
+    OutputFile *of = output_files[ost->file_index];
+
+    ost->finished = 1;
+    if (of->shortest) {
+        int i;
+        for (i = 0; i < of->ctx->nb_streams; i++)
+            output_streams[of->ost_index + i]->finished = 1;
+    }
+}
+
 static int check_recording_time(OutputStream *ost)
 {
     OutputFile *of = output_files[ost->file_index];
@@ -578,7 +591,7 @@ static int check_recording_time(OutputStream *ost)
     if (of->recording_time != INT64_MAX &&
         av_compare_ts(ost->sync_opts - ost->first_pts, ost->st->codec->time_base, of->recording_time,
                       AV_TIME_BASE_Q) >= 0) {
-        ost->finished = 1;
+        close_output_stream(ost);
         return 0;
     }
     return 1;
@@ -1312,7 +1325,7 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
 
     if (of->recording_time != INT64_MAX &&
         ist->pts >= of->recording_time + of->start_time) {
-        ost->finished = 1;
+        close_output_stream(ost);
         return;
     }
 
@@ -1508,7 +1521,8 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
                                           decoded_frame_tb,
                                           (AVRational){1, ist->st->codec->sample_rate});
     for (i = 0; i < ist->nb_filters; i++)
-        av_buffersrc_add_frame(ist->filters[i]->filter, decoded_frame, 0);
+        av_buffersrc_add_frame(ist->filters[i]->filter, decoded_frame,
+                               AV_BUFFERSRC_FLAG_PUSH);
 
     decoded_frame->pts = AV_NOPTS_VALUE;
 
@@ -1619,9 +1633,10 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
             buf->refcount++;
             av_buffersrc_add_ref(ist->filters[i]->filter, fb,
                                  AV_BUFFERSRC_FLAG_NO_CHECK_FORMAT |
-                                 AV_BUFFERSRC_FLAG_NO_COPY);
+                                 AV_BUFFERSRC_FLAG_NO_COPY |
+                                 AV_BUFFERSRC_FLAG_PUSH);
         } else
-        if(av_buffersrc_add_frame(ist->filters[i]->filter, decoded_frame, 0)<0) {
+        if(av_buffersrc_add_frame(ist->filters[i]->filter, decoded_frame, AV_BUFFERSRC_FLAG_PUSH)<0) {
             av_log(NULL, AV_LOG_FATAL, "Failed to inject frame into filter network\n");
             exit_program(1);
         }
@@ -2105,7 +2120,7 @@ static int transcode_init(void)
             }
 
             if (ist)
-                ist->decoding_needed = 1;
+                ist->decoding_needed++;
             ost->encoding_needed = 1;
 
             if (!ost->filter &&
@@ -2395,7 +2410,7 @@ static int need_output(void)
         if (ost->frame_number >= ost->max_frames) {
             int j;
             for (j = 0; j < of->ctx->nb_streams; j++)
-                output_streams[of->ost_index + j]->finished = 1;
+                close_output_stream(output_streams[of->ost_index + j]);
             continue;
         }
 
@@ -2658,18 +2673,6 @@ static void reset_eagain(void)
         output_streams[i]->unavailable = 0;
 }
 
-static void close_output_stream(OutputStream *ost)
-{
-    OutputFile *of = output_files[ost->file_index];
-
-    ost->finished = 1;
-    if (of->shortest) {
-        int i;
-        for (i = 0; i < of->ctx->nb_streams; i++)
-            output_streams[of->ost_index + i]->finished = 1;
-    }
-}
-
 /**
  * @return
  * - 0 -- one packet was read and processed
@@ -2736,15 +2739,16 @@ static int process_input(int file_index)
         goto discard_packet;
 
     if(!ist->wrap_correction_done && input_files[file_index]->ctx->start_time != AV_NOPTS_VALUE && ist->st->pts_wrap_bits < 64){
-        uint64_t stime = av_rescale_q(input_files[file_index]->ctx->start_time, AV_TIME_BASE_Q, ist->st->time_base);
-        uint64_t stime2= stime + (1LL<<ist->st->pts_wrap_bits);
+        int64_t stime = av_rescale_q(input_files[file_index]->ctx->start_time, AV_TIME_BASE_Q, ist->st->time_base);
+        int64_t stime2= stime + (1ULL<<ist->st->pts_wrap_bits);
         ist->wrap_correction_done = 1;
-        if(pkt.dts != AV_NOPTS_VALUE && pkt.dts > stime && pkt.dts - stime > stime2 - pkt.dts) {
-            pkt.dts -= 1LL<<ist->st->pts_wrap_bits;
+
+        if(stime2 > stime && pkt.dts != AV_NOPTS_VALUE && pkt.dts > stime + (1LL<<(ist->st->pts_wrap_bits-1))) {
+            pkt.dts -= 1ULL<<ist->st->pts_wrap_bits;
             ist->wrap_correction_done = 0;
         }
-        if(pkt.pts != AV_NOPTS_VALUE && pkt.pts > stime && pkt.pts - stime > stime2 - pkt.pts) {
-            pkt.pts -= 1LL<<ist->st->pts_wrap_bits;
+        if(stime2 > stime && pkt.pts != AV_NOPTS_VALUE && pkt.pts > stime + (1LL<<(ist->st->pts_wrap_bits-1))) {
+            pkt.pts -= 1ULL<<ist->st->pts_wrap_bits;
             ist->wrap_correction_done = 0;
         }
     }
