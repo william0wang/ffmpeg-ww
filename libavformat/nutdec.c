@@ -623,7 +623,7 @@ static int find_and_decode_index(NUTContext *nut)
                 int flag = x & 1;
                 x >>= 1;
                 if (n + x >= syncpoint_count + 1) {
-                    av_log(s, AV_LOG_ERROR, "index overflow A\n");
+                    av_log(s, AV_LOG_ERROR, "index overflow A %d + %d >= %d\n", n, x, syncpoint_count + 1);
                     goto fail;
                 }
                 while (x--)
@@ -950,6 +950,8 @@ static int read_seek(AVFormatContext *s, int stream_index,
 
     if (st->index_entries) {
         int index = av_index_search_timestamp(st, pts, flags);
+        if (index < 0)
+            index = av_index_search_timestamp(st, pts, flags ^ AVSEEK_FLAG_BACKWARD);
         if (index < 0)
             return -1;
 

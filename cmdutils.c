@@ -301,6 +301,7 @@ int parse_option(void *optctx, const char *opt, const char *arg,
     if (po->flags & OPT_STRING) {
         char *str;
         str = av_strdup(arg);
+//         av_freep(dst);
         *(char **)dst = str;
     } else if (po->flags & OPT_BOOL) {
         *(int *)dst = bool_val;
@@ -916,6 +917,7 @@ int show_codecs(const char *opt, const char *arg)
     while ((desc = avcodec_descriptor_next(desc))) {
         const AVCodec *codec = NULL;
 
+        printf(" ");
         printf(avcodec_find_decoder(desc->id) ? "D" : ".");
         printf(avcodec_find_encoder(desc->id) ? "E" : ".");
 
@@ -964,7 +966,7 @@ static void print_codecs(int encoder)
         const AVCodec *codec = NULL;
 
         while ((codec = next_codec_for_id(desc->id, codec, encoder))) {
-            printf("%c", get_media_type_char(desc->type));
+            printf(" %c", get_media_type_char(desc->type));
             printf((codec->capabilities & CODEC_CAP_FRAME_THREADS) ? "F" : ".");
             printf((codec->capabilities & CODEC_CAP_SLICE_THREADS) ? "S" : ".");
             printf((codec->capabilities & CODEC_CAP_EXPERIMENTAL)  ? "X" : ".");
