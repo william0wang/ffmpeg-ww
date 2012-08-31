@@ -266,7 +266,7 @@ static void median_predict(UtvideoContext *c, uint8_t *src, uint8_t *dst, int st
                            int width, int height)
 {
     int i, j;
-    int A, B, C;
+    int A, C;
     uint8_t prev;
 
     /* First line uses left neighbour prediction */
@@ -441,7 +441,7 @@ static int encode_plane(AVCodecContext *avctx, uint8_t *src,
     }
 
     /* Calculate huffman lengths */
-    ff_generate_len_table(lengths, counts);
+    ff_huff_gen_len_table(lengths, counts);
 
     /*
      * Write the plane's header into the output packet:

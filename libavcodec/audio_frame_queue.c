@@ -108,4 +108,3 @@ void ff_af_queue_remove(AudioFrameQueue *afq, int nb_samples, int64_t *pts,
     if (duration)
         *duration = ff_samples_to_time_base(afq->avctx, removed_samples);
 }
-

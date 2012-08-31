@@ -8,14 +8,15 @@ FFMPEG_LIBS=    libavdevice                        \
                 libavutil                          \
 
 CFLAGS += -Wall -O2 -g
-CFLAGS += $(shell pkg-config --cflags $(FFMPEG_LIBS))
-LDLIBS += $(shell pkg-config --libs $(FFMPEG_LIBS))
+CFLAGS := $(shell pkg-config --cflags $(FFMPEG_LIBS)) $(CFLAGS)
+LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
 
 EXAMPLES=       decoding_encoding                  \
                 filtering_video                    \
                 filtering_audio                    \
                 metadata                           \
                 muxing                             \
+                scaling_video                      \
 
 OBJS=$(addsuffix .o,$(EXAMPLES))
 
@@ -28,7 +29,7 @@ muxing:            LDLIBS += -lm
 all: $(OBJS) $(EXAMPLES)
 
 clean-test:
-	$(RM) -f test*.pgm test.h264 test.mp2 test.sw test.mpg
+	$(RM) test*.pgm test.h264 test.mp2 test.sw test.mpg outscale*.pgm
 
 clean: clean-test
-	$(RM) -f $(EXAMPLES) $(OBJS)
+	$(RM) $(EXAMPLES) $(OBJS)

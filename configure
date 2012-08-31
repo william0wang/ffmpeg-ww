@@ -242,6 +242,7 @@ Advanced options (experts only):
   --ld=LD                  use linker LD [$ld_default]
   --host-cc=HOSTCC         use host C compiler HOSTCC
   --host-cflags=HCFLAGS    use HCFLAGS when compiling for host
+  --host-ld=HOSTLD         use host linker HOSTLD
   --host-ldflags=HLDFLAGS  use HLDFLAGS when linking for host
   --host-libs=HLIBS        use libs HLIBS when linking for host
   --host-os=OS             compiler host OS [$target_os]
@@ -709,11 +710,15 @@ check_cpp(){
     check_cmd $cc $CPPFLAGS $CFLAGS "$@" $(cc_e $TMPO) $TMPC
 }
 
+as_o(){
+    eval printf '%s\\n' $AS_O
+}
+
 check_as(){
     log check_as "$@"
     cat > $TMPC
     log_file $TMPC
-    check_cmd $as $CPPFLAGS $ASFLAGS "$@" $AS_C -o $TMPO $TMPC
+    check_cmd $as $CPPFLAGS $ASFLAGS "$@" $AS_C $(as_o $TMPO) $TMPC
 }
 
 check_inline_asm(){
@@ -735,6 +740,10 @@ check_yasm(){
     check_cmd $yasmexe $YASMFLAGS "$@" -o $TMPO $TMPS
 }
 
+ld_o(){
+    eval printf '%s\\n' $LD_O
+}
+
 check_ld(){
     log check_ld "$@"
     type=$1
@@ -747,7 +756,7 @@ check_ld(){
     check_$type $($cflags_filter $flags) || return
     flags=$($ldflags_filter $flags)
     libs=$($ldflags_filter $libs)
-    check_cmd $ld $LDFLAGS $flags -o $TMPE $TMPO $libs $extralibs
+    check_cmd $ld $LDFLAGS $flags $(ld_o $TMPE) $TMPO $libs $extralibs
 }
 
 check_code(){
@@ -1004,11 +1013,15 @@ require_pkg_config(){
     add_extralibs $(get_safe ${pkg}_libs)
 }
 
+hostcc_o(){
+    eval printf '%s\\n' $HOSTCC_O
+}
+
 check_host_cc(){
     log check_host_cc "$@"
     cat > $TMPC
     log_file $TMPC
-    check_cmd $host_cc $host_cflags "$@" -c -o $TMPO $TMPC
+    check_cmd $host_cc $host_cflags "$@" $HOSTCC_C $(hostcc_o $TMPO) $TMPC
 }
 
 check_host_cflags(){
@@ -1029,6 +1042,11 @@ cp_if_changed(){
     cmp -s "$1" "$2" && echo "$2 is unchanged" && return
     mkdir -p "$(dirname $2)"
     cp -f "$1" "$2"
+}
+
+force_include(){
+    flag=$(eval printf '%s%s\\n' '$FORCE_INC' $1)
+    append CFLAGS "$flag"
 }
 
 # CONFIG_LIST contains configurable options, while HAVE_LIST is for
@@ -1228,6 +1246,7 @@ HAVE_LIST="
     asm_types_h
     attribute_may_alias
     attribute_packed
+    broken_strtod
     cbrtf
     clock_gettime
     closesocket
@@ -1314,6 +1333,7 @@ HAVE_LIST="
     setrlimit
     Sleep
     sndio_h
+    snprintf
     socklen_t
     soundcard_h
     strerror_r
@@ -1425,6 +1445,7 @@ CMDLINE_SET="
     extra_version
     host_cc
     host_cflags
+    host_ld
     host_ldflags
     host_libs
     host_os
@@ -1533,6 +1554,7 @@ eatqi_decoder_select="aandcttables error_resilience mpegvideo"
 exr_decoder_select="zlib"
 ffv1_decoder_select="golomb rangecoder"
 ffv1_encoder_select="rangecoder"
+ffvhuff_encoder_select="huffman"
 flac_decoder_select="golomb"
 flac_encoder_select="golomb lpc"
 flashsv_decoder_select="zlib"
@@ -1554,6 +1576,7 @@ h264_decoder_select="error_resilience golomb h264chroma h264dsp h264pred h264qpe
 h264_dxva2_hwaccel_deps="dxva2api_h"
 h264_dxva2_hwaccel_select="dxva2 h264_decoder"
 h264_vaapi_hwaccel_select="vaapi h264_decoder"
+h264_vda_decoder_select="vda h264_parser h264_decoder"
 h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 h264_vda_hwaccel_select="vda h264_decoder"
 h264_vdpau_decoder_select="vdpau h264_decoder"
@@ -1847,6 +1870,7 @@ ocv_filter_deps="libopencv"
 pan_filter_deps="swresample"
 removelogo_filter_deps="avcodec avformat swscale"
 scale_filter_deps="swscale"
+smartblur_filter_deps="gpl swscale"
 select_filter_deps="avcodec"
 showspectrum_filter_deps="avcodec"
 super2xsai_filter_deps="gpl"
@@ -2025,8 +2049,12 @@ CC_O='-o $@'
 CXX_C='-c'
 CXX_O='-o $@'
 LD_O='-o $@'
+FORCE_INC="-include"
+LD_LIB='-l%'
+LD_PATH='-L'
 HOSTCC_C='-c'
 HOSTCC_O='-o $@'
+HOSTLD_O='-o $@'
 
 host_cflags='-D_ISOC99_SOURCE -D_XOPEN_SOURCE=600 -O3 -g'
 host_libs='-lm'
@@ -2385,7 +2413,8 @@ probe_cc(){
     pfx=$1
     _cc=$2
 
-    unset _type _ident _cc_c _cc_e _cc_o _flags _cflags _ldflags
+    unset _type _ident _cc_c _cc_e _cc_o _flags _cflags
+    unset _ld_o _ldflags _ld_lib _ld_path
     unset _depflags _DEPCMD _DEPFLAGS
     _flags_filter=echo
 
@@ -2525,9 +2554,7 @@ set_ccvars CC
 
 probe_cc hostcc "$host_cc"
 host_cflags_filter=$_flags_filter
-host_ldflags_filter=$_flags_filter
 add_host_cflags  $_flags $_cflags
-add_host_ldflags $_flags $_ldflags
 set_ccvars HOSTCC
 
 test -n "$cc_type" && enable $cc_type ||
@@ -2536,7 +2563,8 @@ test -n "$cc_type" && enable $cc_type ||
 : ${as_default:=$cc}
 : ${dep_cc_default:=$cc}
 : ${ld_default:=$cc}
-set_default ar as dep_cc ld
+: ${host_ld_default:=$host_cc}
+set_default ar as dep_cc ld host_ld
 
 probe_cc as "$as"
 asflags_filter=$_flags_filter
@@ -2547,7 +2575,14 @@ probe_cc ld "$ld"
 ldflags_filter=$_flags_filter
 add_ldflags $_flags $_ldflags
 test "$cc_type" != "$ld_type" && add_ldflags $cc_ldflags
-LD_O=${_cc_o-$LD_O}
+LD_O=${_ld_o-$LD_O}
+LD_LIB=${_ld_lib-$LD_LIB}
+LD_PATH=${_ld_path-$LD_PATH}
+
+probe_cc hostld "$host_ld"
+host_ldflags_filter=$_flags_filter
+add_host_ldflags $_flags $_ldflags
+HOSTLD_O=${_ld_o-$HOSTLD_O}
 
 if [ -z "$CC_DEPFLAGS" ] && [ "$dep_cc" != "$cc" ]; then
     probe_cc depcc "$dep_cc"
@@ -2886,6 +2921,7 @@ case $target_os in
         disable symver
         SHFLAGS='-shared'
         SLIBNAME_WITH_MAJOR='$(SLIBNAME).$(LIBVERSION)'
+        SLIB_INSTALL_LINKS=
         oss_indev_extralibs="-lossaudio"
         oss_outdev_extralibs="-lossaudio"
         ;;
@@ -3343,6 +3379,7 @@ check_func  mmap
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  setrlimit
+check_func  snprintf
 check_func  strerror_r
 check_func  strptime
 check_func  sched_getaffinity
@@ -3362,6 +3399,15 @@ check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h Sleep
 check_func_headers windows.h VirtualAlloc
 check_func_headers glob.h glob
+
+# Check for MSVCRT; it has a broken strtod() that can't parse some input.
+# Use old dos symbol to detect it. If we are on mingw, it already provides
+# its own replacement and we don't need to redo that.
+if check_func _get_doserrno; then
+    if test $target_os != mingw32; then
+        enable broken_strtod
+    fi
+fi
 
 check_header dlfcn.h
 check_header dxva.h
@@ -3734,6 +3780,14 @@ elif enabled pathscale; then
     add_cflags -fstrict-overflow -OPT:wrap_around_unsafe_opt=OFF
 fi
 
+# If a missing snprintf/broken strtod is detected, force-include headers
+# that override prototypes and define it to a prefixed one implemented in
+# libavutil. We do this at the end since -I flags aren't set in configure,
+# and any additional check_cflags() beyond here will thus fail (because
+# it can't find these files, because the -I$(srcdir) wasn't set).
+enabled snprintf || force_include compat/snprintf.h
+enabled broken_strtod && force_include compat/strtod.h
+
 enabled_any $THREADS_LIST      && enable threads
 
 check_deps $CONFIG_LIST       \
@@ -3968,6 +4022,8 @@ CC_O=$CC_O
 CXX_C=$CXX_C
 CXX_O=$CXX_O
 LD_O=$LD_O
+LD_LIB=$LD_LIB
+LD_PATH=$LD_PATH
 DLLTOOL=$dlltool
 LDFLAGS=$LDFLAGS
 LDFLAGS-ffserver=$FFSERVERLDFLAGS
@@ -3991,6 +4047,7 @@ ASDEP_FLAGS=$ASDEP_FLAGS
 CC_DEPFLAGS=$CC_DEPFLAGS
 AS_DEPFLAGS=$AS_DEPFLAGS
 HOSTCC=$host_cc
+HOSTLD=$host_ld
 HOSTCFLAGS=$host_cflags
 HOSTEXESUF=$HOSTEXESUF
 HOSTLDFLAGS=$host_ldflags
@@ -4002,10 +4059,12 @@ HOSTCCDEP_FLAGS=$HOSTCCDEP_FLAGS
 HOSTCC_DEPFLAGS=$HOSTCC_DEPFLAGS
 HOSTCC_C=$HOSTCC_C
 HOSTCC_O=$HOSTCC_O
+HOSTLD_O=$HOSTLD_O
 TARGET_EXEC=$target_exec
 TARGET_PATH=$target_path
 LIBS-ffplay=$sdl_libs
 CFLAGS-ffplay=$sdl_cflags
+ZLIB=$($ldflags_filter -lz)
 LIB_INSTALL_EXTRA_CMD=$LIB_INSTALL_EXTRA_CMD
 EXTRALIBS=$extralibs
 INSTALL=$install
