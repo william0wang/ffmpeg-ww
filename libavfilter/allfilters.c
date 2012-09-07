@@ -64,8 +64,11 @@ void avfilter_register_all(void)
     REGISTER_FILTER (ANULLSRC,    anullsrc,    asrc);
     REGISTER_FILTER (FLITE,       flite,       asrc);
 
+#if !AV_HAVE_INCOMPATIBLE_FORK_ABI
     REGISTER_FILTER (ABUFFERSINK, abuffersink, asink);
+#endif
     REGISTER_FILTER (ANULLSINK,   anullsink,   asink);
+    REGISTER_FILTER (FFABUFFERSINK, ffabuffersink, asink);
 
     REGISTER_FILTER (ALPHAEXTRACT, alphaextract, vf);
     REGISTER_FILTER (ALPHAMERGE,  alphamerge,  vf);
@@ -78,6 +81,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (COPY,        copy,        vf);
     REGISTER_FILTER (CROP,        crop,        vf);
     REGISTER_FILTER (CROPDETECT,  cropdetect,  vf);
+    REGISTER_FILTER (DECIMATE,    decimate,    vf);
     REGISTER_FILTER (DELOGO,      delogo,      vf);
     REGISTER_FILTER (DESHAKE,     deshake,     vf);
     REGISTER_FILTER (DRAWBOX,     drawbox,     vf);
@@ -139,7 +143,10 @@ void avfilter_register_all(void)
     REGISTER_FILTER (SMPTEBARS,   smptebars,   vsrc);
     REGISTER_FILTER (TESTSRC,     testsrc,     vsrc);
 
+#if !AV_HAVE_INCOMPATIBLE_FORK_ABI
     REGISTER_FILTER (BUFFERSINK,  buffersink,  vsink);
+#endif
+    REGISTER_FILTER (FFBUFFERSINK,ffbuffersink,vsink);
     REGISTER_FILTER (NULLSINK,    nullsink,    vsink);
 
     /* multimedia filters */

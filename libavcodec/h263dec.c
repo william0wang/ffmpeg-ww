@@ -60,7 +60,10 @@ av_cold int ff_h263_decode_init(AVCodecContext *avctx)
     s->quant_precision=5;
     s->decode_mb= ff_h263_decode_mb;
     s->low_delay= 1;
-    avctx->pix_fmt= avctx->get_format(avctx, avctx->codec->pix_fmts);
+    if (avctx->codec->id == AV_CODEC_ID_MSS2)
+        avctx->pix_fmt = PIX_FMT_YUV420P;
+    else
+        avctx->pix_fmt = avctx->get_format(avctx, avctx->codec->pix_fmts);
     s->unrestricted_mv= 1;
 
     /* select sub codec */
@@ -96,6 +99,7 @@ av_cold int ff_h263_decode_init(AVCodecContext *avctx)
     case AV_CODEC_ID_WMV3:
     case AV_CODEC_ID_VC1IMAGE:
     case AV_CODEC_ID_WMV3IMAGE:
+    case AV_CODEC_ID_MSS2:
         s->h263_pred = 1;
         s->msmpeg4_version=6;
         avctx->chroma_sample_location = AVCHROMA_LOC_LEFT;
@@ -591,6 +595,7 @@ retry:
     if (s->codec_id == AV_CODEC_ID_MPEG4 && s->xvid_build>=0 && avctx->idct_algo == FF_IDCT_AUTO && (av_get_cpu_flags() & AV_CPU_FLAG_MMX)) {
         avctx->idct_algo= FF_IDCT_XVIDMMX;
         ff_dct_common_init(s);
+        goto retry;
     }
 #endif
 

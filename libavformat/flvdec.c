@@ -126,8 +126,6 @@ static int flv_same_audio_codec(AVCodecContext *acodec, int flags)
     default:
         return acodec->codec_tag == (flv_codecid >> FLV_AUDIO_CODECID_OFFSET);
     }
-
-    return 0;
 }
 
 static void flv_set_audio_codec(AVFormatContext *s, AVStream *astream, AVCodecContext *acodec, int flv_codecid) {
@@ -198,8 +196,6 @@ static int flv_same_video_codec(AVCodecContext *vcodec, int flags)
         default:
             return vcodec->codec_tag == flv_codecid;
     }
-
-    return 0;
 }
 
 static int flv_set_video_codec(AVFormatContext *s, AVStream *vstream, int flv_codecid) {
@@ -713,17 +709,20 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
     /* now find stream */
     for(i=0;i<s->nb_streams;i++) {
         st = s->streams[i];
-        if (stream_type == FLV_STREAM_TYPE_AUDIO && st->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
-            if (flv_same_audio_codec(st->codec, flags)) {
+        if (stream_type == FLV_STREAM_TYPE_AUDIO) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO &&
+                flv_same_audio_codec(st->codec, flags)) {
                 break;
             }
         } else
-        if (stream_type == FLV_STREAM_TYPE_VIDEO && st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
-            if (flv_same_video_codec(st->codec, flags)) {
+        if (stream_type == FLV_STREAM_TYPE_VIDEO) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
+                flv_same_video_codec(st->codec, flags)) {
                 break;
             }
-        } else if (st->id == stream_type) {
-            break;
+        } else if (stream_type == FLV_STREAM_TYPE_DATA) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_DATA)
+                break;
         }
     }
     if(i == s->nb_streams){
@@ -885,7 +884,7 @@ static int flv_read_seek(AVFormatContext *s, int stream_index,
 #define OFFSET(x) offsetof(FLVContext, x)
 #define VD AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
-    { "flv_metadata", "Allocate streams according the onMetaData array",      OFFSET(trust_metadata), AV_OPT_TYPE_INT,    { 0 }, 0, 1, VD},
+    { "flv_metadata", "Allocate streams according the onMetaData array",      OFFSET(trust_metadata), AV_OPT_TYPE_INT,    { .i64 = 0 }, 0, 1, VD},
     { NULL }
 };
 

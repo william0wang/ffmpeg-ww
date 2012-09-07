@@ -77,7 +77,7 @@ typedef struct {
 
 
 static const AVOption options[] = {
-    { "use_odml", "use odml index", offsetof(AVIContext, use_odml), AV_OPT_TYPE_INT, {.dbl = 1}, -1, 1, AV_OPT_FLAG_DECODING_PARAM},
+    { "use_odml", "use odml index", offsetof(AVIContext, use_odml), AV_OPT_TYPE_INT, {.i64 = 1}, -1, 1, AV_OPT_FLAG_DECODING_PARAM},
     { NULL },
 };
 
@@ -235,7 +235,7 @@ static int read_braindead_odml_indx(AVFormatContext *s, int frame_num){
             frame_num += duration;
 
             if(avio_seek(pb, pos, SEEK_SET) < 0) {
-                av_log(s, AV_LOG_ERROR, "Failed to restore position after reading index");
+                av_log(s, AV_LOG_ERROR, "Failed to restore position after reading index\n");
                 return -1;
             }
 

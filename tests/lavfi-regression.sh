@@ -74,15 +74,22 @@ do_lavfi_plain "alphaextract_yuv"   "[in]slicify=random,format=yuv420p,split,alp
 do_lavfi_colormatrix "colormatrix" bt709 fcc bt601 smpte240m
 
 do_lavfi_pixfmts(){
-    test ${test%_[bl]e} = pixfmts_$1 || return 0
+    # if there are three parameters, the first param is the test name
+    if [ -n "$3" ]; then
+        testname=$1;
+        shift;
+    else
+        testname=pixfmts_$1;
+    fi
+    test ${test%_[bl]e} = $testname || return 0
     filter=$1
     filter_args=$2
 
     showfiltfmts="$target_exec $target_path/libavfilter/filtfmts-test"
-    scale_exclude_fmts=${outfile}${1}_scale_exclude_fmts
-    scale_in_fmts=${outfile}${1}_scale_in_fmts
-    scale_out_fmts=${outfile}${1}_scale_out_fmts
-    in_fmts=${outfile}${1}_in_fmts
+    scale_exclude_fmts=${outfile}${testname}_scale_exclude_fmts
+    scale_in_fmts=${outfile}${testname}_scale_in_fmts
+    scale_out_fmts=${outfile}${testname}_scale_out_fmts
+    in_fmts=${outfile}${testname}_in_fmts
 
     # exclude pixel formats which are not supported as input
     $showfiltfmts scale | awk -F '[ \r]' '/^INPUT/{ fmt=substr($3, 5); print fmt }' | sort >$scale_in_fmts
@@ -108,6 +115,8 @@ do_lavfi_pixfmts "pad"     "500:400:20:20"
 do_lavfi_pixfmts "pixdesctest" ""
 do_lavfi_pixfmts "scale"   "200:100"
 do_lavfi_pixfmts "super2xsai" ""
+do_lavfi_pixfmts "tinterlace_merge" "tinterlace" "merge"
+do_lavfi_pixfmts "tinterlace_pad"   "tinterlace" "pad"
 do_lavfi_pixfmts "vflip"   ""
 
 do_lavfi_lavd() {

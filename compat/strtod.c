@@ -21,10 +21,10 @@
 
 #include <ctype.h>
 #include <limits.h>
+#include <stdlib.h>
 
 #include "libavutil/avstring.h"
 #include "libavutil/mathematics.h"
-#include "strtod.h"
 
 static char *check_nan_suffix(char *s)
 {
@@ -41,7 +41,9 @@ static char *check_nan_suffix(char *s)
 }
 
 #undef strtod
-double avpriv_strtod(char *restrict nptr, char **restrict endptr)
+double strtod(const char *, char **);
+
+double avpriv_strtod(const char *nptr, char **endptr)
 {
     char *end;
     double res;

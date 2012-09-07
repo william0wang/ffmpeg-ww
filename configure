@@ -276,7 +276,11 @@ Optimization options (experts only):
   --disable-mmx            disable MMX optimizations
   --disable-mmxext         disable MMXEXT optimizations
   --disable-sse            disable SSE optimizations
+  --disable-sse2           disable SSE2 optimizations
+  --disable-sse3           disable SSE3 optimizations
   --disable-ssse3          disable SSSE3 optimizations
+  --disable-sse4           disable SSE4 optimizations
+  --disable-sse42          disable SSE4.2 optimizations
   --disable-avx            disable AVX optimizations
   --disable-fma4           disable FMA4 optimizations
   --disable-armv5te        disable armv5te optimizations
@@ -413,6 +417,12 @@ map(){
     m=$1
     shift
     for v; do eval $m; done
+}
+
+add_suffix(){
+    suffix=$1
+    shift
+    for v; do echo ${v}${suffix}; done
 }
 
 set_all(){
@@ -737,7 +747,7 @@ check_yasm(){
     echo "$1" > $TMPS
     log_file $TMPS
     shift 1
-    check_cmd $yasmexe $YASMFLAGS "$@" -o $TMPO $TMPS
+    check_cmd $yasmexe $YASMFLAGS -Werror "$@" -o $TMPO $TMPS
 }
 
 ld_o(){
@@ -1044,11 +1054,6 @@ cp_if_changed(){
     cp -f "$1" "$2"
 }
 
-force_include(){
-    flag=$(eval printf '%s%s\\n' '$FORCE_INC' $1)
-    append CFLAGS "$flag"
-}
-
 # CONFIG_LIST contains configurable options, while HAVE_LIST is for
 # system-dependent things.
 
@@ -1104,6 +1109,7 @@ CONFIG_LIST="
     gpl
     gray
     hardcoded_tables
+    incompatible_fork_abi
     libaacplus
     libass
     libbluray
@@ -1202,38 +1208,49 @@ ARCH_LIST='
     x86_64
 '
 
-ARCH_EXT_LIST='
-    altivec
+ARCH_EXT_LIST_X86='
     amd3dnow
     amd3dnowext
+    avx
+    fma4
+    mmx
+    mmxext
+    sse
+    sse2
+    sse3
+    sse4
+    sse42
+    ssse3
+'
+
+ARCH_EXT_LIST="
+    $ARCH_EXT_LIST_X86
+    altivec
     armv5te
     armv6
     armv6t2
     armvfp
-    avx
-    fma4
     mmi
-    mmx
-    mmxext
     neon
     ppc4xx
-    sse
-    ssse3
     vfpv3
     vis
     mipsfpu
     mips32r2
     mipsdspr1
     mipsdspr2
-'
+"
 
 HAVE_LIST_PUB='
     bigendian
     fast_unaligned
+    incompatible_fork_abi
 '
 
 HAVE_LIST="
     $ARCH_EXT_LIST
+    $(add_suffix _external $ARCH_EXT_LIST)
+    $(add_suffix _inline   $ARCH_EXT_LIST)
     $HAVE_LIST_PUB
     $THREADS_LIST
     aligned_malloc
@@ -1246,7 +1263,6 @@ HAVE_LIST="
     asm_types_h
     attribute_may_alias
     attribute_packed
-    broken_strtod
     cbrtf
     clock_gettime
     closesocket
@@ -1314,6 +1330,7 @@ HAVE_LIST="
     mkstemp
     mm_empty
     mmap
+    msvcrt
     nanosleep
     PeekNamedPipe
     perl
@@ -1333,11 +1350,9 @@ HAVE_LIST="
     setrlimit
     Sleep
     sndio_h
-    snprintf
     socklen_t
     soundcard_h
     strerror_r
-    strptime
     struct_addrinfo
     struct_group_source_req
     struct_ip_mreq_source
@@ -1498,14 +1513,30 @@ ppc4xx_deps="ppc"
 vis_deps="sparc"
 
 x86_64_suggest="cmov fast_cmov"
+
 amd3dnow_deps="mmx"
 amd3dnowext_deps="amd3dnow"
 mmx_deps="x86"
 mmxext_deps="mmx"
-sse_deps="mmx"
-ssse3_deps="sse"
-avx_deps="ssse3"
+sse_deps="mmxext"
+sse2_deps="sse"
+sse3_deps="sse2"
+ssse3_deps="sse3"
+sse4_deps="ssse3"
+sse42_deps="sse4"
+avx_deps="sse42"
 fma4_deps="avx"
+
+mmx_external_deps="yasm"
+mmx_inline_deps="inline_asm"
+mmx_suggest="mmx_external mmx_inline"
+
+for ext in $(filter_out mmx $ARCH_EXT_LIST_X86); do
+    eval dep=\$${ext}_deps
+    eval ${ext}_external_deps='"${dep}_external"'
+    eval ${ext}_inline_deps='"${dep}_inline"'
+    eval ${ext}_suggest='"${ext}_external ${ext}_inline"'
+done
 
 aligned_stack_if_any="ppc x86"
 fast_64bit_if_any="alpha ia64 mips64 parisc64 ppc64 sparc64 x86_64"
@@ -1548,7 +1579,7 @@ dnxhd_encoder_select="aandcttables mpegvideoenc"
 dxa_decoder_select="zlib"
 eac3_decoder_select="ac3_decoder"
 eac3_encoder_select="ac3_encoder"
-eamad_decoder_select="aandcttables error_resilience"
+eamad_decoder_select="aandcttables error_resilience mpegvideo"
 eatgq_decoder_select="aandcttables"
 eatqi_decoder_select="aandcttables error_resilience mpegvideo"
 exr_decoder_select="zlib"
@@ -1628,6 +1659,7 @@ msmpeg4v2_decoder_select="h263_decoder"
 msmpeg4v2_encoder_select="h263_encoder"
 msmpeg4v3_decoder_select="h263_decoder"
 msmpeg4v3_encoder_select="h263_encoder"
+mss2_decoder_select="vc1_decoder"
 nellymoser_decoder_select="mdct sinewin"
 nellymoser_encoder_select="mdct sinewin"
 png_decoder_select="zlib"
@@ -1658,6 +1690,7 @@ tiff_decoder_suggest="zlib"
 tiff_encoder_suggest="zlib"
 tscc_decoder_select="zlib"
 twinvq_decoder_select="mdct lsp sinewin"
+utvideo_encoder_select="huffman"
 vc1_crystalhd_decoder_select="crystalhd"
 vc1_decoder_select="h263_decoder h264chroma h264qpel"
 vc1_dxva2_hwaccel_deps="dxva2api_h"
@@ -1852,6 +1885,7 @@ blackframe_filter_deps="gpl"
 boxblur_filter_deps="gpl"
 colormatrix_filter_deps="gpl"
 cropdetect_filter_deps="gpl"
+decimate_filter_deps="gpl avcodec"
 delogo_filter_deps="gpl"
 deshake_filter_deps="avcodec"
 drawtext_filter_deps="libfreetype"
@@ -1884,10 +1918,10 @@ postproc_deps="gpl"
 
 # programs
 ffmpeg_deps="avcodec avfilter avformat swscale swresample"
-ffmpeg_select="buffersink_filter format_filter aformat_filter
-               setpts_filter null_filter anull_filter abuffersink_filter"
+ffmpeg_select="ffbuffersink_filter format_filter aformat_filter
+               setpts_filter null_filter anull_filter ffabuffersink_filter"
 ffplay_deps="avcodec avformat swscale swresample sdl"
-ffplay_select="buffersink_filter rdft"
+ffplay_select="ffbuffersink_filter rdft"
 ffprobe_deps="avcodec avformat"
 ffserver_deps="avformat ffm_muxer fork rtp_protocol rtsp_demuxer"
 ffserver_extralibs='$ldl'
@@ -2049,7 +2083,6 @@ CC_O='-o $@'
 CXX_C='-c'
 CXX_O='-o $@'
 LD_O='-o $@'
-FORCE_INC="-include"
 LD_LIB='-l%'
 LD_PATH='-L'
 HOSTCC_C='-c'
@@ -2337,6 +2370,26 @@ EOF
     die "Sanity test failed."
 fi
 
+msvc_flags(){
+    for flag; do
+        case $flag in
+            -fomit-frame-pointer) echo -Oy ;;
+            -g)                   echo -Z7 ;;
+            -Wall)                echo -W4 -wd4244 -wd4127 -wd4018 -wd4389 \
+                                       -wd4146 -wd4057 -wd4204 -wd4706 -wd4305 \
+                                       -wd4152 -wd4324 -we4013 -wd4100 -wd4214 \
+                                       -wd4996 ;;
+            -std=c99)             ;;
+            -fno-math-errno)      ;;
+            -fno-common)          ;;
+            -fno-signed-zeros)    ;;
+            -lz)                  echo zlib.lib ;;
+            -l*)                  echo ${flag#-l}.lib ;;
+            *)                    echo $flag ;;
+        esac
+    done
+}
+
 pgi_flags(){
     for flag; do
         case $flag in
@@ -2364,7 +2417,7 @@ suncc_flags(){
                     prescott|nocona)    echo -xarch=sse3 -xchip=pentium4 ;;
                     *-sse3)             echo -xarch=sse3                 ;;
                     core2)              echo -xarch=ssse3 -xchip=core2   ;;
-                    amdfam10|barcelona)       echo -xarch=sse4_1         ;;
+                    amdfam10|barcelona|bdver*) echo -xarch=sse4_1        ;;
                     athlon-4|athlon-[mx]p)    echo -xarch=ssea           ;;
                     k8|opteron|athlon64|athlon-fx)
                                               echo -xarch=sse2a          ;;
@@ -2523,6 +2576,29 @@ probe_cc(){
         _cflags_size="-O2 -Munroll=c:1 $opt_common"
         _cflags_noopt="-O1"
         _flags_filter=pgi_flags
+    elif $_cc 2>&1 | grep -q Microsoft; then
+        _type=msvc
+        _ident=$($cc 2>&1 | head -n1)
+        _DEPCMD='$(DEP$(1)) $(DEP$(1)FLAGS) $($(1)DEP_FLAGS) $< 2>&1 | awk '\''/including/ { sub(/^.*file: */, ""); gsub(/\\/, "/"); if (!match($$0, / /)) print "$@:", $$0 }'\'' > $(@:.o=.d)'
+        _DEPFLAGS='$(CPPFLAGS) $(CFLAGS) -showIncludes -Zs'
+        _cflags_speed="-O2"
+        _cflags_size="-O1"
+        # Nonstandard output options, to avoid msys path conversion issues, relies on wrapper to remap it
+        if $_cc 2>&1 | grep -q Linker; then
+            _ld_o='-out $@'
+        else
+            _ld_o='-Fe$@'
+        fi
+        _cc_o='-Fo $@'
+        _flags_filter=msvc_flags
+        _ld_lib='lib%.a'
+        _ld_path='-libpath:'
+        _flags='-nologo'
+        _cflags='-D_USE_MATH_DEFINES -Dinline=__inline -FIstdlib.h -Dstrtoll=_strtoi64'
+        if [ $pfx = hostcc ]; then
+            _cflags="$cflags -Dsnprintf=_snprintf"
+        fi
+        disable aligned_stack
     fi
 
     eval ${pfx}_type=\$_type
@@ -2733,7 +2809,7 @@ elif enabled x86; then
             disable cmov
         ;;
         # targets that do support conditional mov (cmov)
-        i686|pentiumpro|pentium[23]|pentium-m|athlon|athlon-tbird|athlon-4|athlon-[mx]p|athlon64*|k8*|opteron*|athlon-fx|core2|amdfam10|barcelona|atom)
+        i686|pentiumpro|pentium[23]|pentium-m|athlon|athlon-tbird|athlon-4|athlon-[mx]p|athlon64*|k8*|opteron*|athlon-fx|core2|amdfam10|barcelona|atom|bdver*)
             cpuflags="-march=$cpu"
             enable cmov
             enable fast_cmov
@@ -2981,11 +3057,9 @@ case $target_os in
         SLIB_INSTALL_EXTRA_LIB='lib$(SLIBNAME:$(SLIBSUF)=.dll.a) $(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.def)'
         SHFLAGS='-shared -Wl,--output-def,$$(@:$(SLIBSUF)=.def) -Wl,--out-implib,$(SUBDIR)lib$(SLIBNAME:$(SLIBSUF)=.dll.a) -Wl,--enable-runtime-pseudo-reloc -Wl,--enable-auto-image-base'
         objformat="win32"
+        ranlib=:
         enable dos_paths
         check_cflags -fno-common
-        check_cpp_condition _mingw.h "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) \
-                                      || (__MINGW32_MAJOR_VERSION == 3 && __MINGW32_MINOR_VERSION >= 15)" ||
-                die "ERROR: MinGW runtime version must be >= 3.15."
         add_cppflags -U__STRICT_ANSI__
         ;;
     cygwin*)
@@ -3071,6 +3145,32 @@ case $target_os in
         die "Unknown OS '$target_os'."
         ;;
 esac
+
+# determine libc flavour
+
+if check_cpp_condition features.h "defined __UCLIBC__"; then
+    libc_type=uclibc
+elif check_cpp_condition features.h "defined __GLIBC__"; then
+    libc_type=glibc
+elif check_header _mingw.h; then
+    libc_type=mingw
+    check_cpp_condition _mingw.h \
+        "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) || \
+            (__MINGW32_MAJOR_VERSION == 3 && __MINGW32_MINOR_VERSION >= 15)" ||
+        die "ERROR: MinGW runtime version must be >= 3.15."
+elif check_cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
+    libc_type=newlib
+elif check_func_headers stdlib.h _get_doserrno; then
+    libc_type=msvcrt
+    add_cflags -Dstrtod=avpriv_strtod
+    add_cflags -Dsnprintf=avpriv_snprintf   \
+               -D_snprintf=avpriv_snprintf  \
+               -Dvsnprintf=avpriv_vsnprintf
+elif check_cpp_condition stddef.h "defined __KLIBC__"; then
+    libc_type=klibc
+fi
+
+test -n "$libc_type" && enable $libc_type
 
 esc(){
     echo "$*" | sed 's/%/%25/g;s/:/%3a/g'
@@ -3275,8 +3375,8 @@ EOF
     check_inline_asm xmm_clobbers '"":::"%xmm0"'
 
     # check whether binutils is new enough to compile SSSE3/MMXEXT
-    enabled ssse3  && check_inline_asm ssse3  '"pabsw %xmm0, %xmm0"'
-    enabled mmxext && check_inline_asm mmxext '"pmaxub %mm0, %mm1"'
+    enabled ssse3  && check_inline_asm ssse3_inline  '"pabsw %xmm0, %xmm0"'
+    enabled mmxext && check_inline_asm mmxext_inline '"pmaxub %mm0, %mm1"'
 
     if ! disabled_any asm mmx yasm; then
         if check_cmd $yasmexe --version; then
@@ -3297,8 +3397,8 @@ EOF
 
         check_yasm "pextrd [eax], xmm0, 1" && enable yasm ||
             die "yasm not found, use --disable-yasm for a crippled build"
-        check_yasm "vextractf128 xmm0, ymm0, 0" || disable avx
-        check_yasm "vfmaddps ymm0, ymm1, ymm2, ymm3" || disable fma4
+        check_yasm "vextractf128 xmm0, ymm0, 0"      || disable avx_external
+        check_yasm "vfmaddps ymm0, ymm1, ymm2, ymm3" || disable fma4_external
         check_yasm "CPU amdnop" && enable cpunop
     fi
 
@@ -3379,9 +3479,7 @@ check_func  mmap
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  setrlimit
-check_func  snprintf
 check_func  strerror_r
-check_func  strptime
 check_func  sched_getaffinity
 check_func  sysconf
 check_func  sysctl
@@ -3399,15 +3497,6 @@ check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h Sleep
 check_func_headers windows.h VirtualAlloc
 check_func_headers glob.h glob
-
-# Check for MSVCRT; it has a broken strtod() that can't parse some input.
-# Use old dos symbol to detect it. If we are on mingw, it already provides
-# its own replacement and we don't need to redo that.
-if check_func _get_doserrno; then
-    if test $target_os != mingw32; then
-        enable broken_strtod
-    fi
-fi
 
 check_header dlfcn.h
 check_header dxva.h
@@ -3780,15 +3869,9 @@ elif enabled pathscale; then
     add_cflags -fstrict-overflow -OPT:wrap_around_unsafe_opt=OFF
 fi
 
-# If a missing snprintf/broken strtod is detected, force-include headers
-# that override prototypes and define it to a prefixed one implemented in
-# libavutil. We do this at the end since -I flags aren't set in configure,
-# and any additional check_cflags() beyond here will thus fail (because
-# it can't find these files, because the -I$(srcdir) wasn't set).
-enabled snprintf || force_include compat/snprintf.h
-enabled broken_strtod && force_include compat/strtod.h
-
 enabled_any $THREADS_LIST      && enable threads
+
+enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
 check_deps $CONFIG_LIST       \
            $CONFIG_EXTRA      \
@@ -3796,7 +3879,6 @@ check_deps $CONFIG_LIST       \
            $ALL_COMPONENTS    \
            $ALL_TESTS         \
 
-enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
 if test $target_os = "haiku"; then
     disable memalign

@@ -39,10 +39,12 @@
 typedef enum {
     LIST_TYPE_UNDEFINED = -1,
     LIST_TYPE_FLAT = 0,
-    LIST_TYPE_EXT,
+    LIST_TYPE_CSV,
     LIST_TYPE_M3U8,
     LIST_TYPE_NB,
 } ListType;
+
+#define LIST_TYPE_EXT LIST_TYPE_CSV
 
 typedef struct {
     const AVClass *class;  /**< Class for private options. */
@@ -52,6 +54,7 @@ typedef struct {
     AVFormatContext *avf;
     char *format;          ///< format to use for output segment files
     char *list;            ///< filename for the segment list file
+    int   list_count;      ///< list counter
     int   list_size;       ///< number of entries for the segment list file
     double list_max_segment_time; ///< max segment time in the current list
     ListType list_type;    ///< set the list type
@@ -66,6 +69,30 @@ typedef struct {
     int has_video;
     double start_time, end_time;
 } SegmentContext;
+
+static void print_csv_escaped_str(AVIOContext *ctx, const char *str)
+{
+    const char *p;
+    int quote = 0;
+
+    /* check if input needs quoting */
+    for (p = str; *p; p++)
+        if (strchr("\",\n\r", *p)) {
+            quote = 1;
+            break;
+        }
+
+    if (quote)
+        avio_w8(ctx, '"');
+
+    for (p = str; *p; p++) {
+        if (*p == '"')
+            avio_w8(ctx, '"');
+        avio_w8(ctx, *p);
+    }
+    if (quote)
+        avio_w8(ctx, '"');
+}
 
 static int segment_start(AVFormatContext *s)
 {
@@ -127,7 +154,8 @@ static int segment_list_open(AVFormatContext *s)
 
     if (seg->list_type == LIST_TYPE_M3U8) {
         avio_printf(seg->list_pb, "#EXTM3U\n");
-        avio_printf(seg->list_pb, "#EXT-X-VERSION:4\n");
+        avio_printf(seg->list_pb, "#EXT-X-VERSION:3\n");
+        avio_printf(seg->list_pb, "#EXT-X-MEDIA-SEQUENCE:%d\n", seg->list_count);
     }
 
     return ret;
@@ -142,6 +170,7 @@ static void segment_list_close(AVFormatContext *s)
                     (int)ceil(seg->list_max_segment_time));
         avio_printf(seg->list_pb, "#EXT-X-ENDLIST\n");
     }
+    seg->list_count++;
 
     avio_close(seg->list_pb);
 }
@@ -169,7 +198,8 @@ static int segment_end(AVFormatContext *s)
         if (seg->list_type == LIST_TYPE_FLAT) {
             avio_printf(seg->list_pb, "%s\n", oc->filename);
         } else if (seg->list_type == LIST_TYPE_EXT) {
-            avio_printf(seg->list_pb, "%s,%f,%f\n", oc->filename, seg->start_time, seg->end_time);
+            print_csv_escaped_str(seg->list_pb, oc->filename);
+            avio_printf(seg->list_pb, ",%f,%f\n", seg->start_time, seg->end_time);
         } else if (seg->list_type == LIST_TYPE_M3U8) {
             avio_printf(seg->list_pb, "#EXTINF:%f,\n%s\n",
                         seg->end_time - seg->start_time, oc->filename);
@@ -285,13 +315,16 @@ static int seg_write_header(AVFormatContext *s)
 
     if (seg->list) {
         if (seg->list_type == LIST_TYPE_UNDEFINED) {
-            if      (av_match_ext(seg->list, "ext" )) seg->list_type = LIST_TYPE_EXT;
+            if      (av_match_ext(seg->list, "csv" )) seg->list_type = LIST_TYPE_CSV;
+            else if (av_match_ext(seg->list, "ext" )) seg->list_type = LIST_TYPE_EXT;
             else if (av_match_ext(seg->list, "m3u8")) seg->list_type = LIST_TYPE_M3U8;
             else                                      seg->list_type = LIST_TYPE_FLAT;
         }
         if ((ret = segment_list_open(s)) < 0)
             goto fail;
     }
+    if (seg->list_type == LIST_TYPE_EXT)
+        av_log(s, AV_LOG_WARNING, "'ext' list type option is deprecated in favor of 'csv'\n");
 
     for (i = 0; i< s->nb_streams; i++)
         seg->has_video +=
@@ -417,15 +450,16 @@ static int seg_write_trailer(struct AVFormatContext *s)
 static const AVOption options[] = {
     { "segment_format",    "set container format used for the segments", OFFSET(format),  AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
     { "segment_list",      "set the segment list filename",              OFFSET(list),    AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
-    { "segment_list_size", "set the maximum number of playlist entries", OFFSET(list_size), AV_OPT_TYPE_INT,  {.dbl = 0},     0, INT_MAX, E },
-    { "segment_list_type", "set the segment list type",                  OFFSET(list_type), AV_OPT_TYPE_INT,  {.dbl = LIST_TYPE_UNDEFINED}, -1, LIST_TYPE_NB-1, E, "list_type" },
-    { "flat", "flat format",     0, AV_OPT_TYPE_CONST, {.dbl=LIST_TYPE_FLAT }, INT_MIN, INT_MAX, 0, "list_type" },
-    { "ext",  "extended format", 0, AV_OPT_TYPE_CONST, {.dbl=LIST_TYPE_EXT  }, INT_MIN, INT_MAX, 0, "list_type" },
-    { "m3u8", "M3U8 format",     0, AV_OPT_TYPE_CONST, {.dbl=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, 0, "list_type" },
+    { "segment_list_size", "set the maximum number of playlist entries", OFFSET(list_size), AV_OPT_TYPE_INT,  {.i64 = 0},     0, INT_MAX, E },
+    { "segment_list_type", "set the segment list type",                  OFFSET(list_type), AV_OPT_TYPE_INT,  {.i64 = LIST_TYPE_UNDEFINED}, -1, LIST_TYPE_NB-1, E, "list_type" },
+    { "flat", "flat format",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_FLAT }, INT_MIN, INT_MAX, 0, "list_type" },
+    { "csv",  "csv format",      0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_CSV  }, INT_MIN, INT_MAX, 0, "list_type" },
+    { "ext",  "extended format", 0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_EXT  }, INT_MIN, INT_MAX, 0, "list_type" },
+    { "m3u8", "M3U8 format",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, 0, "list_type" },
     { "segment_time",      "set segment duration",                       OFFSET(time_str),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
     { "segment_time_delta","set approximation value used for the segment times", OFFSET(time_delta_str), AV_OPT_TYPE_STRING, {.str = "0"}, 0, 0, E },
     { "segment_times",     "set segment split time points",              OFFSET(times_str),AV_OPT_TYPE_STRING,{.str = NULL},  0, 0,       E },
-    { "segment_wrap",      "set number after which the index wraps",     OFFSET(segment_idx_wrap), AV_OPT_TYPE_INT, {.dbl = 0}, 0, INT_MAX, E },
+    { "segment_wrap",      "set number after which the index wraps",     OFFSET(segment_idx_wrap), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, E },
     { NULL },
 };
 

@@ -1,7 +1,4 @@
 /*
- * C99-compatible strtod() implementation
- * Copyright (c) 2012 Ronald S. Bultje <rsbultje@gmail.com>
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -19,19 +16,20 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVCOMPAT_STRTOD_H
-#define AVCOMPAT_STRTOD_H
+#ifndef AVCODEC_INTRAX8DSP_H
+#define AVCODEC_INTRAX8DSP_H
 
-#include <stdlib.h>
+#include <stdint.h>
 
-/*
- * strtod() on MSVCRT doesn't handle strings like 'inf' or 'nan'. Also,
- * it doesn't handle "0x" prefixes for hexadecimal input.
- *
- * Thus, provide our own fallback wrapper with correct behaviour.
- */
-#undef strtod
-#define strtod avpriv_strtod
-double strtod(char *restrict nptr, char **restrict endptr);
+typedef struct IntraX8DSPContext {
+    void (*v_loop_filter)(uint8_t *src, int stride, int qscale);
+    void (*h_loop_filter)(uint8_t *src, int stride, int qscale);
 
-#endif /* AVCOMPAT_STRTOD_H */
+    void (*spatial_compensation[12])(uint8_t *src , uint8_t *dst, int linesize);
+    void (*setup_spatial_compensation)(uint8_t *src, uint8_t *dst, int linesize,
+                                       int *range, int *sum,  int edges);
+} IntraX8DSPContext;
+
+void ff_intrax8dsp_init(IntraX8DSPContext *dsp);
+
+#endif /* AVCODEC_INTRAX8DSP_H */

@@ -19,14 +19,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <stdio.h>
+#include <stdarg.h>
 #include <limits.h>
 #include <string.h>
 
 #include "libavutil/error.h"
-#include "snprintf.h"
 
-#undef snprintf
-int avpriv_snprintf(char *restrict s, size_t n, const char *restrict fmt, ...)
+int avpriv_snprintf(char *s, size_t n, const char *fmt, ...)
 {
     va_list ap;
     int ret;
@@ -38,8 +38,7 @@ int avpriv_snprintf(char *restrict s, size_t n, const char *restrict fmt, ...)
     return ret;
 }
 
-#undef vsnprintf
-int avpriv_vsnprintf(char *restrict s, size_t n, const char *restrict fmt,
+int avpriv_vsnprintf(char *s, size_t n, const char *fmt,
                      va_list ap)
 {
     int ret;
@@ -47,7 +46,7 @@ int avpriv_vsnprintf(char *restrict s, size_t n, const char *restrict fmt,
     if (n == 0)
         return 0;
     else if (n > INT_MAX)
-        return AVERROR(EINVAL);
+        return AVERROR(EOVERFLOW);
 
     /* we use n - 1 here because if the buffer is not big enough, the MS
      * runtime libraries don't add a terminating zero at the end. MSDN
@@ -56,7 +55,7 @@ int avpriv_vsnprintf(char *restrict s, size_t n, const char *restrict fmt,
      * _snprintf/_vsnprintf() to workaround this problem.
      * See http://msdn.microsoft.com/en-us/library/1kt27hek(v=vs.80).aspx */
     memset(s, 0, n);
-    ret = vsnprintf(s, n - 1, fmt, ap);
+    ret = _vsnprintf(s, n - 1, fmt, ap);
     if (ret == -1)
         ret = n;
 

@@ -1539,6 +1539,43 @@ indicates never reset and return the largest area encountered during
 playback.
 @end table
 
+@section decimate
+
+This filter drops frames that do not differ greatly from the previous
+frame in order to reduce framerate.  The main use of this filter is
+for very-low-bitrate encoding (e.g. streaming over dialup modem), but
+it could in theory be used for fixing movies that were
+inverse-telecined incorrectly.
+
+It accepts the following parameters:
+@var{max}:@var{hi}:@var{lo}:@var{frac}.
+
+@table @option
+
+@item max
+Set the maximum number of consecutive frames which can be dropped (if
+positive), or the minimum interval between dropped frames (if
+negative). If the value is 0, the frame is dropped unregarding the
+number of previous sequentially dropped frames.
+
+Default value is 0.
+
+@item hi, lo, frac
+Set the dropping threshold values.
+
+Values for @var{hi} and @var{lo} are for 8x8 pixel blocks and
+represent actual pixel value differences, so a threshold of 64
+corresponds to 1 unit of difference for each pixel, or the same spread
+out differently over the block.
+
+A frame is a candidate for dropping if no 8x8 blocks differ by more
+than a threshold of @var{hi}, and if no more than @var{frac} blocks (1
+meaning the whole image) differ by more than a threshold of @var{lo}.
+
+Default value for @var{hi} is 64*12, default value for @var{lo} is
+64*5, and default value for @var{frac} is 0.33.
+@end table
+
 @section delogo
 
 Suppress a TV station logo by a simple interpolation of the surrounding
@@ -2313,6 +2350,18 @@ hue=PI/2:1
 @end example
 @end itemize
 
+@subsection Commands
+
+This filter supports the following command:
+@table @option
+@item reinit
+Modify the hue and/or the saturation of the input video.
+The command accepts the same named options and syntax than when calling the
+filter from the command-line.
+
+If a parameter is omitted, it is kept at its current value.
+@end table
+
 @section idet
 
 Interlaceing detect filter. This filter tries to detect if the input is
@@ -2459,7 +2508,6 @@ the named filter.
 
 The list of the currently supported filters follows:
 @table @var
-@item decimate
 @item denoise3d
 @item detc
 @item dint
@@ -2489,9 +2537,7 @@ The list of the currently supported filters follows:
 @item pullup
 @item qp
 @item rectangle
-@item rotate
 @item sab
-@item smartblur
 @item softpulldown
 @item softskip
 @item spp
@@ -2509,13 +2555,19 @@ of the corresponding MPlayer filters. For detailed instructions check
 the "VIDEO FILTERS" section in the MPlayer manual.
 
 Some examples follow:
+@itemize
+@item
+Adjust gamma, brightness, contrast:
 @example
-# adjust gamma, brightness, contrast
 mp=eq2=1.0:2:0.5
-
-# tweak hue and saturation
-mp=hue=100:-10
 @end example
+
+@item
+Add temporal noise to input video:
+@example
+mp=noise=20t
+@end example
+@end itemize
 
 See also mplayer(1), @url{http://www.mplayerhq.hu/}.
 
@@ -3407,7 +3459,7 @@ It accepts a parameter representing an integer, which can assume the
 values:
 
 @table @samp
-@item 0
+@item 0, 4
 Rotate by 90 degrees counterclockwise and vertically flip (default), that is:
 @example
 L.R     L.l
@@ -3415,7 +3467,7 @@ L.R     L.l
 l.r     R.r
 @end example
 
-@item 1
+@item 1, 5
 Rotate by 90 degrees clockwise, that is:
 @example
 L.R     l.L
@@ -3423,7 +3475,7 @@ L.R     l.L
 l.r     r.R
 @end example
 
-@item 2
+@item 2, 6
 Rotate by 90 degrees counterclockwise, that is:
 @example
 L.R     R.r
@@ -3431,7 +3483,7 @@ L.R     R.r
 l.r     L.l
 @end example
 
-@item 3
+@item 3, 7
 Rotate by 90 degrees clockwise and vertically flip, that is:
 @example
 L.R     r.R
@@ -3439,6 +3491,9 @@ L.R     r.R
 l.r     l.L
 @end example
 @end table
+
+For values between 4-7 transposition is only done if the input video
+geometry is portrait and not landscape.
 
 @section unsharp
 

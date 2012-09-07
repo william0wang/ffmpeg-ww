@@ -39,7 +39,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/imgutils.h"
 
-#if HAVE_MMX && HAVE_YASM
+#if HAVE_MMX_EXTERNAL
 #include "x86/dsputil_mmx.h"
 #endif
 
@@ -48,7 +48,7 @@
 #define FF_COLOR_YUV      2 /**< YUV color space. 16 <= Y <= 235, 16 <= U, V <= 240 */
 #define FF_COLOR_YUV_JPEG 3 /**< YUV color space. 0 <= Y <= 255, 0 <= U, V <= 255 */
 
-#if HAVE_MMX && HAVE_YASM
+#if HAVE_MMX_EXTERNAL
 #define deinterlace_line_inplace ff_deinterlace_line_inplace_mmx
 #define deinterlace_line         ff_deinterlace_line_mmx
 #else
@@ -411,7 +411,7 @@ int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, 
                      unsigned char *dest, int dest_size)
 {
     return av_image_copy_to_buffer(dest, dest_size,
-                                   src->data, src->linesize,
+                                   (const uint8_t * const*)src->data, src->linesize,
                                    pix_fmt, width, height, 1);
 }
 
@@ -529,13 +529,13 @@ enum PixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum PixelForma
     dst_pix_fmt = PIX_FMT_NONE; /* so first iteration doesn't have to be treated special */
     for(i = 0; i< FFMIN(PIX_FMT_NB, 64); i++){
         if (pix_fmt_mask & (1ULL << i))
-            dst_pix_fmt = avcodec_find_best_pix_fmt2(dst_pix_fmt, i, src_pix_fmt, has_alpha, loss_ptr);
+            dst_pix_fmt = avcodec_find_best_pix_fmt_of_2(dst_pix_fmt, i, src_pix_fmt, has_alpha, loss_ptr);
     }
     return dst_pix_fmt;
 }
 #endif /* FF_API_FIND_BEST_PIX_FMT */
 
-enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum PixelFormat dst_pix_fmt2,
+enum PixelFormat avcodec_find_best_pix_fmt_of_2(enum PixelFormat dst_pix_fmt1, enum PixelFormat dst_pix_fmt2,
                                             enum PixelFormat src_pix_fmt, int has_alpha, int *loss_ptr)
 {
     enum PixelFormat dst_pix_fmt;
@@ -577,6 +577,20 @@ enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum 
     return dst_pix_fmt;
 }
 
+#if AV_HAVE_INCOMPATIBLE_FORK_ABI
+enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat *pix_fmt_list,
+                                            enum PixelFormat src_pix_fmt,
+                                            int has_alpha, int *loss_ptr){
+    return avcodec_find_best_pix_fmt_of_list(pix_fmt_list, src_pix_fmt, has_alpha, loss_ptr);
+}
+#else
+enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum PixelFormat dst_pix_fmt2,
+                                            enum PixelFormat src_pix_fmt, int has_alpha, int *loss_ptr)
+{
+    return avcodec_find_best_pix_fmt_of_2(dst_pix_fmt1, dst_pix_fmt2, src_pix_fmt, has_alpha, loss_ptr);
+}
+#endif
+
 enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_list,
                                             enum PixelFormat src_pix_fmt,
                                             int has_alpha, int *loss_ptr){
@@ -585,7 +599,7 @@ enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_lis
     enum PixelFormat best = PIX_FMT_NONE;
 
     for(i=0; pix_fmt_list[i] != PIX_FMT_NONE; i++)
-        best = avcodec_find_best_pix_fmt2(best, pix_fmt_list[i], src_pix_fmt, has_alpha, loss_ptr);
+        best = avcodec_find_best_pix_fmt_of_2(best, pix_fmt_list[i], src_pix_fmt, has_alpha, loss_ptr);
 
     return best;
 }
@@ -593,7 +607,7 @@ enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_lis
 void av_picture_copy(AVPicture *dst, const AVPicture *src,
                      enum PixelFormat pix_fmt, int width, int height)
 {
-    av_image_copy(dst->data, dst->linesize, src->data,
+    av_image_copy(dst->data, dst->linesize, (const uint8_t **)src->data,
                   src->linesize, pix_fmt, width, height);
 }
 
@@ -815,7 +829,7 @@ int av_picture_pad(AVPicture *dst, const AVPicture *src, int height, int width,
     return 0;
 }
 
-#if !(HAVE_MMX && HAVE_YASM)
+#if !HAVE_MMX_EXTERNAL
 /* filter parameters: [-1 4 2 4 -1] // 8 */
 static void deinterlace_line_c(uint8_t *dst,
                              const uint8_t *lum_m4, const uint8_t *lum_m3,
@@ -864,7 +878,7 @@ static void deinterlace_line_inplace_c(uint8_t *lum_m4, uint8_t *lum_m3,
         lum++;
     }
 }
-#endif
+#endif /* !HAVE_MMX_EXTERNAL */
 
 /* deinterlacing : 2 temporal taps, 3 spatial taps linear filter. The
    top field is copied as is, but the bottom field is deinterlaced

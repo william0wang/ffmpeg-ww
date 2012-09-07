@@ -127,7 +127,6 @@ extern const vf_info_t vf_info_1bpp;
 extern const vf_info_t vf_info_ass;
 extern const vf_info_t vf_info_bmovl;
 extern const vf_info_t vf_info_crop;
-extern const vf_info_t vf_info_decimate;
 extern const vf_info_t vf_info_denoise3d;
 extern const vf_info_t vf_info_detc;
 extern const vf_info_t vf_info_dint;
@@ -167,10 +166,8 @@ extern const vf_info_t vf_info_pp;
 extern const vf_info_t vf_info_pullup;
 extern const vf_info_t vf_info_qp;
 extern const vf_info_t vf_info_rectangle;
-extern const vf_info_t vf_info_rotate;
 extern const vf_info_t vf_info_sab;
 extern const vf_info_t vf_info_scale;
-extern const vf_info_t vf_info_smartblur;
 extern const vf_info_t vf_info_softpulldown;
 extern const vf_info_t vf_info_softskip;
 extern const vf_info_t vf_info_spp;
@@ -190,7 +187,6 @@ extern const vf_info_t vf_info_zrmjpeg;
 
 
 static const vf_info_t* const filters[]={
-    &vf_info_decimate,
     &vf_info_denoise3d,
     &vf_info_detc,
     &vf_info_dint,
@@ -222,9 +218,7 @@ static const vf_info_t* const filters[]={
     &vf_info_pullup,
     &vf_info_qp,
     &vf_info_rectangle,
-    &vf_info_rotate,
     &vf_info_sab,
-    &vf_info_smartblur,
     &vf_info_softpulldown,
     &vf_info_softskip,
     &vf_info_spp,
@@ -672,8 +666,8 @@ int vf_next_config(struct vf_instance *vf,
         vf->next=vf2;
     }
     vf->next->w = width; vf->next->h = height;
-#endif
     return 1;
+#endif
 }
 
 int vf_next_control(struct vf_instance *vf, int request, void* data){

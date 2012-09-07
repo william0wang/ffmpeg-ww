@@ -10,6 +10,7 @@ FFLIBS-$(CONFIG_ACONVERT_FILTER)             += swresample
 FFLIBS-$(CONFIG_AMOVIE_FILTER)               += avformat avcodec
 FFLIBS-$(CONFIG_ARESAMPLE_FILTER)            += swresample
 FFLIBS-$(CONFIG_ATEMPO_FILTER)               += avcodec
+FFLIBS-$(CONFIG_DECIMATE_FILTER)             += avcodec
 FFLIBS-$(CONFIG_MOVIE_FILTER)                += avformat avcodec
 FFLIBS-$(CONFIG_PAN_FILTER)                  += swresample
 FFLIBS-$(CONFIG_REMOVELOGO_FILTER)           += avformat avcodec
@@ -75,6 +76,7 @@ OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
 OBJS-$(CONFIG_FLITE_FILTER)                  += asrc_flite.o
 
 OBJS-$(CONFIG_ABUFFERSINK_FILTER)            += sink_buffer.o
+OBJS-$(CONFIG_FFABUFFERSINK_FILTER)          += sink_buffer.o
 OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
 
 OBJS-$(CONFIG_ASS_FILTER)                    += vf_ass.o
@@ -88,6 +90,7 @@ OBJS-$(CONFIG_COLORMATRIX_FILTER)            += vf_colormatrix.o
 OBJS-$(CONFIG_COPY_FILTER)                   += vf_copy.o
 OBJS-$(CONFIG_CROP_FILTER)                   += vf_crop.o
 OBJS-$(CONFIG_CROPDETECT_FILTER)             += vf_cropdetect.o
+OBJS-$(CONFIG_DECIMATE_FILTER)               += vf_decimate.o
 OBJS-$(CONFIG_DELOGO_FILTER)                 += vf_delogo.o
 OBJS-$(CONFIG_DESHAKE_FILTER)                += vf_deshake.o
 OBJS-$(CONFIG_DRAWBOX_FILTER)                += vf_drawbox.o
@@ -150,11 +153,11 @@ OBJS-$(CONFIG_SMPTEBARS_FILTER)              += vsrc_testsrc.o
 OBJS-$(CONFIG_TESTSRC_FILTER)                += vsrc_testsrc.o
 
 OBJS-$(CONFIG_BUFFERSINK_FILTER)             += sink_buffer.o
+OBJS-$(CONFIG_FFBUFFERSINK_FILTER)           += sink_buffer.o
 OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
 
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/mp_image.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/img_format.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_decimate.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_denoise3d.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_detc.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_dint.o
@@ -186,9 +189,7 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_pp7.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_pullup.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_qp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_rectangle.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_rotate.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_sab.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_smartblur.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_softpulldown.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_softskip.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_spp.o

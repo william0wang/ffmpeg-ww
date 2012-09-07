@@ -2967,9 +2967,6 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
 #if CONFIG_MLP_DECODER || CONFIG_TRUEHD_DECODER
     ff_mlp_init(c, avctx);
 #endif
-#if CONFIG_WMV2_DECODER || CONFIG_VC1_DECODER
-    ff_intrax8dsp_init(c,avctx);
-#endif
 
     c->put_mspel_pixels_tab[0]= ff_put_pixels8x8_c;
     c->put_mspel_pixels_tab[1]= put_mspel8_mc10_c;
@@ -3176,6 +3173,7 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
     if (HAVE_MMI)        ff_dsputil_init_mmi   (c, avctx);
     if (ARCH_SH4)        ff_dsputil_init_sh4   (c, avctx);
     if (ARCH_BFIN)       ff_dsputil_init_bfin  (c, avctx);
+    if (HAVE_MIPSFPU)    ff_dsputil_init_mips  (c, avctx);
 
     for (i = 0; i < 4; i++) {
         for (j = 0; j < 16; j++) {
