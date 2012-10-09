@@ -521,8 +521,8 @@ static int svq1_decode_frame_header (GetBitContext *bitbuf,MpegEncContext *s) {
 
       csum = ff_svq1_packet_checksum (bitbuf->buffer, bitbuf->size_in_bits>>3, csum);
 
-//      av_log(s->avctx, AV_LOG_INFO, "%s checksum (%02x) for packet data\n",
-//              (csum == 0) ? "correct" : "incorrect", csum);
+      av_dlog(s->avctx, "%s checksum (%02x) for packet data\n",
+              (csum == 0) ? "correct" : "incorrect", csum);
     }
 
     if ((s->f_code ^ 0x10) >= 0x50) {
@@ -717,7 +717,7 @@ static av_cold int svq1_decode_init(AVCodecContext *avctx)
     s->width = (avctx->width+3)&~3;
     s->height = (avctx->height+3)&~3;
     s->codec_id= avctx->codec->id;
-    avctx->pix_fmt = PIX_FMT_YUV410P;
+    avctx->pix_fmt = AV_PIX_FMT_YUV410P;
     avctx->has_b_frames= 1; // not true, but DP frames and these behave like unidirectional b frames
     s->flags= avctx->flags;
     if (ff_MPV_common_init(s) < 0) return -1;
@@ -777,6 +777,6 @@ AVCodec ff_svq1_decoder = {
     .decode         = svq1_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
     .flush          = ff_mpeg_flush,
-    .pix_fmts       = (const enum PixelFormat[]){ PIX_FMT_YUV410P, PIX_FMT_NONE },
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV410P, AV_PIX_FMT_NONE },
     .long_name      = NULL_IF_CONFIG_SMALL("Sorenson Vector Quantizer 1 / Sorenson Video 1 / SVQ1"),
 };

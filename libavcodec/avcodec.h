@@ -275,6 +275,7 @@ enum AVCodecID {
     AV_CODEC_ID_G2M        = MKBETAG( 0 ,'G','2','M'),
     AV_CODEC_ID_AVUI       = MKBETAG('A','V','U','I'),
     AV_CODEC_ID_AYUV       = MKBETAG('A','Y','U','V'),
+    AV_CODEC_ID_TARGA_Y216 = MKBETAG('T','2','1','6'),
     AV_CODEC_ID_V308       = MKBETAG('V','3','0','8'),
     AV_CODEC_ID_V408       = MKBETAG('V','4','0','8'),
     AV_CODEC_ID_YUV4       = MKBETAG('Y','U','V','4'),
@@ -423,12 +424,14 @@ enum AVCodecID {
     AV_CODEC_ID_RALF,
     AV_CODEC_ID_IAC,
     AV_CODEC_ID_ILBC,
+    AV_CODEC_ID_OPUS_DEPRECATED,
     AV_CODEC_ID_FFWAVESYNTH = MKBETAG('F','F','W','S'),
     AV_CODEC_ID_8SVX_RAW    = MKBETAG('8','S','V','X'),
     AV_CODEC_ID_SONIC       = MKBETAG('S','O','N','C'),
     AV_CODEC_ID_SONIC_LS    = MKBETAG('S','O','N','L'),
     AV_CODEC_ID_PAF_AUDIO   = MKBETAG('P','A','F','A'),
     AV_CODEC_ID_OPUS        = MKBETAG('O','P','U','S'),
+    AV_CODEC_ID_TAK         = MKBETAG('t','B','a','K'),
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
@@ -448,6 +451,7 @@ enum AVCodecID {
     AV_CODEC_ID_REALTEXT   = MKBETAG('R','T','X','T'),
     AV_CODEC_ID_SUBVIEWER  = MKBETAG('S','u','b','V'),
     AV_CODEC_ID_SUBRIP     = MKBETAG('S','R','i','p'),
+    AV_CODEC_ID_WEBVTT     = MKBETAG('W','V','T','T'),
 
     /* other specific kind of codecs (generally used for attachments) */
     AV_CODEC_ID_FIRST_UNKNOWN = 0x18000,           ///< A dummy ID pointing at the start of various fake codecs.
@@ -455,6 +459,7 @@ enum AVCodecID {
     AV_CODEC_ID_BINTEXT    = MKBETAG('B','T','X','T'),
     AV_CODEC_ID_XBIN       = MKBETAG('X','B','I','N'),
     AV_CODEC_ID_IDF        = MKBETAG( 0 ,'I','D','F'),
+    AV_CODEC_ID_OTF        = MKBETAG( 0 ,'O','T','F'),
 
     AV_CODEC_ID_PROBE = 0x19000, ///< codec_id is not known (like AV_CODEC_ID_NONE) but lavf should attempt to identify it
 
@@ -926,6 +931,16 @@ enum AVPacketSideDataType {
      * @endcode
      */
     AV_PKT_DATA_SKIP_SAMPLES=70,
+
+    /**
+     * An AV_PKT_DATA_JP_DUALMONO side data packet indicates that
+     * the packet may contain "dual mono" audio specific to Japanese DTV
+     * and if it is true, recommends only the selected channel to be used.
+     * @code
+     * u8    selected channels (0=mail/left, 1=sub/right, 2=both)
+     * @endcode
+     */
+    AV_PKT_DATA_JP_DUALMONO,
 };
 
 typedef struct AVPacket {
@@ -1071,7 +1086,7 @@ typedef struct AVFrame {
 
     /**
      * format of the frame, -1 if unknown or unset
-     * Values correspond to enum PixelFormat for video frames,
+     * Values correspond to enum AVPixelFormat for video frames,
      * enum AVSampleFormat for audio)
      * - encoding: unused
      * - decoding: Read by user.
@@ -1595,12 +1610,15 @@ typedef struct AVCodecContext {
      *   encoded input.
      *
      * Audio:
-     *   Number of "priming" samples added to the beginning of the stream
-     *   during encoding. The decoded output will be delayed by this many
-     *   samples relative to the input to the encoder. Note that this field is
-     *   purely informational and does not directly affect the pts output by
-     *   the encoder, which should always be based on the actual presentation
-     *   time, including any delay.
+     *   For encoding, this is the number of "priming" samples added to the
+     *   beginning of the stream. The decoded output will be delayed by this
+     *   many samples relative to the input to the encoder. Note that this
+     *   field is purely informational and does not directly affect the pts
+     *   output by the encoder, which should always be based on the actual
+     *   presentation time, including any delay.
+     *   For decoding, this is the number of samples the decoder needs to
+     *   output before the decoder's output is valid. When seeking, you should
+     *   start decoding this many samples prior to your desired seek point.
      *
      * - encoding: Set by libavcodec.
      * - decoding: Set by libavcodec.
@@ -1635,13 +1653,13 @@ typedef struct AVCodecContext {
     int gop_size;
 
     /**
-     * Pixel format, see PIX_FMT_xxx.
+     * Pixel format, see AV_PIX_FMT_xxx.
      * May be set by the demuxer if known from headers.
      * May be overridden by the decoder if it knows better.
      * - encoding: Set by user.
      * - decoding: Set by user if known, overridden by libavcodec if known
      */
-    enum PixelFormat pix_fmt;
+    enum AVPixelFormat pix_fmt;
 
     /**
      * Motion estimation algorithm used for video coding.
@@ -1688,7 +1706,7 @@ typedef struct AVCodecContext {
      * - encoding: unused
      * - decoding: Set by user, if not set the native format will be chosen.
      */
-    enum PixelFormat (*get_format)(struct AVCodecContext *s, const enum PixelFormat * fmt);
+    enum AVPixelFormat (*get_format)(struct AVCodecContext *s, const enum AVPixelFormat * fmt);
 
     /**
      * maximum number of B-frames between non-B-frames
@@ -3088,6 +3106,8 @@ typedef struct AVProfile {
 
 typedef struct AVCodecDefault AVCodecDefault;
 
+struct AVSubtitle;
+
 /**
  * AVCodec.
  */
@@ -3112,7 +3132,7 @@ typedef struct AVCodec {
      */
     int capabilities;
     const AVRational *supported_framerates; ///< array of supported framerates, or NULL if any, array is terminated by {0,0}
-    const enum PixelFormat *pix_fmts;       ///< array of supported pixel formats, or NULL if unknown, array is terminated by -1
+    const enum AVPixelFormat *pix_fmts;     ///< array of supported pixel formats, or NULL if unknown, array is terminated by -1
     const int *supported_samplerates;       ///< array of supported audio samplerates, or NULL if unknown, array is terminated by 0
     const enum AVSampleFormat *sample_fmts; ///< array of supported sample formats, or NULL if unknown, array is terminated by -1
     const uint64_t *channel_layouts;         ///< array of support channel layouts, or NULL if unknown. array is terminated by 0
@@ -3160,7 +3180,8 @@ typedef struct AVCodec {
     void (*init_static_data)(struct AVCodec *codec);
 
     int (*init)(AVCodecContext *);
-    int (*encode)(AVCodecContext *, uint8_t *buf, int buf_size, void *data);
+    int (*encode_sub)(AVCodecContext *, uint8_t *buf, int buf_size,
+                      const struct AVSubtitle *sub);
     /**
      * Encode data to an AVPacket.
      *
@@ -3212,7 +3233,7 @@ typedef struct AVHWAccel {
      *
      * Only hardware accelerated formats are supported here.
      */
-    enum PixelFormat pix_fmt;
+    enum AVPixelFormat pix_fmt;
 
     /**
      * Hardware accelerated codec capabilities.
@@ -3494,7 +3515,7 @@ int avcodec_copy_context(AVCodecContext *dest, const AVCodecContext *src);
 
 /**
  * Allocate an AVFrame and set its fields to default values.  The resulting
- * struct can be deallocated by simply calling av_free().
+ * struct must be freed using avcodec_free_frame().
  *
  * @return An AVFrame filled with default values or NULL on failure.
  * @see avcodec_get_frame_defaults
@@ -3504,9 +3525,21 @@ AVFrame *avcodec_alloc_frame(void);
 /**
  * Set the fields of the given AVFrame to default values.
  *
- * @param pic The AVFrame of which the fields should be set to default values.
+ * @param frame The AVFrame of which the fields should be set to default values.
  */
-void avcodec_get_frame_defaults(AVFrame *pic);
+void avcodec_get_frame_defaults(AVFrame *frame);
+
+/**
+ * Free the frame and any dynamically allocated objects in it,
+ * e.g. extended_data.
+ *
+ * @param frame frame to be freed. The pointer will be set to NULL.
+ *
+ * @warning this function does NOT free the data buffers themselves
+ * (it does not know how, since they might have been allocated with
+ *  a custom get_buffer()).
+ */
+void avcodec_free_frame(AVFrame **frame);
 
 #if FF_API_AVCODEC_OPEN
 /**
@@ -3608,11 +3641,6 @@ void avsubtitle_free(AVSubtitle *sub);
  */
 
 /**
- * @deprecated use NULL instead
- */
-attribute_deprecated void av_destruct_packet_nofree(AVPacket *pkt);
-
-/**
  * Default packet destructor.
  */
 void av_destruct_packet(AVPacket *pkt);
@@ -3658,6 +3686,13 @@ int av_grow_packet(AVPacket *pkt, int grow_by);
  * packet is allocated if it was not really allocated.
  */
 int av_dup_packet(AVPacket *pkt);
+
+/**
+ * Copy packet, including contents
+ *
+ * @return 0 on success, negative AVERROR on fail
+ */
+int av_copy_packet(AVPacket *dst, AVPacket *src);
 
 /**
  * Free a packet.
@@ -4289,9 +4324,11 @@ int avcodec_encode_subtitle(AVCodecContext *avctx, uint8_t *buf, int buf_size,
  * @}
  */
 
+#if FF_API_AVCODEC_RESAMPLE
 /**
  * @defgroup lavc_resample Audio resampling
  * @ingroup libavc
+ * @deprecated use libswresample instead
  *
  * @{
  */
@@ -4316,6 +4353,7 @@ typedef struct ReSampleContext ReSampleContext;
  * @param cutoff           cutoff frequency, 1.0 corresponds to half the output sampling rate
  * @return allocated ReSampleContext, NULL if error occurred
  */
+attribute_deprecated
 ReSampleContext *av_audio_resample_init(int output_channels, int input_channels,
                                         int output_rate, int input_rate,
                                         enum AVSampleFormat sample_fmt_out,
@@ -4323,6 +4361,7 @@ ReSampleContext *av_audio_resample_init(int output_channels, int input_channels,
                                         int filter_length, int log2_phase_count,
                                         int linear, double cutoff);
 
+attribute_deprecated
 int audio_resample(ReSampleContext *s, short *output, short *input, int nb_samples);
 
 /**
@@ -4331,6 +4370,7 @@ int audio_resample(ReSampleContext *s, short *output, short *input, int nb_sampl
  * @param s a non-NULL pointer to a resample context previously
  *          created with av_audio_resample_init()
  */
+attribute_deprecated
 void audio_resample_close(ReSampleContext *s);
 
 
@@ -4343,6 +4383,7 @@ void audio_resample_close(ReSampleContext *s);
                  between the 2 closest, if 0 the closest will be used
  * @param cutoff cutoff frequency, 1.0 corresponds to half the output sampling rate
  */
+attribute_deprecated
 struct AVResampleContext *av_resample_init(int out_rate, int in_rate, int filter_length, int log2_phase_count, int linear, double cutoff);
 
 /**
@@ -4354,6 +4395,7 @@ struct AVResampleContext *av_resample_init(int out_rate, int in_rate, int filter
  * @param update_ctx If this is 0 then the context will not be modified, that way several channels can be resampled with the same context.
  * @return the number of samples written in dst or -1 if an error occurred
  */
+attribute_deprecated
 int av_resample(struct AVResampleContext *c, short *dst, short *src, int *consumed, int src_size, int dst_size, int update_ctx);
 
 
@@ -4369,12 +4411,15 @@ int av_resample(struct AVResampleContext *c, short *dst, short *src, int *consum
  * note, due to rounding the actual compensation might be slightly different,
  * especially if the compensation_distance is large and the in_rate used during init is small
  */
+attribute_deprecated
 void av_resample_compensate(struct AVResampleContext *c, int sample_delta, int compensation_distance);
+attribute_deprecated
 void av_resample_close(struct AVResampleContext *c);
 
 /**
  * @}
  */
+#endif
 
 /**
  * @addtogroup lavc_picture
@@ -4392,7 +4437,7 @@ void av_resample_close(struct AVResampleContext *c);
  * @param height the height of the picture
  * @return zero if successful, a negative value if not
  */
-int avpicture_alloc(AVPicture *picture, enum PixelFormat pix_fmt, int width, int height);
+int avpicture_alloc(AVPicture *picture, enum AVPixelFormat pix_fmt, int width, int height);
 
 /**
  * Free a picture previously allocated by avpicture_alloc().
@@ -4410,7 +4455,7 @@ void avpicture_free(AVPicture *picture);
  * @see av_image_fill_arrays()
  */
 int avpicture_fill(AVPicture *picture, uint8_t *ptr,
-                   enum PixelFormat pix_fmt, int width, int height);
+                   enum AVPixelFormat pix_fmt, int width, int height);
 
 /**
  * Copy pixel data from an AVPicture into a buffer, always assume a
@@ -4418,7 +4463,8 @@ int avpicture_fill(AVPicture *picture, uint8_t *ptr,
  *
  * @see av_image_copy_to_buffer()
  */
-int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, int height,
+int avpicture_layout(const AVPicture* src, enum AVPixelFormat pix_fmt,
+                     int width, int height,
                      unsigned char *dest, int dest_size);
 
 /**
@@ -4428,29 +4474,29 @@ int avpicture_layout(const AVPicture* src, enum PixelFormat pix_fmt, int width, 
  *
  * @see av_image_get_buffer_size().
  */
-int avpicture_get_size(enum PixelFormat pix_fmt, int width, int height);
+int avpicture_get_size(enum AVPixelFormat pix_fmt, int width, int height);
 
 /**
  *  deinterlace - if not supported return -1
  */
 int avpicture_deinterlace(AVPicture *dst, const AVPicture *src,
-                          enum PixelFormat pix_fmt, int width, int height);
+                          enum AVPixelFormat pix_fmt, int width, int height);
 /**
  * Copy image src to dst. Wraps av_image_copy().
  */
 void av_picture_copy(AVPicture *dst, const AVPicture *src,
-                     enum PixelFormat pix_fmt, int width, int height);
+                     enum AVPixelFormat pix_fmt, int width, int height);
 
 /**
  * Crop image top and left side.
  */
 int av_picture_crop(AVPicture *dst, const AVPicture *src,
-                    enum PixelFormat pix_fmt, int top_band, int left_band);
+                    enum AVPixelFormat pix_fmt, int top_band, int left_band);
 
 /**
  * Pad image.
  */
-int av_picture_pad(AVPicture *dst, const AVPicture *src, int height, int width, enum PixelFormat pix_fmt,
+int av_picture_pad(AVPicture *dst, const AVPicture *src, int height, int width, enum AVPixelFormat pix_fmt,
             int padtop, int padbottom, int padleft, int padright, int *color);
 
 /**
@@ -4473,14 +4519,14 @@ int av_picture_pad(AVPicture *dst, const AVPicture *src, int height, int width, 
  * @{
  */
 
-void avcodec_get_chroma_sub_sample(enum PixelFormat pix_fmt, int *h_shift, int *v_shift);
+void avcodec_get_chroma_sub_sample(enum AVPixelFormat pix_fmt, int *h_shift, int *v_shift);
 
 /**
  * Return a value representing the fourCC code associated to the
  * pixel format pix_fmt, or 0 if no associated fourCC code can be
  * found.
  */
-unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat pix_fmt);
+unsigned int avcodec_pix_fmt_to_codec_tag(enum AVPixelFormat pix_fmt);
 
 #define FF_LOSS_RESOLUTION  0x0001 /**< loss due to resolution change */
 #define FF_LOSS_DEPTH       0x0002 /**< loss due to color depth change */
@@ -4507,7 +4553,7 @@ unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat pix_fmt);
  * @return Combination of flags informing you what kind of losses will occur
  * (maximum loss for an invalid dst_pix_fmt).
  */
-int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_pix_fmt,
+int avcodec_get_pix_fmt_loss(enum AVPixelFormat dst_pix_fmt, enum AVPixelFormat src_pix_fmt,
                              int has_alpha);
 
 #if FF_API_FIND_BEST_PIX_FMT
@@ -4526,8 +4572,8 @@ int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_
  * Note, only the first 64 pixel formats will fit in pix_fmt_mask.
  *
  * @code
- * src_pix_fmt = PIX_FMT_YUV420P;
- * pix_fmt_mask = (1 << PIX_FMT_YUV422P) | (1 << PIX_FMT_RGB24);
+ * src_pix_fmt = AV_PIX_FMT_YUV420P;
+ * pix_fmt_mask = (1 << AV_PIX_FMT_YUV422P) | (1 << AV_PIX_FMT_RGB24);
  * dst_pix_fmt = avcodec_find_best_pix_fmt(pix_fmt_mask, src_pix_fmt, alpha, &loss);
  * @endcode
  *
@@ -4538,7 +4584,7 @@ int avcodec_get_pix_fmt_loss(enum PixelFormat dst_pix_fmt, enum PixelFormat src_
  * @return The best pixel format to convert to or -1 if none was found.
  */
 attribute_deprecated
-enum PixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum PixelFormat src_pix_fmt,
+enum AVPixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum AVPixelFormat src_pix_fmt,
                               int has_alpha, int *loss_ptr);
 #endif /* FF_API_FIND_BEST_PIX_FMT */
 
@@ -4553,14 +4599,14 @@ enum PixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum PixelForma
  * pix_fmt_list parameter.
  *
  *
- * @param[in] pix_fmt_list PIX_FMT_NONE terminated array of pixel formats to choose from
+ * @param[in] pix_fmt_list AV_PIX_FMT_NONE terminated array of pixel formats to choose from
  * @param[in] src_pix_fmt source pixel format
  * @param[in] has_alpha Whether the source pixel format alpha channel is used.
  * @param[out] loss_ptr Combination of flags informing you what kind of losses will occur.
  * @return The best pixel format to convert to or -1 if none was found.
  */
-enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_list,
-                                            enum PixelFormat src_pix_fmt,
+enum AVPixelFormat avcodec_find_best_pix_fmt_of_list(enum AVPixelFormat *pix_fmt_list,
+                                            enum AVPixelFormat src_pix_fmt,
                                             int has_alpha, int *loss_ptr);
 
 /**
@@ -4571,14 +4617,14 @@ enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_lis
  * converting from some formats to other formats. avcodec_find_best_pix_fmt_of_2() selects which of
  * the given pixel formats should be used to suffer the least amount of loss.
  *
- * If one of the destination formats is PIX_FMT_NONE the other pixel format (if valid) will be
+ * If one of the destination formats is AV_PIX_FMT_NONE the other pixel format (if valid) will be
  * returned.
  *
  * @code
- * src_pix_fmt = PIX_FMT_YUV420P;
- * dst_pix_fmt1= PIX_FMT_RGB24;
- * dst_pix_fmt2= PIX_FMT_GRAY8;
- * dst_pix_fmt3= PIX_FMT_RGB8;
+ * src_pix_fmt = AV_PIX_FMT_YUV420P;
+ * dst_pix_fmt1= AV_PIX_FMT_RGB24;
+ * dst_pix_fmt2= AV_PIX_FMT_GRAY8;
+ * dst_pix_fmt3= AV_PIX_FMT_RGB8;
  * loss= FF_LOSS_CHROMA; // don't care about chroma loss, so chroma loss will be ignored.
  * dst_pix_fmt = avcodec_find_best_pix_fmt_of_2(dst_pix_fmt1, dst_pix_fmt2, src_pix_fmt, alpha, &loss);
  * dst_pix_fmt = avcodec_find_best_pix_fmt_of_2(dst_pix_fmt, dst_pix_fmt3, src_pix_fmt, alpha, &loss);
@@ -4593,21 +4639,21 @@ enum PixelFormat avcodec_find_best_pix_fmt_of_list(enum PixelFormat *pix_fmt_lis
  *                               that occurs when converting from src to selected dst pixel format.
  * @return The best pixel format to convert to or -1 if none was found.
  */
-enum PixelFormat avcodec_find_best_pix_fmt_of_2(enum PixelFormat dst_pix_fmt1, enum PixelFormat dst_pix_fmt2,
-                                            enum PixelFormat src_pix_fmt, int has_alpha, int *loss_ptr);
+enum AVPixelFormat avcodec_find_best_pix_fmt_of_2(enum AVPixelFormat dst_pix_fmt1, enum AVPixelFormat dst_pix_fmt2,
+                                            enum AVPixelFormat src_pix_fmt, int has_alpha, int *loss_ptr);
 
 attribute_deprecated
 #if AV_HAVE_INCOMPATIBLE_FORK_ABI
-enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat *pix_fmt_list,
-                                            enum PixelFormat src_pix_fmt,
-                                            int has_alpha, int *loss_ptr);
+enum AVPixelFormat avcodec_find_best_pix_fmt2(enum AVPixelFormat *pix_fmt_list,
+                                              enum AVPixelFormat src_pix_fmt,
+                                              int has_alpha, int *loss_ptr);
 #else
-enum PixelFormat avcodec_find_best_pix_fmt2(enum PixelFormat dst_pix_fmt1, enum PixelFormat dst_pix_fmt2,
-                                            enum PixelFormat src_pix_fmt, int has_alpha, int *loss_ptr);
+enum AVPixelFormat avcodec_find_best_pix_fmt2(enum AVPixelFormat dst_pix_fmt1, enum AVPixelFormat dst_pix_fmt2,
+                                            enum AVPixelFormat src_pix_fmt, int has_alpha, int *loss_ptr);
 #endif
 
 
-enum PixelFormat avcodec_default_get_format(struct AVCodecContext *s, const enum PixelFormat * fmt);
+enum AVPixelFormat avcodec_default_get_format(struct AVCodecContext *s, const enum AVPixelFormat * fmt);
 
 /**
  * @}

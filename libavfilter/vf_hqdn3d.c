@@ -50,10 +50,9 @@ void ff_hqdn3d_row_10_x86(uint8_t *src, uint8_t *dst, uint16_t *line_ant, uint16
 void ff_hqdn3d_row_16_x86(uint8_t *src, uint8_t *dst, uint16_t *line_ant, uint16_t *frame_ant, ptrdiff_t w, int16_t *spatial, int16_t *temporal);
 
 #define LUT_BITS (depth==16 ? 8 : 4)
-#define RIGHTSHIFT(a,b) (((a)+(((1<<(b))-1)>>1))>>(b))
-#define LOAD(x) ((depth==8 ? src[x] : AV_RN16A(src+(x)*2)) << (16-depth))
-#define STORE(x,val) (depth==8 ? dst[x] = RIGHTSHIFT(val, 16-depth)\
-                    : AV_WN16A(dst+(x)*2, RIGHTSHIFT(val, 16-depth)))
+#define LOAD(x) (((depth==8 ? src[x] : AV_RN16A(src+(x)*2)) << (16-depth)) + (((1<<(16-depth))-1)>>1))
+#define STORE(x,val) (depth==8 ? dst[x] = (val) >> (16-depth)\
+                    : AV_WN16A(dst+(x)*2, (val) >> (16-depth)))
 
 av_always_inline
 static uint32_t lowpass(int prev, int cur, int16_t *coef, int depth)
@@ -264,27 +263,27 @@ static void uninit(AVFilterContext *ctx)
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum PixelFormat pix_fmts[] = {
-        PIX_FMT_YUV420P,
-        PIX_FMT_YUV422P,
-        PIX_FMT_YUV444P,
-        PIX_FMT_YUV410P,
-        PIX_FMT_YUV411P,
-        PIX_FMT_YUV440P,
-        PIX_FMT_YUVJ420P,
-        PIX_FMT_YUVJ422P,
-        PIX_FMT_YUVJ444P,
-        PIX_FMT_YUVJ440P,
-        AV_NE( PIX_FMT_YUV420P9BE, PIX_FMT_YUV420P9LE ),
-        AV_NE( PIX_FMT_YUV422P9BE, PIX_FMT_YUV422P9LE ),
-        AV_NE( PIX_FMT_YUV444P9BE, PIX_FMT_YUV444P9LE ),
-        AV_NE( PIX_FMT_YUV420P10BE, PIX_FMT_YUV420P10LE ),
-        AV_NE( PIX_FMT_YUV422P10BE, PIX_FMT_YUV422P10LE ),
-        AV_NE( PIX_FMT_YUV444P10BE, PIX_FMT_YUV444P10LE ),
-        AV_NE( PIX_FMT_YUV420P16BE, PIX_FMT_YUV420P16LE ),
-        AV_NE( PIX_FMT_YUV422P16BE, PIX_FMT_YUV422P16LE ),
-        AV_NE( PIX_FMT_YUV444P16BE, PIX_FMT_YUV444P16LE ),
-        PIX_FMT_NONE
+    static const enum AVPixelFormat pix_fmts[] = {
+        AV_PIX_FMT_YUV420P,
+        AV_PIX_FMT_YUV422P,
+        AV_PIX_FMT_YUV444P,
+        AV_PIX_FMT_YUV410P,
+        AV_PIX_FMT_YUV411P,
+        AV_PIX_FMT_YUV440P,
+        AV_PIX_FMT_YUVJ420P,
+        AV_PIX_FMT_YUVJ422P,
+        AV_PIX_FMT_YUVJ444P,
+        AV_PIX_FMT_YUVJ440P,
+        AV_NE( AV_PIX_FMT_YUV420P9BE, AV_PIX_FMT_YUV420P9LE ),
+        AV_NE( AV_PIX_FMT_YUV422P9BE, AV_PIX_FMT_YUV422P9LE ),
+        AV_NE( AV_PIX_FMT_YUV444P9BE, AV_PIX_FMT_YUV444P9LE ),
+        AV_NE( AV_PIX_FMT_YUV420P10BE, AV_PIX_FMT_YUV420P10LE ),
+        AV_NE( AV_PIX_FMT_YUV422P10BE, AV_PIX_FMT_YUV422P10LE ),
+        AV_NE( AV_PIX_FMT_YUV444P10BE, AV_PIX_FMT_YUV444P10LE ),
+        AV_NE( AV_PIX_FMT_YUV420P16BE, AV_PIX_FMT_YUV420P16LE ),
+        AV_NE( AV_PIX_FMT_YUV422P16BE, AV_PIX_FMT_YUV422P16LE ),
+        AV_NE( AV_PIX_FMT_YUV444P16BE, AV_PIX_FMT_YUV444P16LE ),
+        AV_PIX_FMT_NONE
     };
 
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));

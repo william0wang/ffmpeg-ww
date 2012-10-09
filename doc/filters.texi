@@ -79,7 +79,18 @@ display graph.png
 @end example
 
 can be used to create and display an image representing the graph
-described by the @var{GRAPH_DESCRIPTION} string.
+described by the @var{GRAPH_DESCRIPTION} string. Note that this string must be
+a complete self-contained graph, with its inputs and outputs explicitly defined.
+For example if your command line is of the form:
+@example
+ffmpeg -i infile -vf scale=640:360 outfile
+@end example
+your @var{GRAPH_DESCRIPTION} string will need to be of the form:
+@example
+nullsrc,scale=640:360,nullsink
+@end example
+you may also need to set the @var{nullsrc} parameters and add a @var{format}
+filter in order to simulate a specific input file.
 
 @c man end GRAPH2DOT
 
@@ -738,14 +749,17 @@ The filter accepts the following named parameters:
 @table @option
 
 @item compensate
-Enable stretching/squeezing the data to make it match the timestamps.
+Enable stretching/squeezing the data to make it match the timestamps. Disabled
+by default. When disabled, time gaps are covered with silence.
 
 @item min_delta
 Minimum difference between timestamps and audio data (in seconds) to trigger
-adding/dropping samples.
+adding/dropping samples. Default value is 0.1. If you get non-perfect sync with
+this filter, try setting this parameter to 0.
 
 @item max_comp
-Maximum compensation in samples per second.
+Maximum compensation in samples per second. Relevant only with compensate=1.
+Default value 500.
 
 @item first_pts
 Assume the first pts should be this value.
@@ -2318,6 +2332,26 @@ Specify the saturation in the [-10,10] range. It accepts a float number and
 defaults to 1.0.
 @end table
 
+The @var{h}, @var{H} and @var{s} parameters are expressions containing the
+following constants:
+
+@table @option
+@item n
+frame count of the input frame starting from 0
+
+@item pts
+presentation timestamp of the input frame expressed in time base units
+
+@item r
+frame rate of the input video, NAN if the input frame rate is unknown
+
+@item t
+timestamp expressed in seconds, NAN if the input timestamp is unknown
+
+@item tb
+time base of the input video
+@end table
+
 The options can also be set using the syntax: @var{hue}:@var{saturation}
 
 In this case @var{hue} is expressed in degrees.
@@ -2348,6 +2382,36 @@ h and s, so the following example will issue an error:
 @example
 hue=PI/2:1
 @end example
+
+@item
+Rotate hue and make the saturation swing between 0
+and 2 over a period of 1 second:
+@example
+hue="H=2*PI*t: s=sin(2*PI*t)+1"
+@end example
+
+@item
+Apply a 3 seconds saturation fade-in effect starting at 0:
+@example
+hue="s=min(t/3\,1)"
+@end example
+
+The general fade-in expression can be written as:
+@example
+hue="s=min(0\, max((t-START)/DURATION\, 1))"
+@end example
+
+@item
+Apply a 3 seconds saturation fade-out effect starting at 5 seconds:
+@example
+hue="s=max(0\, min(1\, (8-t)/3))"
+@end example
+
+The general fade-out expression can be written as:
+@example
+hue="s=max(0\, min(1\, (START+DURATION-t)/DURATION))"
+@end example
+
 @end itemize
 
 @subsection Commands
@@ -2382,14 +2446,10 @@ corresponding pixel component values.
 The @var{lut} filter requires either YUV or RGB pixel formats in
 input, and accepts the options:
 @table @option
-@item c0
-first  pixel component
-@item c1
-second pixel component
-@item c2
-third  pixel component
-@item c3
-fourth pixel component, corresponds to the alpha component
+@item @var{c0} (first  pixel component)
+@item @var{c1} (second pixel component)
+@item @var{c2} (third  pixel component)
+@item @var{c3} (fourth pixel component, corresponds to the alpha component)
 @end table
 
 The exact component associated to each option depends on the format in
@@ -2398,27 +2458,19 @@ input.
 The @var{lutrgb} filter requires RGB pixel formats in input, and
 accepts the options:
 @table @option
-@item r
-red component
-@item g
-green component
-@item b
-blue component
-@item a
-alpha component
+@item @var{r} (red component)
+@item @var{g} (green component)
+@item @var{b} (blue component)
+@item @var{a} (alpha component)
 @end table
 
 The @var{lutyuv} filter requires YUV pixel formats in input, and
 accepts the options:
 @table @option
-@item y
-Y/luminance component
-@item u
-U/Cb component
-@item v
-V/Cr component
-@item a
-alpha component
+@item @var{y} (Y/luminance component)
+@item @var{u} (U/Cb component)
+@item @var{v} (V/Cr component)
+@item @var{a} (alpha component)
 @end table
 
 The expressions can contain the following constants and functions:
@@ -3455,8 +3507,11 @@ Default mode is @code{merge}.
 
 Transpose rows with columns in the input video and optionally flip it.
 
-It accepts a parameter representing an integer, which can assume the
-values:
+This filter accepts the following named parameters:
+
+@table @option
+@item dir
+Specify the transposition direction. Can assume the following values:
 
 @table @samp
 @item 0, 4
@@ -3492,8 +3547,24 @@ l.r     l.L
 @end example
 @end table
 
-For values between 4-7 transposition is only done if the input video
-geometry is portrait and not landscape.
+For values between 4-7, the transposition is only done if the input
+video geometry is portrait and not landscape. These values are
+deprecated, the @code{passthrough} option should be used instead.
+
+@item passthrough
+Do not apply the transposition if the input geometry matches the one
+specified by the specified value. It accepts the following values:
+@table @samp
+@item none
+Always apply transposition.
+@item portrait
+Preserve portrait geometry (when @var{height} >= @var{width}).
+@item landscape
+Preserve landscape geometry (when @var{width} >= @var{height}).
+@end table
+
+Default value is @code{none}.
+@end table
 
 @section unsharp
 
@@ -3619,7 +3690,7 @@ This source is mainly intended for a programmatic use, in particular
 through the interface defined in @file{libavfilter/vsrc_buffer.h}.
 
 It accepts a list of options in the form of @var{key}=@var{value} pairs
-separated by ":". A descroption of the accepted options follows.
+separated by ":". A description of the accepted options follows.
 
 @table @option
 
@@ -3655,7 +3726,7 @@ will instruct the source to accept video frames with size 320x240 and
 with format "yuv410p", assuming 1/24 as the timestamps timebase and
 square pixels (1:1 sample aspect ratio).
 Since the pixel format with name "yuv410p" corresponds to the number 6
-(check the enum PixelFormat definition in @file{libavutil/pixfmt.h}),
+(check the enum AVPixelFormat definition in @file{libavutil/pixfmt.h}),
 this example corresponds to:
 @example
 buffer=size=320x240:pixfmt=6:time_base=1/24:pixel_aspect=1/1
@@ -4184,6 +4255,137 @@ tools.
 
 Below is a description of the currently available multimedia filters.
 
+@section asendcmd, sendcmd
+
+Send commands to filters in the filtergraph.
+
+These filters read commands to be sent to other filters in the
+filtergraph.
+
+@code{asendcmd} must be inserted between two audio filters,
+@code{sendcmd} must be inserted between two video filters, but apart
+from that they act the same way.
+
+The specification of commands can be provided in the filter arguments
+with the @var{commands} option, or in a file specified by the
+@var{filename} option.
+
+These filters accept the following options:
+@table @option
+@item commands, c
+Set the commands to be read and sent to the other filters.
+@item filename, f
+Set the filename of the commands to be read and sent to the other
+filters.
+@end table
+
+@subsection Commands syntax
+
+A commands description consists of a sequence of interval
+specifications, comprising a list of commands to be executed when a
+particular event related to that interval occurs. The occurring event
+is typically the current frame time entering or leaving a given time
+interval.
+
+An interval is specified by the following syntax:
+@example
+@var{START}[-@var{END}] @var{COMMANDS};
+@end example
+
+The time interval is specified by the @var{START} and @var{END} times.
+@var{END} is optional and defaults to the maximum time.
+
+The current frame time is considered within the specified interval if
+it is included in the interval [@var{START}, @var{END}), that is when
+the time is greater or equal to @var{START} and is lesser than
+@var{END}.
+
+@var{COMMANDS} consists of a sequence of one or more command
+specifications, separated by ",", relating to that interval.  The
+syntax of a command specification is given by:
+@example
+[@var{FLAGS}] @var{TARGET} @var{COMMAND} @var{ARG}
+@end example
+
+@var{FLAGS} is optional and specifies the type of events relating to
+the time interval which enable sending the specified command, and must
+be a non-null sequence of identifier flags separated by "+" or "|" and
+enclosed between "[" and "]".
+
+The following flags are recognized:
+@table @option
+@item enter
+The command is sent when the current frame timestamp enters the
+specified interval. In other words, the command is sent when the
+previous frame timestamp was not in the given interval, and the
+current is.
+
+@item leave
+The command is sent when the current frame timestamp leaves the
+specified interval. In other words, the command is sent when the
+previous frame timestamp was in the given interval, and the
+current is not.
+@end table
+
+If @var{FLAGS} is not specified, a default value of @code{[enter]} is
+assumed.
+
+@var{TARGET} specifies the target of the command, usually the name of
+the filter class or a specific filter instance name.
+
+@var{COMMAND} specifies the name of the command for the target filter.
+
+@var{ARG} is optional and specifies the optional list of argument for
+the given @var{COMMAND}.
+
+Between one interval specification and another, whitespaces, or
+sequences of characters starting with @code{#} until the end of line,
+are ignored and can be used to annotate comments.
+
+A simplified BNF description of the commands specification syntax
+follows:
+@example
+@var{COMMAND_FLAG}  ::= "enter" | "leave"
+@var{COMMAND_FLAGS} ::= @var{COMMAND_FLAG} [(+|"|")@var{COMMAND_FLAG}]
+@var{COMMAND}       ::= ["[" @var{COMMAND_FLAGS} "]"] @var{TARGET} @var{COMMAND} [@var{ARG}]
+@var{COMMANDS}      ::= @var{COMMAND} [,@var{COMMANDS}]
+@var{INTERVAL}      ::= @var{START}[-@var{END}] @var{COMMANDS}
+@var{INTERVALS}     ::= @var{INTERVAL}[;@var{INTERVALS}]
+@end example
+
+@subsection Examples
+
+@itemize
+@item
+Specify audio tempo change at second 4:
+@example
+asendcmd=c='4.0 atempo tempo 1.5',atempo
+@end example
+
+@item
+Specify a list of drawtext and hue commands in a file.
+@example
+# show text in the interval 5-10
+5.0-10.0 [enter] drawtext reinit 'fontfile=FreeSerif.ttf:text=hello world',
+         [leave] drawtext reinit 'fontfile=FreeSerif.ttf:text=';
+
+# desaturate the image in the interval 15-20
+15.0-20.0 [enter] hue reinit s=0,
+          [enter] drawtext reinit 'fontfile=FreeSerif.ttf:text=nocolor',
+          [leave] hue reinit s=1,
+          [leave] drawtext reinit 'fontfile=FreeSerif.ttf:text=color';
+
+# apply an exponential saturation fade-out effect, starting from time 25
+25 [enter] hue s=exp(t-25)
+@end example
+
+A filtergraph allowing to read and process the above command list
+stored in a file @file{test.cmd}, can be specified with:
+@example
+sendcmd=f=test.cmd,drawtext=fontfile=FreeSerif.ttf:text='',hue
+@end example
+@end itemize
+
 @section asetpts, setpts
 
 Change the PTS (presentation timestamp) of the input frames.
@@ -4194,6 +4396,9 @@ Accept in input an expression evaluated through the eval API, which
 can contain the following constants:
 
 @table @option
+@item FRAME_RATE
+frame rate, only defined for constant frame-rate video
+
 @item PTS
 the presentation timestamp in input
 
@@ -4281,6 +4486,53 @@ Apply an offset of 10 seconds to the input PTS:
 setpts=PTS+10/TB
 @end example
 @end itemize
+
+@section ebur128
+
+EBU R128 scanner filter. This filter takes an audio stream as input and outputs
+it unchanged. By default, it logs a message at a frequency of 10Hz with the
+Momentary loudness (identified by @code{M}), Short-term loudness (@code{S}),
+Integrated loudness (@code{I}) and Loudness Range (@code{LRA}).
+
+The filter also has a video output (see the @var{video} option) with a real
+time graph to observe the loudness evolution. The graphic contains the logged
+message mentioned above, so it is not printed anymore when this option is set,
+unless the verbose logging is set. The main graphing area contains the
+short-term loudness (3 seconds of analysis), and the gauge on the right is for
+the momentary loudness (400 milliseconds).
+
+More information about the Loudness Recommendation EBU R128 on
+@url{http://tech.ebu.ch/loudness}.
+
+The filter accepts the following named parameters:
+
+@table @option
+
+@item video
+Activate the video output. The audio stream is passed unchanged whether this
+option is set or no. The video stream will be the first output stream if
+activated. Default is @code{0}.
+
+@item size
+Set the video size. This option is for video only. Default and minimum
+resolution is @code{640x480}.
+
+@item meter
+Set the EBU scale meter. Default is @code{9}. Common values are @code{9} and
+@code{18}, respectively for EBU scale meter +9 and EBU scale meter +18. Any
+other integer value between this range is allowed.
+
+@end table
+
+Example of real-time graph using @command{ffplay}, with a EBU scale meter +18:
+@example
+ffplay -f lavfi -i "amovie=input.mp3,ebur128=video=1:meter=18 [out0][out1]"
+@end example
+
+Run an analysis with @command{ffmpeg}:
+@example
+ffmpeg -nostats -i input.mp3 -filter_complex ebur128 -f null -
+@end example
 
 @section settb, asettb
 

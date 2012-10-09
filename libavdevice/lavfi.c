@@ -46,6 +46,7 @@ typedef struct {
     AVFilterGraph *graph;
     AVFilterContext **sinks;
     int *sink_stream_map;
+    int *sink_eof;
     int *stream_sink_map;
 } LavfiContext;
 
@@ -72,6 +73,7 @@ av_cold static int lavfi_read_close(AVFormatContext *avctx)
     LavfiContext *lavfi = avctx->priv_data;
 
     av_freep(&lavfi->sink_stream_map);
+    av_freep(&lavfi->sink_eof);
     av_freep(&lavfi->stream_sink_map);
     av_freep(&lavfi->sinks);
     avfilter_graph_free(&lavfi->graph);
@@ -84,7 +86,7 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx)
     LavfiContext *lavfi = avctx->priv_data;
     AVFilterInOut *input_links = NULL, *output_links = NULL, *inout;
     AVFilter *buffersink, *abuffersink;
-    int *pix_fmts = create_all_formats(PIX_FMT_NB);
+    int *pix_fmts = create_all_formats(AV_PIX_FMT_NB);
     enum AVMediaType type;
     int ret = 0, i, n;
 
@@ -119,6 +121,8 @@ av_cold static int lavfi_read_header(AVFormatContext *avctx)
     for (n = 0, inout = output_links; inout; n++, inout = inout->next);
 
     if (!(lavfi->sink_stream_map = av_malloc(sizeof(int) * n)))
+        FAIL(AVERROR(ENOMEM));
+    if (!(lavfi->sink_eof = av_mallocz(sizeof(int) * n)))
         FAIL(AVERROR(ENOMEM));
     if (!(lavfi->stream_sink_map = av_malloc(sizeof(int) * n)))
         FAIL(AVERROR(ENOMEM));
@@ -284,9 +288,18 @@ static int lavfi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
     for (i = 0; i < avctx->nb_streams; i++) {
         AVRational tb = lavfi->sinks[i]->inputs[0]->time_base;
         double d;
-        int ret = av_buffersink_get_buffer_ref(lavfi->sinks[i],
-                                               &ref, AV_BUFFERSINK_FLAG_PEEK);
-        if (ret < 0)
+        int ret;
+
+        if (lavfi->sink_eof[i])
+            continue;
+
+        ret = av_buffersink_get_buffer_ref(lavfi->sinks[i],
+                                       &ref, AV_BUFFERSINK_FLAG_PEEK);
+        if (ret == AVERROR_EOF) {
+            av_dlog(avctx, "EOF sink_idx:%d\n", i);
+            lavfi->sink_eof[i] = 1;
+            continue;
+        } else if (ret < 0)
             return ret;
         d = av_rescale_q(ref->pts, tb, AV_TIME_BASE_Q);
         av_dlog(avctx, "sink_idx:%d time:%f\n", i, d);
@@ -296,6 +309,9 @@ static int lavfi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
             min_pts_sink_idx = i;
         }
     }
+    if (min_pts == DBL_MAX)
+        return AVERROR_EOF;
+
     av_dlog(avctx, "min_pts_sink_idx:%i\n", min_pts_sink_idx);
 
     av_buffersink_get_buffer_ref(lavfi->sinks[min_pts_sink_idx], &ref, 0);
@@ -325,7 +341,6 @@ static int lavfi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
     pkt->pos = ref->pos;
     pkt->size = size;
     avfilter_unref_buffer(ref);
-
     return size;
 }
 
@@ -334,8 +349,8 @@ static int lavfi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 
 static const AVOption options[] = {
-    { "graph", "Libavfilter graph", OFFSET(graph_str),  AV_OPT_TYPE_STRING, {.str = NULL }, 0,  0, DEC },
-    { "dumpgraph", "Dump graph to stderr", OFFSET(dump_graph), AV_OPT_TYPE_STRING, {.str = NULL}, 0,  0, DEC },
+    { "graph",     "set libavfilter graph", OFFSET(graph_str),  AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "dumpgraph", "dump graph to stderr",  OFFSET(dump_graph), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { NULL },
 };
 

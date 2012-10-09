@@ -36,7 +36,6 @@
 #include "mathops.h"
 #include "mpegvideo.h"
 #include "config.h"
-#include "ac3dec.h"
 #include "vorbis.h"
 #include "diracdsp.h"
 
@@ -353,7 +352,7 @@ static int sse16_c(void *v, uint8_t *pix1, uint8_t *pix2, int line_size, int h)
     return s;
 }
 
-static void diff_pixels_c(DCTELEM *restrict block, const uint8_t *s1,
+static void diff_pixels_c(DCTELEM *av_restrict block, const uint8_t *s1,
                           const uint8_t *s2, int stride){
     int i;
 
@@ -374,7 +373,7 @@ static void diff_pixels_c(DCTELEM *restrict block, const uint8_t *s1,
 }
 
 
-static void put_pixels_clamped_c(const DCTELEM *block, uint8_t *restrict pixels,
+static void put_pixels_clamped_c(const DCTELEM *block, uint8_t *av_restrict pixels,
                                  int line_size)
 {
     int i;
@@ -395,7 +394,7 @@ static void put_pixels_clamped_c(const DCTELEM *block, uint8_t *restrict pixels,
     }
 }
 
-static void put_pixels_clamped4_c(const DCTELEM *block, uint8_t *restrict pixels,
+static void put_pixels_clamped4_c(const DCTELEM *block, uint8_t *av_restrict pixels,
                                  int line_size)
 {
     int i;
@@ -412,7 +411,7 @@ static void put_pixels_clamped4_c(const DCTELEM *block, uint8_t *restrict pixels
     }
 }
 
-static void put_pixels_clamped2_c(const DCTELEM *block, uint8_t *restrict pixels,
+static void put_pixels_clamped2_c(const DCTELEM *block, uint8_t *av_restrict pixels,
                                  int line_size)
 {
     int i;
@@ -428,7 +427,7 @@ static void put_pixels_clamped2_c(const DCTELEM *block, uint8_t *restrict pixels
 }
 
 static void put_signed_pixels_clamped_c(const DCTELEM *block,
-                                        uint8_t *restrict pixels,
+                                        uint8_t *av_restrict pixels,
                                         int line_size)
 {
     int i, j;
@@ -448,7 +447,7 @@ static void put_signed_pixels_clamped_c(const DCTELEM *block,
     }
 }
 
-static void add_pixels_clamped_c(const DCTELEM *block, uint8_t *restrict pixels,
+static void add_pixels_clamped_c(const DCTELEM *block, uint8_t *av_restrict pixels,
                                  int line_size)
 {
     int i;
@@ -468,7 +467,7 @@ static void add_pixels_clamped_c(const DCTELEM *block, uint8_t *restrict pixels,
     }
 }
 
-static void add_pixels_clamped4_c(const DCTELEM *block, uint8_t *restrict pixels,
+static void add_pixels_clamped4_c(const DCTELEM *block, uint8_t *av_restrict pixels,
                           int line_size)
 {
     int i;
@@ -484,7 +483,7 @@ static void add_pixels_clamped4_c(const DCTELEM *block, uint8_t *restrict pixels
     }
 }
 
-static void add_pixels_clamped2_c(const DCTELEM *block, uint8_t *restrict pixels,
+static void add_pixels_clamped2_c(const DCTELEM *block, uint8_t *av_restrict pixels,
                           int line_size)
 {
     int i;
@@ -1813,7 +1812,7 @@ static int try_8x8basis_c(int16_t rem[64], int16_t weight[64], int16_t basis[64]
         int b= rem[i] + ((basis[i]*scale + (1<<(BASIS_SHIFT - RECON_SHIFT-1)))>>(BASIS_SHIFT - RECON_SHIFT));
         int w= weight[i];
         b>>= RECON_SHIFT;
-        assert(-512<b && b<512);
+        av_assert2(-512<b && b<512);
 
         sum += (w*b)*(w*b)>>4;
     }
@@ -2072,7 +2071,7 @@ static int hadamard8_diff8x8_c(/*MpegEncContext*/ void *s, uint8_t *dst, uint8_t
     int temp[64];
     int sum=0;
 
-    assert(h==8);
+    av_assert2(h==8);
 
     for(i=0; i<8; i++){
         //FIXME try pointer walks
@@ -2117,7 +2116,7 @@ static int hadamard8_intra8x8_c(/*MpegEncContext*/ void *s, uint8_t *src, uint8_
     int temp[64];
     int sum=0;
 
-    assert(h==8);
+    av_assert2(h==8);
 
     for(i=0; i<8; i++){
         //FIXME try pointer walks
@@ -2164,7 +2163,7 @@ static int dct_sad8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *src2
     MpegEncContext * const s= (MpegEncContext *)c;
     LOCAL_ALIGNED_16(DCTELEM, temp, [64]);
 
-    assert(h==8);
+    av_assert2(h==8);
 
     s->dsp.diff_pixels(temp, src1, src2, stride);
     s->dsp.fdct(temp);
@@ -2229,7 +2228,7 @@ static int dct_max8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *src2
     LOCAL_ALIGNED_16(DCTELEM, temp, [64]);
     int sum=0, i;
 
-    assert(h==8);
+    av_assert2(h==8);
 
     s->dsp.diff_pixels(temp, src1, src2, stride);
     s->dsp.fdct(temp);
@@ -2246,7 +2245,7 @@ static int quant_psnr8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *s
     DCTELEM * const bak = temp+64;
     int sum=0, i;
 
-    assert(h==8);
+    av_assert2(h==8);
     s->mb_intra=0;
 
     s->dsp.diff_pixels(temp, src1, src2, stride);
@@ -2274,7 +2273,7 @@ static int rd8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *src2, int
     uint8_t * length;
     uint8_t * last_length;
 
-    assert(h==8);
+    av_assert2(h==8);
 
     copy_block8(lsrc1, src1, 8, stride, 8);
     copy_block8(lsrc2, src2, 8, stride, 8);
@@ -2316,7 +2315,7 @@ static int rd8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *src2, int
 
         level= temp[i] + 64;
 
-        assert(level - 64);
+        av_assert2(level - 64);
 
         if((level&(~127)) == 0){
             bits+= last_length[UNI_AC_ENC_INDEX(run, level)];
@@ -2348,7 +2347,7 @@ static int bit8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *src2, in
     uint8_t * length;
     uint8_t * last_length;
 
-    assert(h==8);
+    av_assert2(h==8);
 
     s->dsp.diff_pixels(temp, src1, src2, stride);
 
@@ -2387,7 +2386,7 @@ static int bit8x8_c(/*MpegEncContext*/ void *c, uint8_t *src1, uint8_t *src2, in
 
         level= temp[i] + 64;
 
-        assert(level - 64);
+        av_assert2(level - 64);
 
         if((level&(~127)) == 0){
             bits+= last_length[UNI_AC_ENC_INDEX(run, level)];
@@ -3032,9 +3031,6 @@ av_cold void ff_dsputil_init(DSPContext* c, AVCodecContext *avctx)
 
 #if CONFIG_VORBIS_DECODER
     c->vorbis_inverse_coupling = ff_vorbis_inverse_coupling;
-#endif
-#if CONFIG_AC3_DECODER
-    c->ac3_downmix = ff_ac3_downmix_c;
 #endif
     c->vector_fmul_reverse = vector_fmul_reverse_c;
     c->vector_fmul_add = vector_fmul_add_c;

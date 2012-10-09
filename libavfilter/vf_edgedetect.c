@@ -68,7 +68,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum PixelFormat pix_fmts[] = {PIX_FMT_GRAY8, PIX_FMT_NONE};
+    static const enum AVPixelFormat pix_fmts[] = {AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE};
     ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
     return 0;
 }
@@ -142,7 +142,7 @@ static int get_rounded_direction(int gx, int gy)
      * Gy/Gx is the tangent of the angle (theta), so Gy/Gx is compared against
      * <ref-angle>, or more simply Gy against <ref-angle>*Gx
      *
-     * Gx and Gy bounds = [1020;1020], using 16-bit arithmetic:
+     * Gx and Gy bounds = [-1020;1020], using 16-bit arithmetic:
      *   round((sqrt(2)-1) * (1<<16)) =  27146
      *   round((sqrt(2)+1) * (1<<16)) = 158218
      */

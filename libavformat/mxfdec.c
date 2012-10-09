@@ -154,7 +154,7 @@ typedef struct {
     int linked_track_id;
     uint8_t *extradata;
     int extradata_size;
-    enum PixelFormat pix_fmt;
+    enum AVPixelFormat pix_fmt;
 } MXFDescriptor;
 
 typedef struct {
@@ -801,7 +801,7 @@ static void mxf_read_pixel_layout(AVIOContext *pb, MXFDescriptor *descriptor)
 static int mxf_read_generic_descriptor(void *arg, AVIOContext *pb, int tag, int size, UID uid, int64_t klv_offset)
 {
     MXFDescriptor *descriptor = arg;
-    descriptor->pix_fmt = PIX_FMT_NONE;
+    descriptor->pix_fmt = AV_PIX_FMT_NONE;
     switch(tag) {
     case 0x3F01:
         descriptor->sub_descriptors_count = avio_rb32(pb);
@@ -1518,17 +1518,17 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             }
             if (st->codec->codec_id == AV_CODEC_ID_RAWVIDEO) {
                 st->codec->pix_fmt = descriptor->pix_fmt;
-                if (st->codec->pix_fmt == PIX_FMT_NONE) {
+                if (st->codec->pix_fmt == AV_PIX_FMT_NONE) {
                     pix_fmt_ul = mxf_get_codec_ul(ff_mxf_pixel_format_uls,
                                                   &descriptor->essence_codec_ul);
                     st->codec->pix_fmt = pix_fmt_ul->id;
-                    if (st->codec->pix_fmt == PIX_FMT_NONE) {
+                    if (st->codec->pix_fmt == AV_PIX_FMT_NONE) {
                         /* support files created before RP224v10 by defaulting to UYVY422
                            if subsampling is 4:2:2 and component depth is 8-bit */
                         if (descriptor->horiz_subsampling == 2 &&
                             descriptor->vert_subsampling == 1 &&
                             descriptor->component_depth == 8) {
-                            st->codec->pix_fmt = PIX_FMT_UYVY422;
+                            st->codec->pix_fmt = AV_PIX_FMT_UYVY422;
                         }
                     }
                 }
@@ -1536,7 +1536,8 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             st->need_parsing = AVSTREAM_PARSE_HEADERS;
         } else if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
             container_ul = mxf_get_codec_ul(mxf_sound_essence_container_uls, essence_container_ul);
-            if (st->codec->codec_id == AV_CODEC_ID_NONE)
+            /* Only overwrite existing codec ID if it is unset or A-law, which is the default according to SMPTE RP 224. */
+            if (st->codec->codec_id == AV_CODEC_ID_NONE || (st->codec->codec_id == AV_CODEC_ID_PCM_ALAW && container_ul->id != AV_CODEC_ID_NONE))
                 st->codec->codec_id = container_ul->id;
             st->codec->channels = descriptor->channels;
             st->codec->bits_per_coded_sample = descriptor->bits_per_sample;
@@ -2202,7 +2203,7 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
     int ret;
     MXFIndexTable *t;
 
-    if (mxf->index_tables <= 0) {
+    if (mxf->nb_index_tables <= 0) {
     if (!s->bit_rate)
         return AVERROR_INVALIDDATA;
     if (sample_time < 0)

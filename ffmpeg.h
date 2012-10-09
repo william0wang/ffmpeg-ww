@@ -157,6 +157,8 @@ typedef struct OptionsContext {
     int        nb_presets;
     SpecifierOpt *copy_initial_nonkeyframes;
     int        nb_copy_initial_nonkeyframes;
+    SpecifierOpt *copy_prior_start;
+    int        nb_copy_prior_start;
     SpecifierOpt *filters;
     int        nb_filters;
     SpecifierOpt *fix_sub_duration;
@@ -232,7 +234,6 @@ typedef struct InputStream {
 
     int fix_sub_duration;
     struct { /* previous decoded subtitle and related variables */
-        int64_t pts;
         int got_output;
         int ret;
         AVSubtitle subtitle;
@@ -327,6 +328,7 @@ typedef struct OutputStream {
     int stream_copy;
     const char *attachment_filename;
     int copy_initial_nonkeyframes;
+    int copy_prior_start;
 
     int keep_pix_fmt;
 } OutputStream;
@@ -396,7 +398,7 @@ void assert_avoptions(AVDictionary *m);
 
 int guess_input_channel_layout(InputStream *ist);
 
-enum PixelFormat choose_pixel_fmt(AVStream *st, AVCodec *codec, enum PixelFormat target);
+enum AVPixelFormat choose_pixel_fmt(AVStream *st, AVCodec *codec, enum AVPixelFormat target);
 void choose_sample_fmt(AVStream *st, AVCodec *codec);
 
 int configure_filtergraph(FilterGraph *fg);

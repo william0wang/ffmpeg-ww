@@ -131,6 +131,9 @@ typedef struct AVFilterBufferRefVideoProps {
     int top_field_first;        ///< field order
     enum AVPictureType pict_type; ///< picture type of the frame
     int key_frame;              ///< 1 -> keyframe, 0-> not
+    int qp_table_linesize;                ///< qp_table stride
+    int qp_table_size;            ///< qp_table size
+    int8_t *qp_table;             ///< array of Quantization Parameters
 } AVFilterBufferRefVideoProps;
 
 /**
@@ -406,10 +409,6 @@ const char *avfilter_pad_get_name(AVFilterPad *pads, int pad_idx);
  * @return type of the pad_idx'th pad in pads
  */
 enum AVMediaType avfilter_pad_get_type(AVFilterPad *pads, int pad_idx);
-
-/** default handler for end_frame() for video inputs */
-attribute_deprecated
-int  avfilter_default_end_frame(AVFilterLink *link);
 
 /**
  * Filter definition. This defines the pads a filter contains, and all the
@@ -754,7 +753,7 @@ int avfilter_config_links(AVFilterContext *filter);
  */
 AVFilterBufferRef *
 avfilter_get_video_buffer_ref_from_arrays(uint8_t * const data[4], const int linesize[4], int perms,
-                                          int w, int h, enum PixelFormat format);
+                                          int w, int h, enum AVPixelFormat format);
 
 /**
  * Create an audio buffer reference wrapped around an already

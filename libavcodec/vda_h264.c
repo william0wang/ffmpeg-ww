@@ -24,9 +24,9 @@
 #include <CoreFoundation/CFNumber.h>
 #include <CoreFoundation/CFData.h>
 
+#include "vda.h"
 #include "libavutil/avutil.h"
 #include "h264.h"
-#include "vda.h"
 
 #if FF_API_VDA_ASYNC
 #include <CoreFoundation/CFString.h>
@@ -375,7 +375,7 @@ AVHWAccel ff_h264_vda_hwaccel = {
     .name           = "h264_vda",
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_H264,
-    .pix_fmt        = PIX_FMT_VDA_VLD,
+    .pix_fmt        = AV_PIX_FMT_VDA_VLD,
     .start_frame    = start_frame,
     .decode_slice   = decode_slice,
     .end_frame      = end_frame,

@@ -139,7 +139,7 @@ typedef struct SpecifierOpt {
     } u;
 } SpecifierOpt;
 
-typedef struct {
+typedef struct OptionDef {
     const char *name;
     int flags;
 #define HAS_ARG    0x0001
@@ -411,14 +411,8 @@ FILE *get_preset_file(char *filename, size_t filename_size,
                       const char *preset_name, int is_path, const char *codec_name);
 
 /**
- * Do all the necessary cleanup and abort.
- * This function is implemented in the avtools, not cmdutils.
- */
-av_noreturn void exit_program(int ret);
-
-/**
  * Realloc array to hold new_size elements of elem_size.
- * Calls exit_program() on failure.
+ * Calls exit() on failure.
  *
  * @param elem_size size in bytes of each element
  * @param size new element count will be written here
@@ -432,7 +426,7 @@ typedef struct FrameBuffer {
     int  linesize[4];
 
     int h, w;
-    enum PixelFormat pix_fmt;
+    enum AVPixelFormat pix_fmt;
 
     int refcount;
     struct FrameBuffer **pool;  ///< head of the buffer pool

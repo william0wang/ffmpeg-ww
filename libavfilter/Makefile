@@ -36,6 +36,7 @@ OBJS = allfilters.o                                                     \
        formats.o                                                        \
        graphdump.o                                                      \
        graphparser.o                                                    \
+       sink_buffer.o                                                    \
        src_buffer.o                                                     \
        transform.o                                                      \
        vf_scale.o                                                       \
@@ -53,6 +54,7 @@ OBJS-$(CONFIG_AMERGE_FILTER)                 += af_amerge.o
 OBJS-$(CONFIG_AMIX_FILTER)                   += af_amix.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
+OBJS-$(CONFIG_ASENDCMD_FILTER)               += f_sendcmd.o
 OBJS-$(CONFIG_ASETNSAMPLES_FILTER)           += af_asetnsamples.o
 OBJS-$(CONFIG_ASETPTS_FILTER)                += f_setpts.o
 OBJS-$(CONFIG_ASETTB_FILTER)                 += f_settb.o
@@ -64,6 +66,7 @@ OBJS-$(CONFIG_ATEMPO_FILTER)                 += af_atempo.o
 OBJS-$(CONFIG_CHANNELMAP_FILTER)             += af_channelmap.o
 OBJS-$(CONFIG_CHANNELSPLIT_FILTER)           += af_channelsplit.o
 OBJS-$(CONFIG_EARWAX_FILTER)                 += af_earwax.o
+OBJS-$(CONFIG_EBUR128_FILTER)                += f_ebur128.o
 OBJS-$(CONFIG_JOIN_FILTER)                   += af_join.o
 OBJS-$(CONFIG_PAN_FILTER)                    += af_pan.o
 OBJS-$(CONFIG_RESAMPLE_FILTER)               += af_resample.o
@@ -75,8 +78,6 @@ OBJS-$(CONFIG_AEVALSRC_FILTER)               += asrc_aevalsrc.o
 OBJS-$(CONFIG_ANULLSRC_FILTER)               += asrc_anullsrc.o
 OBJS-$(CONFIG_FLITE_FILTER)                  += asrc_flite.o
 
-OBJS-$(CONFIG_ABUFFERSINK_FILTER)            += sink_buffer.o
-OBJS-$(CONFIG_FFABUFFERSINK_FILTER)          += sink_buffer.o
 OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
 
 OBJS-$(CONFIG_ASS_FILTER)                    += vf_ass.o
@@ -122,6 +123,7 @@ OBJS-$(CONFIG_PIXDESCTEST_FILTER)            += vf_pixdesctest.o
 OBJS-$(CONFIG_REMOVELOGO_FILTER)             += bbox.o lswsutils.o lavfutils.o vf_removelogo.o
 OBJS-$(CONFIG_SCALE_FILTER)                  += vf_scale.o
 OBJS-$(CONFIG_SELECT_FILTER)                 += vf_select.o
+OBJS-$(CONFIG_SENDCMD_FILTER)                += f_sendcmd.o
 OBJS-$(CONFIG_SETDAR_FILTER)                 += vf_aspect.o
 OBJS-$(CONFIG_SETFIELD_FILTER)               += vf_setfield.o
 OBJS-$(CONFIG_SETPTS_FILTER)                 += f_setpts.o
@@ -152,8 +154,6 @@ OBJS-$(CONFIG_RGBTESTSRC_FILTER)             += vsrc_testsrc.o
 OBJS-$(CONFIG_SMPTEBARS_FILTER)              += vsrc_testsrc.o
 OBJS-$(CONFIG_TESTSRC_FILTER)                += vsrc_testsrc.o
 
-OBJS-$(CONFIG_BUFFERSINK_FILTER)             += sink_buffer.o
-OBJS-$(CONFIG_FFBUFFERSINK_FILTER)           += sink_buffer.o
 OBJS-$(CONFIG_NULLSINK_FILTER)               += vsink_nullsink.o
 
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/mp_image.o

@@ -32,6 +32,7 @@ HEADERS = adler32.h                                                     \
           md5.h                                                         \
           mem.h                                                         \
           dict.h                                                        \
+          old_pix_fmts.h                                                \
           opt.h                                                         \
           parseutils.h                                                  \
           pixdesc.h                                                     \
@@ -92,10 +93,12 @@ OBJS = adler32.o                                                        \
        timecode.o                                                       \
        tree.o                                                           \
        utils.o                                                          \
+       xga_font_data.o                                                  \
        xtea.o                                                           \
 
-OBJS-$(HAVE_MSVCRT) += ../compat/msvcrt/snprintf.o                      \
-                       ../compat/strtod.o
+OBJS-$(HAVE_BROKEN_SNPRINTF) += ../compat/msvcrt/snprintf.o
+
+OBJS-$(HAVE_MSVCRT) += ../compat/strtod.o
 
 TESTPROGS = adler32                                                     \
             aes                                                         \

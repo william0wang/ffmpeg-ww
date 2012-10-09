@@ -1260,6 +1260,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_INTRA_ONLY,
     },
     {
+        .id        = AV_CODEC_ID_TARGA_Y216,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "targa_y216",
+        .long_name = NULL_IF_CONFIG_SMALL("Pinnacle TARGA CineWave YUV16"),
+        .props     = AV_CODEC_PROP_INTRA_ONLY,
+    },
+    {
         .id        = AV_CODEC_ID_V308,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "v308",
@@ -2242,7 +2249,15 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_OPUS,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "opus",
-        .long_name = NULL_IF_CONFIG_SMALL("Opus"),
+        .long_name = NULL_IF_CONFIG_SMALL("Opus (Opus Interactive Audio Codec)"),
+        .props     = AV_CODEC_PROP_LOSSY,
+    },
+    {
+        .id        = AV_CODEC_ID_TAK,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "tak",
+        .long_name = NULL_IF_CONFIG_SMALL("TAK (Tom's lossless Audio Kompressor)"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
     },
 
     /* subtitle codecs */
@@ -2341,6 +2356,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .type      = AVMEDIA_TYPE_SUBTITLE,
         .name      = "subviewer",
         .long_name = NULL_IF_CONFIG_SMALL("SubViewer subtitle"),
+    },
+    {
+        .id        = AV_CODEC_ID_WEBVTT,
+        .type      = AVMEDIA_TYPE_SUBTITLE,
+        .name      = "webvtt",
+        .long_name = NULL_IF_CONFIG_SMALL("WebVTT subtitle"),
     },
     {
         .id        = AV_CODEC_ID_BINTEXT,

@@ -221,6 +221,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (SVQ1, svq1);
     REGISTER_DECODER (SVQ3, svq3);
     REGISTER_ENCDEC  (TARGA, targa);
+    REGISTER_DECODER (TARGA_Y216, targa_y216);
     REGISTER_DECODER (THEORA, theora);
     REGISTER_DECODER (THP, thp);
     REGISTER_DECODER (TIERTEXSEQVIDEO, tiertexseqvideo);
@@ -327,6 +328,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (SMACKAUD, smackaud);
     REGISTER_ENCDEC  (SONIC, sonic);
     REGISTER_ENCODER (SONIC_LS, sonic_ls);
+    REGISTER_DECODER (TAK, tak);
     REGISTER_DECODER (TRUEHD, truehd);
     REGISTER_DECODER (TRUESPEECH, truespeech);
     REGISTER_DECODER (TTA, tta);
@@ -422,6 +424,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (SRT, srt);
     REGISTER_ENCDEC  (SUBRIP, subrip);
     REGISTER_DECODER (SUBVIEWER, subviewer);
+    REGISTER_DECODER (WEBVTT, webvtt);
     REGISTER_ENCDEC  (XSUB, xsub);
 
     /* external libraries */
@@ -435,7 +438,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (LIBOPENCORE_AMRNB, libopencore_amrnb);
     REGISTER_DECODER (LIBOPENCORE_AMRWB, libopencore_amrwb);
     REGISTER_ENCDEC  (LIBOPENJPEG, libopenjpeg);
-    REGISTER_DECODER (LIBOPUS, libopus);
+    REGISTER_ENCDEC  (LIBOPUS, libopus);
     REGISTER_ENCDEC  (LIBSCHROEDINGER, libschroedinger);
     REGISTER_ENCDEC  (LIBSPEEX, libspeex);
     REGISTER_DECODER (LIBSTAGEFRIGHT_H264, libstagefright_h264);
@@ -484,6 +487,7 @@ void avcodec_register_all(void)
     REGISTER_PARSER  (PNM, pnm);
     REGISTER_PARSER  (RV30, rv30);
     REGISTER_PARSER  (RV40, rv40);
+    REGISTER_PARSER  (TAK, tak);
     REGISTER_PARSER  (VC1, vc1);
     REGISTER_PARSER  (VORBIS, vorbis);
     REGISTER_PARSER  (VP3, vp3);

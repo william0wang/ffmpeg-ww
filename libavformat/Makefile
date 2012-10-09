@@ -14,6 +14,7 @@ OBJS = allformats.o         \
        id3v1.o              \
        id3v2.o              \
        metadata.o           \
+       mux.o                \
        options.o            \
        os_support.o         \
        riff.o               \
@@ -277,6 +278,7 @@ OBJS-$(CONFIG_RTP_MUXER)                 += rtp.o         \
                                             rtpenc_amr.o     \
                                             rtpenc_h263.o    \
                                             rtpenc_h263_rfc2190.o \
+                                            rtpenc_jpeg.o \
                                             rtpenc_mpv.o     \
                                             rtpenc.o      \
                                             rtpenc_h264.o \
@@ -293,6 +295,7 @@ OBJS-$(CONFIG_RTPDEC)                    += rdt.o         \
                                             rtpdec_h263_rfc2190.o \
                                             rtpdec_h264.o \
                                             rtpdec_ilbc.o \
+                                            rtpdec_jpeg.o \
                                             rtpdec_latm.o \
                                             rtpdec_mpeg4.o \
                                             rtpdec_qcelp.o \
@@ -317,6 +320,7 @@ OBJS-$(CONFIG_SIFF_DEMUXER)              += siff.o
 OBJS-$(CONFIG_SMACKER_DEMUXER)           += smacker.o
 OBJS-$(CONFIG_SMJPEG_DEMUXER)            += smjpegdec.o smjpeg.o
 OBJS-$(CONFIG_SMJPEG_MUXER)              += smjpegenc.o smjpeg.o
+OBJS-$(CONFIG_SMOOTHSTREAMING_MUXER)     += smoothstreamingenc.o isom.o
 OBJS-$(CONFIG_SMUSH_DEMUXER)             += smush.o
 OBJS-$(CONFIG_SOL_DEMUXER)               += sol.o pcm.o
 OBJS-$(CONFIG_SOX_DEMUXER)               += soxdec.o pcm.o
@@ -329,6 +333,7 @@ OBJS-$(CONFIG_STR_DEMUXER)               += psxstr.o
 OBJS-$(CONFIG_SUBVIEWER_DEMUXER)         += subviewerdec.o
 OBJS-$(CONFIG_SWF_DEMUXER)               += swfdec.o swf.o
 OBJS-$(CONFIG_SWF_MUXER)                 += swfenc.o swf.o
+OBJS-$(CONFIG_TAK_DEMUXER)               += takdec.o apetag.o img2.o rawdec.o
 OBJS-$(CONFIG_THP_DEMUXER)               += thp.o
 OBJS-$(CONFIG_TIERTEXSEQ_DEMUXER)        += tiertexseq.o
 OBJS-$(CONFIG_MKVTIMESTAMP_V2_MUXER)     += mkvtimestamp_v2.o
@@ -352,6 +357,7 @@ OBJS-$(CONFIG_WC3_DEMUXER)               += wc3movie.o
 OBJS-$(CONFIG_WEBM_MUXER)                += matroskaenc.o matroska.o \
                                             isom.o avc.o \
                                             flacenc_header.o avlanguage.o
+OBJS-$(CONFIG_WEBVTT_DEMUXER)            += webvttdec.o
 OBJS-$(CONFIG_WSAUD_DEMUXER)             += westwood_aud.o
 OBJS-$(CONFIG_WSVQA_DEMUXER)             += westwood_vqa.o
 OBJS-$(CONFIG_WTV_DEMUXER)               += wtvdec.o wtv.o asfdec.o asf.o asfcrypt.o \

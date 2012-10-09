@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/avassert.h"
 #include "libavutil/base64.h"
 #include "libavutil/avstring.h"
 #include "libavutil/intreadwrite.h"
@@ -154,8 +155,6 @@ static void rtsp_parse_range_npt(const char *p, int64_t *start, int64_t *end)
         get_word_sep(buf, sizeof(buf), "-", &p);
         av_parse_time(end, buf, 1);
     }
-//    av_log(NULL, AV_LOG_DEBUG, "Range Start: %lld\n", *start);
-//    av_log(NULL, AV_LOG_DEBUG, "Range End: %lld\n", *end);
 }
 
 static int get_sockaddr(const char *buf, struct sockaddr_storage *sock)
@@ -617,7 +616,7 @@ int ff_rtsp_open_transport_ctx(AVFormatContext *s, RTSPStream *rtsp_st)
         s->ctx_flags |= AVFMTCTX_NOHEADER;
 
     if (s->oformat && CONFIG_RTSP_MUXER) {
-        int ret = ff_rtp_chain_mux_open(&rtsp_st->transport_priv, s, st,
+        int ret = ff_rtp_chain_mux_open((AVFormatContext **)&rtsp_st->transport_priv, s, st,
                                         rtsp_st->rtp_handle,
                                         RTSP_TCP_MAX_PACKET_SIZE);
         /* Ownership of rtp_handle is passed to the rtp mux context */
@@ -1793,7 +1792,8 @@ int ff_rtsp_fetch_packet(AVFormatContext *s, AVPacket *pkt)
                 rt->recvbuf_pos += ret;
                 ret = rt->recvbuf_pos < rt->recvbuf_len;
             }
-        }
+        } else
+            av_assert0(0);
         if (ret == 0) {
             rt->cur_transport_priv = NULL;
             return 0;

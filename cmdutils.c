@@ -29,6 +29,7 @@
    references to libraries that are not being built. */
 
 #include "config.h"
+#include "compat/va_copy.h"
 #include "libavformat/avformat.h"
 #include "libavfilter/avfilter.h"
 #include "libavdevice/avdevice.h"
@@ -125,7 +126,7 @@ double parse_number_or_die(const char *context, const char *numstr, int type,
     else
         return d;
     av_log(NULL, AV_LOG_FATAL, error, context, numstr, min, max);
-    exit_program(1);
+    exit(1);
     return 0;
 }
 
@@ -136,7 +137,7 @@ int64_t parse_time_or_die(const char *context, const char *timestr,
     if (av_parse_time(&us, timestr, is_duration) < 0) {
         av_log(NULL, AV_LOG_FATAL, "Invalid %s specification for %s: %s\n",
                is_duration ? "duration" : "date", context, timestr);
-        exit_program(1);
+        exit(1);
     }
     return us;
 }
@@ -324,7 +325,7 @@ int parse_option(void *optctx, const char *opt, const char *arg,
         }
     }
     if (po->flags & OPT_EXIT)
-        exit_program(0);
+        exit(0);
     return !!(po->flags & HAS_ARG);
 }
 
@@ -350,7 +351,7 @@ void parse_options(void *optctx, int argc, char **argv, const OptionDef *options
             opt++;
 
             if ((ret = parse_option(optctx, opt, argv[optindex], options)) < 0)
-                exit_program(1);
+                exit(1);
             optindex += ret;
         } else {
             if (parse_arg_function)
@@ -510,7 +511,7 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg)
                "Possible levels are numbers or:\n", arg);
         for (i = 0; i < FF_ARRAY_ELEMS(log_levels); i++)
             av_log(NULL, AV_LOG_FATAL, "\"%s\"\n", log_levels[i].name);
-        exit_program(1);
+        exit(1);
     }
     av_log_set_level(level);
     return 0;
@@ -556,7 +557,7 @@ int opt_max_alloc(void *optctx, const char *opt, const char *arg)
     max = strtol(arg, &tail, 10);
     if (*tail) {
         av_log(NULL, AV_LOG_FATAL, "Invalid max_alloc \"%s\".\n", arg);
-        exit_program(1);
+        exit(1);
     }
     av_max_alloc(max);
     return 0;
@@ -850,8 +851,8 @@ static void print_codec(const AVCodec *c)
         }
         printf("\n");
     }
-    PRINT_CODEC_SUPPORTED(c, pix_fmts, enum PixelFormat, "pixel formats",
-                          PIX_FMT_NONE, GET_PIX_FMT_NAME);
+    PRINT_CODEC_SUPPORTED(c, pix_fmts, enum AVPixelFormat, "pixel formats",
+                          AV_PIX_FMT_NONE, GET_PIX_FMT_NAME);
     PRINT_CODEC_SUPPORTED(c, supported_samplerates, int, "sample rates", 0,
                           GET_SAMPLE_RATE_NAME);
     PRINT_CODEC_SUPPORTED(c, sample_fmts, enum AVSampleFormat, "sample formats",
@@ -889,6 +890,36 @@ static const AVCodec *next_codec_for_id(enum AVCodecID id, const AVCodec *prev,
     return NULL;
 }
 
+static int compare_codec_desc(const void *a, const void *b)
+{
+    const AVCodecDescriptor * const *da = a;
+    const AVCodecDescriptor * const *db = b;
+
+    return (*da)->type != (*db)->type ? (*da)->type - (*db)->type :
+           strcmp((*da)->name, (*db)->name);
+}
+
+static unsigned get_codecs_sorted(const AVCodecDescriptor ***rcodecs)
+{
+    const AVCodecDescriptor *desc = NULL;
+    const AVCodecDescriptor **codecs;
+    unsigned nb_codecs = 0, i = 0;
+
+    while ((desc = avcodec_descriptor_next(desc)))
+        nb_codecs++;
+    if (!(codecs = av_calloc(nb_codecs, sizeof(*codecs)))) {
+        av_log(0, AV_LOG_ERROR, "Out of memory\n");
+        exit(1);
+    }
+    desc = NULL;
+    while ((desc = avcodec_descriptor_next(desc)))
+        codecs[i++] = desc;
+    av_assert0(i == nb_codecs);
+    qsort(codecs, nb_codecs, sizeof(*codecs), compare_codec_desc);
+    *rcodecs = codecs;
+    return nb_codecs;
+}
+
 static void print_codecs_for_id(enum AVCodecID id, int encoder)
 {
     const AVCodec *codec = NULL;
@@ -903,7 +934,8 @@ static void print_codecs_for_id(enum AVCodecID id, int encoder)
 
 int show_codecs(void *optctx, const char *opt, const char *arg)
 {
-    const AVCodecDescriptor *desc = NULL;
+    const AVCodecDescriptor **codecs;
+    unsigned i, nb_codecs = get_codecs_sorted(&codecs);
 
     printf("Codecs:\n"
            " D..... = Decoding supported\n"
@@ -915,7 +947,8 @@ int show_codecs(void *optctx, const char *opt, const char *arg)
            " ....L. = Lossy compression\n"
            " .....S = Lossless compression\n"
            " -------\n");
-    while ((desc = avcodec_descriptor_next(desc))) {
+    for (i = 0; i < nb_codecs; i++) {
+        const AVCodecDescriptor *desc = codecs[i];
         const AVCodec *codec = NULL;
 
         printf(" ");
@@ -947,12 +980,14 @@ int show_codecs(void *optctx, const char *opt, const char *arg)
 
         printf("\n");
     }
+    av_free(codecs);
     return 0;
 }
 
 static void print_codecs(int encoder)
 {
-    const AVCodecDescriptor *desc = NULL;
+    const AVCodecDescriptor **codecs;
+    unsigned i, nb_codecs = get_codecs_sorted(&codecs);
 
     printf("%s:\n"
            " V..... = Video\n"
@@ -965,7 +1000,8 @@ static void print_codecs(int encoder)
            " .....D = Supports direct rendering method 1\n"
            " ------\n",
            encoder ? "Encoders" : "Decoders");
-    while ((desc = avcodec_descriptor_next(desc))) {
+    for (i = 0; i < nb_codecs; i++) {
+        const AVCodecDescriptor *desc = codecs[i];
         const AVCodec *codec = NULL;
 
         while ((codec = next_codec_for_id(desc->id, codec, encoder))) {
@@ -983,6 +1019,7 @@ static void print_codecs(int encoder)
             printf("\n");
         }
     }
+    av_free(codecs);
 }
 
 int show_decoders(void *optctx, const char *opt, const char *arg)
@@ -1040,7 +1077,7 @@ int show_filters(void *optctx, const char *opt, const char *arg)
                 *(descr_cur++) = '>';
             }
             pad = i ? (*filter)->outputs : (*filter)->inputs;
-            for (j = 0; pad[j].name; j++) {
+            for (j = 0; pad && pad[j].name; j++) {
                 if (descr_cur >= descr + sizeof(descr) - 4)
                     break;
                 *(descr_cur++) = get_media_type_char(pad[j].type);
@@ -1057,7 +1094,7 @@ int show_filters(void *optctx, const char *opt, const char *arg)
 
 int show_pix_fmts(void *optctx, const char *opt, const char *arg)
 {
-    enum PixelFormat pix_fmt;
+    enum AVPixelFormat pix_fmt;
 
     printf("Pixel formats:\n"
            "I.... = Supported Input  format for conversion\n"
@@ -1073,7 +1110,7 @@ int show_pix_fmts(void *optctx, const char *opt, const char *arg)
 #   define sws_isSupportedOutput(x) 0
 #endif
 
-    for (pix_fmt = 0; pix_fmt < PIX_FMT_NB; pix_fmt++) {
+    for (pix_fmt = 0; pix_fmt < AV_PIX_FMT_NB; pix_fmt++) {
         const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[pix_fmt];
         if(!pix_desc->name)
             continue;
@@ -1430,13 +1467,13 @@ void *grow_array(void *array, int elem_size, int *size, int new_size)
 {
     if (new_size >= INT_MAX / elem_size) {
         av_log(NULL, AV_LOG_ERROR, "Array too big.\n");
-        exit_program(1);
+        exit(1);
     }
     if (*size < new_size) {
         uint8_t *tmp = av_realloc(array, new_size*elem_size);
         if (!tmp) {
             av_log(NULL, AV_LOG_ERROR, "Could not alloc buffer.\n");
-            exit_program(1);
+            exit(1);
         }
         memset(tmp + *size*elem_size, 0, (new_size-*size) * elem_size);
         *size = new_size;

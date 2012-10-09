@@ -346,4 +346,21 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
 
 void ff_free_stream(AVFormatContext *s, AVStream *st);
 
+/**
+ * Return the frame duration in seconds. Return 0 if not available.
+ */
+void ff_compute_frame_duration(int *pnum, int *pden, AVStream *st,
+                               AVCodecParserContext *pc, AVPacket *pkt);
+
+int ff_get_audio_frame_size(AVCodecContext *enc, int size, int mux);
+
+/**
+ * Chooses a timebase for muxing the specified stream.
+ *
+ * The choosen timebase allows sample accurate timestamps based
+ * on the framerate or sample rate for audio streams. It also is
+ * at least as precisse as 1/min_precission would be.
+ */
+AVRational ff_choose_timebase(AVFormatContext *s, AVStream *st, int min_precission);
+
 #endif /* AVFORMAT_INTERNAL_H */

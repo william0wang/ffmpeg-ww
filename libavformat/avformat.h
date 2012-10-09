@@ -581,7 +581,7 @@ enum AVStreamParseType {
     AVSTREAM_PARSE_FULL_ONCE,  /**< full parsing and repack of the first frame only, only implemented for H.264 currently */
     AVSTREAM_PARSE_FULL_RAW=MKTAG(0,'R','A','W'),       /**< full parsing and repack with timestamp and position generation by parser for raw
                                                              this assumes that each packet in the file contains no demuxer level headers and
-                                                             just codec level data, otherwise position generaion would fail */
+                                                             just codec level data, otherwise position generation would fail */
 };
 
 typedef struct AVIndexEntry {
@@ -809,7 +809,10 @@ typedef struct AVStream {
     unsigned int index_entries_allocated_size;
 
     /**
-     * flag to indicate that probing is requested
+     * stream probing state
+     * -1   -> probing finished
+     *  0   -> no probing requested
+     * rest -> perform probing with request_probe being the minimum score to accept.
      * NOT PART OF PUBLIC API
      */
     int request_probe;
@@ -829,6 +832,13 @@ typedef struct AVStream {
      * its lifetime differs from info which is why its not in that structure.
      */
     int nb_decoded_frames;
+
+    /**
+     * Timestamp offset added to timestamps before muxing
+     * NOT PART OF PUBLIC API
+     */
+    int64_t mux_ts_offset;
+
 } AVStream;
 
 #define AV_PROGRAM_RUNNING 1
@@ -1108,6 +1118,32 @@ typedef struct AVFormatContext {
      */
     int use_wallclock_as_timestamps;
 
+    /**
+     * Avoids negative timestamps during muxing
+     *  0 -> allow negative timestamps
+     *  1 -> avoid negative timestamps
+     * -1 -> choose automatically (default)
+     * Note, this is only works when interleave_packet_per_dts is in use
+     * - encoding: Set by user via AVOptions (NO direct access)
+     * - decoding: unused
+     */
+    int avoid_negative_ts;
+
+    /**
+     * avio flags, used to force AVIO_FLAG_DIRECT.
+     * - encoding: unused
+     * - decoding: Set by user via AVOptions (NO direct access)
+     */
+    int avio_flags;
+
+    /**
+     * The duration field can be estimated through various ways, and this field can be used
+     * to know how the duration was estimated.
+     * - encoding: unused
+     * - decoding: Read by user via AVOptions (NO direct access)
+     */
+    enum AVDurationEstimationMethod duration_estimation_method;
+
     /*****************************************************************
      * All fields below this line are not part of the public API. They
      * may not be used outside of libavformat and can be changed and
@@ -1145,14 +1181,6 @@ typedef struct AVFormatContext {
      */
 #define RAW_PACKET_BUFFER_SIZE 2500000
     int raw_packet_buffer_remaining_size;
-
-    int avio_flags;
-
-    /**
-     * The duration field can be estimated through various ways, and this field can be used
-     * to know how the duration was estimated.
-     */
-    enum AVDurationEstimationMethod duration_estimation_method;
 } AVFormatContext;
 
 /**
@@ -1785,7 +1813,7 @@ int av_get_output_timestamp(struct AVFormatContext *s, int stream,
  *
  * @see av_hex_dump_log, av_pkt_dump2, av_pkt_dump_log2
  */
-void av_hex_dump(FILE *f, uint8_t *buf, int size);
+void av_hex_dump(FILE *f, const uint8_t *buf, int size);
 
 /**
  * Send a nice hexadecimal dump of a buffer to the log.
@@ -1799,7 +1827,7 @@ void av_hex_dump(FILE *f, uint8_t *buf, int size);
  *
  * @see av_hex_dump, av_pkt_dump2, av_pkt_dump_log2
  */
-void av_hex_dump_log(void *avcl, int level, uint8_t *buf, int size);
+void av_hex_dump_log(void *avcl, int level, const uint8_t *buf, int size);
 
 /**
  * Send a nice dump of a packet to the specified file stream.

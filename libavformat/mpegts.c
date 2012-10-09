@@ -123,6 +123,7 @@ struct MpegTSContext {
     unsigned int nb_prg;
     struct Program *prg;
 
+    int8_t crc_validity[NB_PID_MAX];
 
     /** filters for various streams specified by PMT + for the PAT and PMT */
     MpegTSFilter *pids[NB_PID_MAX];
@@ -277,6 +278,7 @@ static int discard_pid(MpegTSContext *ts, unsigned int pid)
 static void write_section_data(AVFormatContext *s, MpegTSFilter *tss1,
                                const uint8_t *buf, int buf_size, int is_start)
 {
+    MpegTSContext *ts = s->priv_data;
     MpegTSSectionFilter *tss = &tss1->u.section_filter;
     int len;
 
@@ -304,10 +306,19 @@ static void write_section_data(AVFormatContext *s, MpegTSFilter *tss1,
     }
 
     if (tss->section_h_size != -1 && tss->section_index >= tss->section_h_size) {
+        int crc_valid = 1;
         tss->end_of_section_reached = 1;
-        if (!tss->check_crc ||
-            av_crc(av_crc_get_table(AV_CRC_32_IEEE), -1,
-                   tss->section_buf, tss->section_h_size) == 0)
+
+        if (tss->check_crc){
+            crc_valid = !av_crc(av_crc_get_table(AV_CRC_32_IEEE), -1, tss->section_buf, tss->section_h_size);
+            if (crc_valid){
+                ts->crc_validity[ tss1->pid ] = 100;
+            }else if(ts->crc_validity[ tss1->pid ] > -10){
+                ts->crc_validity[ tss1->pid ]--;
+            }else
+                crc_valid = 2;
+        }
+        if (crc_valid)
             tss->section_cb(tss1, tss->section_buf, tss->section_h_size);
     }
 }
@@ -423,7 +434,8 @@ static int get_packet_size(const uint8_t *buf, int size)
     score    = analyze(buf, size, TS_PACKET_SIZE, NULL);
     dvhs_score    = analyze(buf, size, TS_DVHS_PACKET_SIZE, NULL);
     fec_score= analyze(buf, size, TS_FEC_PACKET_SIZE, NULL);
-//    av_log(NULL, AV_LOG_DEBUG, "score: %d, dvhs_score: %d, fec_score: %d \n", score, dvhs_score, fec_score);
+    av_dlog(NULL, "score: %d, dvhs_score: %d, fec_score: %d \n",
+            score, dvhs_score, fec_score);
 
     if     (score > fec_score && score > dvhs_score) return TS_PACKET_SIZE;
     else if(dvhs_score > score && dvhs_score > fec_score) return TS_DVHS_PACKET_SIZE;
@@ -812,7 +824,8 @@ static int mpegts_push_data(MpegTSFilter *filter,
                     code = pes->header[3] | 0x100;
                     av_dlog(pes->stream, "pid=%x pes_code=%#x\n", pes->pid, code);
 
-                    if ((pes->st && pes->st->discard == AVDISCARD_ALL) ||
+                    if ((pes->st && pes->st->discard == AVDISCARD_ALL &&
+                         (!pes->sub_st || pes->sub_st->discard == AVDISCARD_ALL)) ||
                         code == 0x1be) /* padding_stream */
                         goto skip;
 
@@ -1412,7 +1425,7 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
     int i;
 
     av_dlog(ts->stream, "PMT: len %i\n", section_len);
-    hex_dump_debug(ts->stream, (uint8_t *)section, section_len);
+    hex_dump_debug(ts->stream, section, section_len);
 
     p_end = section + section_len - 4;
     p = section;
@@ -1551,7 +1564,7 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
     AVProgram *program;
 
     av_dlog(ts->stream, "PAT:\n");
-    hex_dump_debug(ts->stream, (uint8_t *)section, section_len);
+    hex_dump_debug(ts->stream, section, section_len);
 
     p_end = section + section_len - 4;
     p = section;
@@ -1599,7 +1612,7 @@ static void sdt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
     char *name, *provider_name;
 
     av_dlog(ts->stream, "SDT:\n");
-    hex_dump_debug(ts->stream, (uint8_t *)section, section_len);
+    hex_dump_debug(ts->stream, section, section_len);
 
     p_end = section + section_len - 4;
     p = section;
@@ -1877,7 +1890,8 @@ static int mpegts_probe(AVProbeData *p)
     score     = analyze(p->buf, TS_PACKET_SIZE     *check_count, TS_PACKET_SIZE     , NULL)*CHECK_COUNT/check_count;
     dvhs_score= analyze(p->buf, TS_DVHS_PACKET_SIZE*check_count, TS_DVHS_PACKET_SIZE, NULL)*CHECK_COUNT/check_count;
     fec_score = analyze(p->buf, TS_FEC_PACKET_SIZE *check_count, TS_FEC_PACKET_SIZE , NULL)*CHECK_COUNT/check_count;
-//    av_log(NULL, AV_LOG_DEBUG, "score: %d, dvhs_score: %d, fec_score: %d \n", score, dvhs_score, fec_score);
+    av_dlog(NULL, "score: %d, dvhs_score: %d, fec_score: %d \n",
+            score, dvhs_score, fec_score);
 
 // we need a clear definition for the returned score otherwise things will become messy sooner or later
     if     (score > fec_score && score > dvhs_score && score > 6) return AVPROBE_SCORE_MAX + score     - CHECK_COUNT;
@@ -2066,6 +2080,7 @@ static int mpegts_read_packet(AVFormatContext *s,
     ts->pkt = pkt;
     ret = handle_packets(ts, 0);
     if (ret < 0) {
+        av_free_packet(ts->pkt);
         /* flush pes data left */
         for (i = 0; i < NB_PID_MAX; i++) {
             if (ts->pids[i] && ts->pids[i]->type == MPEGTS_PES) {

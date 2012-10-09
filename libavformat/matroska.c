@@ -73,6 +73,7 @@ const CodecTags ff_mkv_codec_tags[]={
     {"V_MPEG4/ISO/SP"   , AV_CODEC_ID_MPEG4},
     {"V_MPEG4/ISO/AVC"  , AV_CODEC_ID_H264},
     {"V_MPEG4/MS/V3"    , AV_CODEC_ID_MSMPEG4V3},
+    {"V_PRORES"         , AV_CODEC_ID_PRORES},
     {"V_REAL/RV10"      , AV_CODEC_ID_RV10},
     {"V_REAL/RV20"      , AV_CODEC_ID_RV20},
     {"V_REAL/RV30"      , AV_CODEC_ID_RV30},
@@ -93,6 +94,7 @@ const CodecMime ff_mkv_mime_tags[] = {
     {"image/tiff"                 , AV_CODEC_ID_TIFF},
     {"application/x-truetype-font", AV_CODEC_ID_TTF},
     {"application/x-font"         , AV_CODEC_ID_TTF},
+    {"application/vnd.ms-opentype", AV_CODEC_ID_OTF},
 
     {""                           , AV_CODEC_ID_NONE}
 };
@@ -103,7 +105,7 @@ const AVMetadataConv ff_mkv_metadata_conv[] = {
     { 0 }
 };
 
-const char * const matroska_video_stereo_mode[MATROSKA_VIDEO_STEREO_MODE_COUNT] = {
+const char * const ff_matroska_video_stereo_mode[MATROSKA_VIDEO_STEREO_MODE_COUNT] = {
     "mono",
     "left_right",
     "bottom_top",
@@ -121,7 +123,7 @@ const char * const matroska_video_stereo_mode[MATROSKA_VIDEO_STEREO_MODE_COUNT] 
     "block_rl",
 };
 
-const char * const matroska_video_stereo_plane[MATROSKA_VIDEO_STEREO_PLANE_COUNT] = {
+const char * const ff_matroska_video_stereo_plane[MATROSKA_VIDEO_STEREO_PLANE_COUNT] = {
     "left",
     "right",
     "background",

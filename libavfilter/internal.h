@@ -223,7 +223,7 @@ int64_t *ff_copy_int64_list(const int64_t * const list);
  * @param log_ctx log context
  * @return 0 in case of success, a negative AVERROR code on error
  */
-int ff_parse_pixel_format(enum PixelFormat *ret, const char *arg, void *log_ctx);
+int ff_parse_pixel_format(enum AVPixelFormat *ret, const char *arg, void *log_ctx);
 
 /**
  * Parse a sample rate.
@@ -364,5 +364,9 @@ AVFilterBufferRef *ff_copy_buffer_ref(AVFilterLink *outlink,
  */
 #define FF_INLINK_IDX(link)  ((int)((link)->dstpad - (link)->dst->input_pads))
 #define FF_OUTLINK_IDX(link) ((int)((link)->srcpad - (link)->src->output_pads))
+
+int ff_buffersink_read_compat(AVFilterContext *ctx, AVFilterBufferRef **buf);
+int ff_buffersink_read_samples_compat(AVFilterContext *ctx, AVFilterBufferRef **pbuf,
+                                      int nb_samples);
 
 #endif /* AVFILTER_INTERNAL_H */

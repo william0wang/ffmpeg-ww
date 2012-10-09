@@ -749,7 +749,7 @@ static void decode_mb_p(AVSContext *h, enum cavs_mb mb_type) {
     h->col_type_base[h->mbidx] = mb_type;
 }
 
-static void decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
+static int decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
     int block;
     enum cavs_sub_mb sub_type[4];
     int flags;
@@ -820,7 +820,11 @@ static void decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
         }
         break;
     default:
-        av_assert2((mb_type > B_SYM_16X16) && (mb_type < B_8X8));
+        if (mb_type <= B_SYM_16X16) {
+            av_log(h->s.avctx, AV_LOG_ERROR, "Invalid mb_type %d in B frame\n", mb_type);
+            return AVERROR_INVALIDDATA;
+        }
+        av_assert2(mb_type < B_8X8);
         flags = ff_cavs_partition_flags[mb_type];
         if(mb_type & 1) { /* 16x8 macroblock types */
             if(flags & FWD0)
@@ -855,6 +859,8 @@ static void decode_mb_b(AVSContext *h, enum cavs_mb mb_type) {
     if(mb_type != B_SKIP)
         decode_residual_inter(h);
     ff_cavs_filter(h,mb_type);
+
+    return 0;
 }
 
 /*****************************************************************************
@@ -921,9 +927,10 @@ static int decode_pic(AVSContext *h) {
     enum cavs_mb mb_type;
 
     if (!s->context_initialized) {
-        s->avctx->idct_algo = FF_IDCT_CAVS;
         if (ff_MPV_common_init(s) < 0)
             return -1;
+        ff_init_scantable_permutation(s->dsp.idct_permutation,
+                                      h->cdsp.idct_perm);
         ff_init_scantable(s->dsp.idct_permutation,&h->scantable,ff_zigzag_direct);
     }
     skip_bits(&s->gb,16);//bbv_dwlay
@@ -1066,11 +1073,12 @@ static int decode_seq_header(AVSContext *h) {
     h->profile =         get_bits(&s->gb,8);
     h->level =           get_bits(&s->gb,8);
     skip_bits1(&s->gb); //progressive sequence
-       width =           get_bits(&s->gb,14);
-       height =          get_bits(&s->gb,14);
+
+    width  = get_bits(&s->gb, 14);
+    height = get_bits(&s->gb, 14);
     if ((s->width || s->height) && (s->width != width || s->height != height)) {
         av_log_missing_feature(s, "Width/height changing in CAVS is", 0);
-        return -1;
+        return AVERROR_PATCHWELCOME;
     }
     if (width <= 0 || height <= 0) {
         av_log(s, AV_LOG_ERROR, "Dimensions invalid\n");
@@ -1078,6 +1086,7 @@ static int decode_seq_header(AVSContext *h) {
     }
     s->width  = width;
     s->height = height;
+
     skip_bits(&s->gb,2); //chroma format
     skip_bits(&s->gb,3); //sample_precision
     h->aspect_ratio =    get_bits(&s->gb,4);

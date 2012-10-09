@@ -336,7 +336,7 @@ static av_cold void movie_uninit(AVFilterContext *ctx)
     av_freep(&movie->file_name);
     av_freep(&movie->st);
     av_freep(&movie->out_index);
-    av_freep(&movie->frame);
+    avcodec_free_frame(&movie->frame);
     if (movie->format_ctx)
         avformat_close_input(&movie->format_ctx);
 }
@@ -611,7 +611,7 @@ AVFilter avfilter_avsrc_movie = {
     .uninit        = movie_uninit,
     .query_formats = movie_query_formats,
 
-    .inputs    = (const AVFilterPad[]) {{ .name = NULL }},
+    .inputs    = NULL,
     .outputs   = (const AVFilterPad[]) {{ .name = NULL }},
     .priv_class = &movie_class,
 };

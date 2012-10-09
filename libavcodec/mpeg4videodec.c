@@ -847,7 +847,7 @@ static inline int mpeg4_decode_block(MpegEncContext * s, DCTELEM * block,
                               int n, int coded, int intra, int rvlc)
 {
     int level, i, last, run;
-    int dc_pred_dir;
+    int av_uninit(dc_pred_dir);
     RLTable * rl;
     RL_VLC_ELEM * rl_vlc;
     const uint8_t * scan_table;
@@ -1630,6 +1630,9 @@ static int decode_vol_header(MpegEncContext *s, GetBitContext *gb){
             height = get_bits(gb, 13);
             skip_bits1(gb);   /* marker */
             if(width && height && !(s->width && s->codec_tag == AV_RL32("MP4S"))){ /* they should be non zero but who knows ... */
+                if (s->width && s->height &&
+                    (s->width != width || s->height != height))
+                    s->context_reinit = 1;
                 s->width = width;
                 s->height = height;
             }
@@ -2316,8 +2319,8 @@ static const AVProfile mpeg4_video_profiles[] = {
 };
 
 static const AVOption mpeg4_options[] = {
-    {"quarter_sample", "1/4 subpel MC", offsetof(MpegEncContext, quarter_sample), FF_OPT_TYPE_INT, {.dbl = 0}, 0, 1, 0},
-    {"divx_packed", "divx style packed b frames", offsetof(MpegEncContext, divx_packed), FF_OPT_TYPE_INT, {.dbl = 0}, 0, 1, 0},
+    {"quarter_sample", "1/4 subpel MC", offsetof(MpegEncContext, quarter_sample), FF_OPT_TYPE_INT, {.i64 = 0}, 0, 1, 0},
+    {"divx_packed", "divx style packed b frames", offsetof(MpegEncContext, divx_packed), FF_OPT_TYPE_INT, {.i64 = 0}, 0, 1, 0},
     {NULL}
 };
 
@@ -2368,8 +2371,8 @@ AVCodec ff_mpeg4_vdpau_decoder = {
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_TRUNCATED | CODEC_CAP_DELAY |
                       CODEC_CAP_HWACCEL_VDPAU,
     .long_name      = NULL_IF_CONFIG_SMALL("MPEG-4 part 2 (VDPAU)"),
-    .pix_fmts       = (const enum PixelFormat[]){ PIX_FMT_VDPAU_MPEG4,
-                                                  PIX_FMT_NONE },
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_VDPAU_MPEG4,
+                                                  AV_PIX_FMT_NONE },
     .priv_class     = &mpeg4_vdpau_class,
 };
 #endif

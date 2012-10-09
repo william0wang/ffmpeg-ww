@@ -20,6 +20,7 @@
  */
 
 #include "libavutil/parseutils.h"
+#include "libavutil/pixdesc.h"
 #include "libavutil/opt.h"
 #include "libavformat/internal.h"
 #include "avdevice.h"
@@ -52,7 +53,8 @@ struct dshow_ctx {
 
     IMediaControl *control;
 
-    char *video_size;
+    enum AVPixelFormat pixel_format;
+    enum AVCodecID video_codec_id;
     char *framerate;
 
     int requested_width;
@@ -64,33 +66,33 @@ struct dshow_ctx {
     int channels;
 };
 
-static enum PixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
+static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
 {
     switch(biCompression) {
     case MKTAG('U', 'Y', 'V', 'Y'):
-        return PIX_FMT_UYVY422;
+        return AV_PIX_FMT_UYVY422;
     case MKTAG('Y', 'U', 'Y', '2'):
-        return PIX_FMT_YUYV422;
+        return AV_PIX_FMT_YUYV422;
     case MKTAG('I', '4', '2', '0'):
-        return PIX_FMT_YUV420P;
+        return AV_PIX_FMT_YUV420P;
     case BI_BITFIELDS:
     case BI_RGB:
         switch(biBitCount) { /* 1-8 are untested */
             case 1:
-                return PIX_FMT_MONOWHITE;
+                return AV_PIX_FMT_MONOWHITE;
             case 4:
-                return PIX_FMT_RGB4;
+                return AV_PIX_FMT_RGB4;
             case 8:
-                return PIX_FMT_RGB8;
+                return AV_PIX_FMT_RGB8;
             case 16:
-                return PIX_FMT_RGB555;
+                return AV_PIX_FMT_RGB555;
             case 24:
-                return PIX_FMT_BGR24;
+                return AV_PIX_FMT_BGR24;
             case 32:
-                return PIX_FMT_RGB32;
+                return AV_PIX_FMT_RGB32;
         }
     }
-    return PIX_FMT_NONE;
+    return AV_PIX_FMT_NONE;
 }
 
 static enum AVCodecID dshow_codecid(DWORD biCompression)
@@ -371,12 +373,32 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
                 goto next;
             }
             if (!pformat_set) {
+                enum AVPixelFormat pix_fmt = dshow_pixfmt(bih->biCompression, bih->biBitCount);
+                if (pix_fmt == AV_PIX_FMT_NONE) {
+                    enum AVCodecID codec_id = dshow_codecid(bih->biCompression);
+                    AVCodec *codec = avcodec_find_decoder(codec_id);
+                    if (codec_id == AV_CODEC_ID_NONE || !codec) {
+                        av_log(avctx, AV_LOG_INFO, "  unknown compression type 0x%X", (int) bih->biCompression);
+                    } else {
+                        av_log(avctx, AV_LOG_INFO, "  vcodec=%s", codec->name);
+                    }
+                } else {
+                    av_log(avctx, AV_LOG_INFO, "  pixel_format=%s", av_get_pix_fmt_name(pix_fmt));
+                }
                 av_log(avctx, AV_LOG_INFO, "  min s=%ldx%ld fps=%g max s=%ldx%ld fps=%g\n",
                        vcaps->MinOutputSize.cx, vcaps->MinOutputSize.cy,
                        1e7 / vcaps->MaxFrameInterval,
                        vcaps->MaxOutputSize.cx, vcaps->MaxOutputSize.cy,
                        1e7 / vcaps->MinFrameInterval);
                 continue;
+            }
+            if (ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO) {
+                if (ctx->video_codec_id != dshow_codecid(bih->biCompression))
+                    goto next;
+            }
+            if (ctx->pixel_format != AV_PIX_FMT_NONE &&
+                ctx->pixel_format != dshow_pixfmt(bih->biCompression, bih->biBitCount)) {
+                goto next;
             }
             if (ctx->framerate) {
                 int64_t framerate = ((int64_t) ctx->requested_framerate.den*10000000)
@@ -386,7 +408,7 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
                     goto next;
                 *fr = framerate;
             }
-            if (ctx->video_size) {
+            if (ctx->requested_width && ctx->requested_height) {
                 if (ctx->requested_width  > vcaps->MaxOutputSize.cx ||
                     ctx->requested_width  < vcaps->MinOutputSize.cx ||
                     ctx->requested_height > vcaps->MaxOutputSize.cy ||
@@ -511,7 +533,10 @@ dshow_cycle_pins(AVFormatContext *avctx, enum dshowDeviceType devtype,
     const GUID *mediatype[2] = { &MEDIATYPE_Video, &MEDIATYPE_Audio };
     const char *devtypename = (devtype == VideoDevice) ? "video" : "audio";
 
-    int set_format = (devtype == VideoDevice && (ctx->video_size || ctx->framerate))
+    int set_format = (devtype == VideoDevice && (ctx->framerate ||
+                                                (ctx->requested_width && ctx->requested_height) ||
+                                                 ctx->pixel_format != AV_PIX_FMT_NONE ||
+                                                 ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO))
                   || (devtype == AudioDevice && (ctx->channels || ctx->sample_rate));
     int format_set = 0;
 
@@ -754,7 +779,7 @@ dshow_add_device(AVFormatContext *avctx,
         codec->width      = bih->biWidth;
         codec->height     = bih->biHeight;
         codec->pix_fmt    = dshow_pixfmt(bih->biCompression, bih->biBitCount);
-        if (codec->pix_fmt == PIX_FMT_NONE) {
+        if (codec->pix_fmt == AV_PIX_FMT_NONE) {
             codec->codec_id = dshow_codecid(bih->biCompression);
             if (codec->codec_id == AV_CODEC_ID_NONE) {
                 av_log(avctx, AV_LOG_ERROR, "Unknown compression type. "
@@ -851,10 +876,13 @@ static int dshow_read_header(AVFormatContext *avctx)
         goto error;
     }
 
-    if (ctx->video_size) {
-        r = av_parse_video_size(&ctx->requested_width, &ctx->requested_height, ctx->video_size);
-        if (r < 0) {
-            av_log(avctx, AV_LOG_ERROR, "Could not parse video size '%s'.\n", ctx->video_size);
+    ctx->video_codec_id = avctx->video_codec_id ? avctx->video_codec_id
+                                                : AV_CODEC_ID_RAWVIDEO;
+    if (ctx->pixel_format != AV_PIX_FMT_NONE) {
+        if (ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO) {
+            av_log(avctx, AV_LOG_ERROR, "Pixel format may only be set when "
+                              "video codec is not set or set to rawvideo\n");
+            ret = AVERROR(EINVAL);
             goto error;
         }
     }
@@ -989,7 +1017,8 @@ static int dshow_read_packet(AVFormatContext *s, AVPacket *pkt)
 #define OFFSET(x) offsetof(struct dshow_ctx, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
-    { "video_size", "set video size given a string such as 640x480 or hd720.", OFFSET(video_size), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "video_size", "set video size given a string such as 640x480 or hd720.", OFFSET(requested_width), AV_OPT_TYPE_IMAGE_SIZE, {.str = NULL}, 0, 0, DEC },
+    { "pixel_format", "set video pixel format", OFFSET(pixel_format), AV_OPT_TYPE_PIXEL_FMT, {.str = NULL}, 0, 0, DEC },
     { "framerate", "set video frame rate", OFFSET(framerate), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { "sample_rate", "set audio sample rate", OFFSET(sample_rate), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, DEC },
     { "sample_size", "set audio sample size", OFFSET(sample_size), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 16, DEC },

@@ -486,8 +486,6 @@ static int swf_write_trailer(AVFormatContext *s)
     put_swf_tag(s, TAG_END);
     put_swf_end_tag(s);
 
-    avio_flush(s->pb);
-
     /* patch file size and number of frames if not streamed */
     if (s->pb->seekable && video_enc) {
         file_size = avio_tell(pb);
@@ -495,8 +493,10 @@ static int swf_write_trailer(AVFormatContext *s)
         avio_wl32(pb, file_size);
         avio_seek(pb, swf->duration_pos, SEEK_SET);
         avio_wl16(pb, swf->video_frame_number);
+        if (swf->vframes_pos) {
         avio_seek(pb, swf->vframes_pos, SEEK_SET);
         avio_wl16(pb, swf->video_frame_number);
+        }
         avio_seek(pb, file_size, SEEK_SET);
     }
     return 0;
