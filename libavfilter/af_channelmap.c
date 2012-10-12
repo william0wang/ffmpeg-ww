@@ -337,8 +337,8 @@ static int channelmap_filter_samples(AVFilterLink *inlink, AVFilterBufferRef *bu
             if (buf->extended_data == buf->data) {
                 buf->extended_data = new_extended_data;
             } else {
-                buf->extended_data = new_extended_data;
                 av_free(buf->extended_data);
+                buf->extended_data = new_extended_data;
             }
         } else if (buf->extended_data != buf->data) {
             av_free(buf->extended_data);
@@ -385,6 +385,25 @@ static int channelmap_config_input(AVFilterLink *inlink)
     return err;
 }
 
+static const AVFilterPad avfilter_af_channelmap_inputs[] = {
+    {
+        .name           = "default",
+        .type           = AVMEDIA_TYPE_AUDIO,
+        .min_perms      = AV_PERM_READ | AV_PERM_WRITE,
+        .filter_samples = channelmap_filter_samples,
+        .config_props   = channelmap_config_input
+    },
+    { NULL }
+};
+
+static const AVFilterPad avfilter_af_channelmap_outputs[] = {
+    {
+        .name = "default",
+        .type = AVMEDIA_TYPE_AUDIO
+    },
+    { NULL }
+};
+
 AVFilter avfilter_af_channelmap = {
     .name          = "channelmap",
     .description   = NULL_IF_CONFIG_SMALL("Remap audio channels."),
@@ -392,14 +411,7 @@ AVFilter avfilter_af_channelmap = {
     .query_formats = channelmap_query_formats,
     .priv_size     = sizeof(ChannelMapContext),
 
-    .inputs        = (const AVFilterPad[]) {{ .name            = "default",
-                                              .type            = AVMEDIA_TYPE_AUDIO,
-                                              .min_perms       = AV_PERM_READ | AV_PERM_WRITE,
-                                              .filter_samples  = channelmap_filter_samples,
-                                              .config_props    = channelmap_config_input },
-                                            { .name = NULL }},
-    .outputs       = (const AVFilterPad[]) {{ .name            = "default",
-                                              .type            = AVMEDIA_TYPE_AUDIO },
-                                            { .name = NULL }},
-    .priv_class = &channelmap_class,
+    .inputs        = avfilter_af_channelmap_inputs,
+    .outputs       = avfilter_af_channelmap_outputs,
+    .priv_class    = &channelmap_class,
 };

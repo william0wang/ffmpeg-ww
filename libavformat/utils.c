@@ -425,7 +425,7 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
 
     for(probe_size= PROBE_BUF_MIN; probe_size<=max_probe_size && !*fmt;
         probe_size = FFMIN(probe_size<<1, FFMAX(max_probe_size, probe_size+1))) {
-        int score = probe_size < max_probe_size ? AVPROBE_SCORE_MAX/4 : 0;
+        int score = probe_size < max_probe_size ? AVPROBE_SCORE_RETRY : 0;
         int buf_offset = (probe_size == PROBE_BUF_MIN) ? 0 : probe_size>>1;
         void *buftmp;
 
@@ -457,7 +457,7 @@ int av_probe_input_buffer(AVIOContext *pb, AVInputFormat **fmt,
         /* guess file format */
         *fmt = av_probe_input_format2(&pd, 1, &score);
         if(*fmt){
-            if(score <= AVPROBE_SCORE_MAX/4){ //this can only be true in the last iteration
+            if(score <= AVPROBE_SCORE_RETRY){ //this can only be true in the last iteration
                 av_log(logctx, AV_LOG_WARNING, "Format %s detected only with low score of %d, misdetection possible!\n", (*fmt)->name, score);
             }else
                 av_log(logctx, AV_LOG_DEBUG, "Format %s probed with size=%d and score=%d\n", (*fmt)->name, probe_size, score);
@@ -481,6 +481,7 @@ static int init_input(AVFormatContext *s, const char *filename, AVDictionary **o
 {
     int ret;
     AVProbeData pd = {filename, NULL, 0};
+    int score = AVPROBE_SCORE_RETRY;
 
     if (s->pb) {
         s->flags |= AVFMT_FLAG_CUSTOM_IO;
@@ -493,7 +494,7 @@ static int init_input(AVFormatContext *s, const char *filename, AVDictionary **o
     }
 
     if ( (s->iformat && s->iformat->flags & AVFMT_NOFILE) ||
-        (!s->iformat && (s->iformat = av_probe_input_format(&pd, 0))))
+        (!s->iformat && (s->iformat = av_probe_input_format2(&pd, 0, &score))))
         return 0;
 
     if ((ret = avio_open2(&s->pb, filename, AVIO_FLAG_READ | s->avio_flags,
@@ -656,7 +657,7 @@ no_packet:
 
         if(end || av_log2(pd->buf_size) != av_log2(pd->buf_size - pkt->size)){
             int score= set_codec_from_probe_data(s, st, pd);
-            if(    (st->codec->codec_id != AV_CODEC_ID_NONE && score > AVPROBE_SCORE_MAX/4)
+            if(    (st->codec->codec_id != AV_CODEC_ID_NONE && score > AVPROBE_SCORE_RETRY)
                 || end){
                 pd->buf_size=0;
                 av_freep(&pd->buf);
@@ -890,7 +891,7 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
 {
     AVStream *st= s->streams[stream_index];
     AVPacketList *pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
-    int64_t pts_buffer[MAX_REORDER_DELAY];
+    int64_t pts_buffer[MAX_REORDER_DELAY+1];
     int64_t shift;
     int i, delay;
 
@@ -902,7 +903,7 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
     st->cur_dts= dts;
     shift = st->first_dts - RELATIVE_TS_BASE;
 
-    for (i=0; i<MAX_REORDER_DELAY; i++)
+    for (i=0; i<MAX_REORDER_DELAY+1; i++)
         pts_buffer[i] = AV_NOPTS_VALUE;
 
     if (is_relative(pts))
@@ -3824,9 +3825,9 @@ void ff_make_absolute_url(char *buf, int size, const char *base,
         sep = strstr(buf, "://");
         if (sep) {
             /* Take scheme from base url */
-            if (rel[1] == '/')
+            if (rel[1] == '/') {
                 sep[1] = '\0';
-            else {
+            } else {
                 /* Take scheme and host from base url */
                 sep += 3;
                 sep = strchr(sep, '/');

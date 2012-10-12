@@ -393,7 +393,7 @@ static int audio_get_buffer(AVCodecContext *avctx, AVFrame *frame)
         if (buf->extended_data[0] && buf_size > buf->audio_data_size) {
             av_free(buf->extended_data[0]);
             if (buf->extended_data != buf->data)
-                av_freep(&buf->extended_data);
+                av_free(buf->extended_data);
             buf->extended_data = NULL;
             buf->data[0]       = NULL;
         }
@@ -1753,10 +1753,14 @@ int attribute_align_arg avcodec_decode_audio4(AVCodecContext *avctx,
     /* many decoders assign whole AVFrames, thus overwriting extended_data;
      * make sure it's set correctly; assume decoders that actually use
      * extended_data are doing it correctly */
-    planar   = av_sample_fmt_is_planar(frame->format);
-    channels = av_get_channel_layout_nb_channels(frame->channel_layout);
-    if (!(planar && channels > AV_NUM_DATA_POINTERS))
-        frame->extended_data = frame->data;
+    if (*got_frame_ptr) {
+        planar   = av_sample_fmt_is_planar(frame->format);
+        channels = av_get_channel_layout_nb_channels(frame->channel_layout);
+        if (!(planar && channels > AV_NUM_DATA_POINTERS))
+            frame->extended_data = frame->data;
+    } else {
+        frame->extended_data = NULL;
+    }
 
     return ret;
 }
@@ -2429,7 +2433,7 @@ int ff_match_2uint16(const uint16_t(*tab)[2], int size, int a, int b)
 
 void av_log_missing_feature(void *avc, const char *feature, int want_sample)
 {
-    av_log(avc, AV_LOG_WARNING, "%s not implemented. Update your FFmpeg "
+    av_log(avc, AV_LOG_WARNING, "%s is not implemented. Update your FFmpeg "
             "version to the newest one from Git. If the problem still "
             "occurs, it means that your file has a feature which has not "
             "been implemented.\n", feature);

@@ -76,8 +76,8 @@ static inline int read_line(AVFormatContext *s, char *rbuf, const int rbufsize,
 
     do {
         ret = ffurl_read_complete(rt->rtsp_hd, rbuf + idx, 1);
-        if (ret < 0)
-            return ret;
+        if (ret <= 0)
+            return ret ? ret : AVERROR_EOF;
         if (rbuf[idx] == '\r') {
             /* Ignore */
         } else if (rbuf[idx] == '\n') {
@@ -436,7 +436,7 @@ static inline int parse_command_line(AVFormatContext *s, const char *line,
         if (*methodcode == ANNOUNCE) {
             av_log(s, AV_LOG_INFO,
                    "Updating control URI to %s\n", uri);
-            strcpy(rt->control_uri, uri);
+            av_strlcpy(rt->control_uri, uri, sizeof(rt->control_uri));
         }
     }
 
