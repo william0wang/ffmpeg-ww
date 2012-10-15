@@ -17,6 +17,10 @@ subtitle and user-defined streams in a simple, yet efficient, way.
 It was created by a group of FFmpeg and MPlayer developers in 2003
 and was finalized in 2008.
 
+The official nut specification is at svn://svn.mplayerhq.hu/nut
+In case of any differences between this text and the official specification,
+the official specification shall prevail.
+
 @chapter Container-specific codec tags
 
 @section Generic raw YUVA formats
@@ -50,7 +54,7 @@ to be read big-endian.
 @end multitable
 
 <type> is S for signed integer, U for unsigned integer, F for IEEE float
-<interleaving> is D for default, as a historical artefact.
+<interleaving> is D for default, P is for planar.
 <bits> is 8/16/24/32
 
 @example

@@ -129,10 +129,8 @@ static char *choose_pix_fmts(OutputStream *ost)
         return NULL;
 }
 
-/**
- * Define a function for building a string containing a list of
- * allowed formats,
- */
+/* Define a function for building a string containing a list of
+ * allowed formats. */
 #define DEF_CHOOSE_FORMAT(type, var, supported_list, none, get_name, separator)\
 static char *choose_ ## var ## s(OutputStream *ost)                            \
 {                                                                              \
@@ -559,6 +557,13 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     char name[255];
     int pad_idx = in->pad_idx;
     int ret;
+
+    if (!ist->framerate.num) {
+        AVRational codec_fr = av_inv_q(ist->st->codec->time_base);
+        codec_fr.den *= ist->st->codec->ticks_per_frame;
+        if(av_q2d(codec_fr) < av_q2d(fr)*0.7)
+            fr = codec_fr;
+    }
 
     if (ist->st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE) {
         ret = sub2video_prepare(ist);

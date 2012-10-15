@@ -71,7 +71,7 @@ static int zlib_refill(void *opaque, uint8_t *buf, int buf_size)
 retry:
     if (!z->avail_in) {
         int n = avio_read(s->pb, swf->zbuf_in, ZBUF_SIZE);
-        if (n <= 0)
+        if (n < 0)
             return n;
         z->next_in  = swf->zbuf_in;
         z->avail_in = n;
@@ -169,7 +169,7 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
             /* Check for FLV1 */
             vst = avformat_new_stream(s, NULL);
             if (!vst)
-                return -1;
+                return AVERROR(ENOMEM);
             vst->id = ch_id;
             vst->codec->codec_type = AVMEDIA_TYPE_VIDEO;
             vst->codec->codec_id = ff_codec_get_id(ff_swf_codec_tags, avio_r8(pb));
@@ -190,7 +190,7 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
             swf->samples_per_frame = avio_rl16(pb);
             ast = avformat_new_stream(s, NULL);
             if (!ast)
-                return -1;
+                return AVERROR(ENOMEM);
             ast->id = -1; /* -1 to avoid clash with video stream ch_id */
             ast->codec->channels = 1 + (v&1);
             ast->codec->codec_type = AVMEDIA_TYPE_AUDIO;
@@ -200,6 +200,44 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
             ast->codec->sample_rate = 44100 >> (3 - sample_rate_code);
             avpriv_set_pts_info(ast, 64, 1, ast->codec->sample_rate);
             len -= 4;
+        } else if (tag == TAG_DEFINESOUND) {
+            /* audio stream */
+            int sample_rate_code;
+            int ch_id = avio_rl16(pb);
+
+            for (i=0; i<s->nb_streams; i++) {
+                st = s->streams[i];
+                if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO && st->id == ch_id)
+                    goto skip;
+            }
+
+            // FIXME: 8-bit uncompressed PCM audio will be interpreted as 16-bit
+            // FIXME: The entire audio stream is stored in a single chunk/tag. Normally,
+            // these are smaller audio streams in DEFINESOUND tags, but it's technically
+            // possible they could be huge. Break it up into multiple packets if it's big.
+            v = avio_r8(pb);
+            ast = avformat_new_stream(s, NULL);
+            if (!ast)
+                return AVERROR(ENOMEM);
+            ast->id = ch_id;
+            ast->codec->channels = 1 + (v&1);
+            ast->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+            ast->codec->codec_id = ff_codec_get_id(swf_audio_codec_tags, (v>>4) & 15);
+            ast->need_parsing = AVSTREAM_PARSE_FULL;
+            sample_rate_code= (v>>2) & 3;
+            ast->codec->sample_rate = 44100 >> (3 - sample_rate_code);
+            avpriv_set_pts_info(ast, 64, 1, ast->codec->sample_rate);
+            ast->duration = avio_rl32(pb); // number of samples
+            if (((v>>4) & 15) == 2) { // MP3 sound data record
+                ast->skip_samples = avio_rl16(pb);
+                len -= 2;
+            }
+            len -= 7;
+            if ((res = av_get_packet(pb, pkt, len)) < 0)
+                return res;
+            pkt->pos = pos;
+            pkt->stream_index = ast->index;
+            return pkt->size;
         } else if (tag == TAG_VIDEOFRAME) {
             int ch_id = avio_rl16(pb);
             len -= 2;
@@ -241,7 +279,7 @@ static int swf_read_packet(AVFormatContext *s, AVPacket *pkt)
             if (i == s->nb_streams) {
                 vst = avformat_new_stream(s, NULL);
                 if (!vst)
-                    return -1;
+                    return AVERROR(ENOMEM);
                 vst->id = -2; /* -2 to avoid clash with video stream and audio stream */
                 vst->codec->codec_type = AVMEDIA_TYPE_VIDEO;
                 vst->codec->codec_id = AV_CODEC_ID_MJPEG;

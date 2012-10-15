@@ -190,7 +190,7 @@ static int return_frame(AVFilterContext *ctx, int is_second)
     }
 
     if (!yadif->csp)
-        yadif->csp = &av_pix_fmt_descriptors[link->format];
+        yadif->csp = av_pix_fmt_desc_get(link->format);
     if (yadif->csp->comp[0].depth_minus1 / 8 == 1)
         yadif->filter_line = (void*)filter_line_c_16bit;
 
@@ -412,7 +412,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 
     yadif->filter_line = filter_line_c;
 
-    if (HAVE_MMX)
+    if (ARCH_X86)
         ff_yadif_init_x86(yadif);
 
     av_log(ctx, AV_LOG_VERBOSE, "mode:%d parity:%d auto_enable:%d\n",

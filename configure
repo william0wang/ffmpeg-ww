@@ -54,6 +54,8 @@ if test "$E1" != 0 || test "$E2" = 0; then
     exit 1
 fi
 
+test -d /usr/xpg4/bin && PATH=/usr/xpg4/bin:$PATH
+
 show_help(){
     cat <<EOF
 Usage: configure [options]
@@ -289,7 +291,6 @@ Optimization options (experts only):
   --disable-armv6          disable armv6 optimizations
   --disable-armv6t2        disable armv6t2 optimizations
   --disable-armvfp         disable ARM VFP optimizations
-  --disable-mmi            disable MMI optimizations
   --disable-neon           disable NEON optimizations
   --disable-vis            disable VIS optimizations
   --disable-inline-asm     disable use of inline assembler
@@ -638,7 +639,7 @@ print_config(){
 }
 
 print_enabled(){
-    test "$1" = -n && end=" " && shift || end="\n"
+    test x"$1" = x-n && end=" " && shift || end="\n"
     suf=$1
     shift
     for v; do
@@ -1235,7 +1236,6 @@ ARCH_EXT_LIST="
     armv6
     armv6t2
     armvfp
-    mmi
     neon
     ppc4xx
     vfpv3
@@ -1281,6 +1281,7 @@ HAVE_LIST="
     closesocket
     cmov
     cpunop
+    CryptGenRandom
     dcbzl
     dev_bktr_ioctl_bt848_h
     dev_bktr_ioctl_meteor_h
@@ -1516,7 +1517,6 @@ mipsfpu_deps="mips"
 mips32r2_deps="mips"
 mipsdspr1_deps="mips"
 mipsdspr2_deps="mips"
-mmi_deps="mips"
 
 altivec_deps="ppc"
 ppc4xx_deps="ppc"
@@ -2488,6 +2488,7 @@ tms470_flags(){
             -mfpu=neon)     echo --float_support=vfpv3 --neon ;;
             -mfpu=vfp)      echo --float_support=vfpv2        ;;
             -mfpu=vfpv3)    echo --float_support=vfpv3        ;;
+            -mfpu=vfpv3-d16) echo --float_support=vfpv3d16    ;;
             -msoft-float)   echo --float_support=vfplib       ;;
             -O[0-3]|-mf=*)  echo $flag                        ;;
             -g)             echo -g -mn                       ;;
@@ -2567,11 +2568,8 @@ probe_cc(){
         _type=tms470
         _ident=$($_cc -version | head -n1 | tr -s ' ')
         _flags='--gcc --abi=eabi -me'
-        _cflags='-D__gnuc_va_list=va_list -D__USER_LABEL_PREFIX__='
         _cc_e='-ppl -fe=$@'
         _cc_o='-fe=$@'
-        as_default="${cross_prefix}gcc"
-        ld_default="${cross_prefix}gcc"
         _depflags='-ppa -ppd=$(@:.o=.d)'
         _cflags_speed='-O3 -mf=5'
         _cflags_size='-O3 -mf=2'
@@ -3187,6 +3185,12 @@ case $target_os in
                       -l:drtaeabi.dso -l:scppnwdl.dso -lsupc++ -lgcc \
                       -l:libc.dso -l:libm.dso -l:euser.dso -l:libcrt0.lib
         ;;
+    osf1)
+        add_cppflags -D_OSF_SOURCE -D_POSIX_PII -D_REENTRANT
+        FFSERVERLDFLAGS=
+        ;;
+    minix)
+        ;;
     none)
         ;;
     *)
@@ -3225,6 +3229,16 @@ elif check_cpp_condition stddef.h "defined __KLIBC__"; then
 fi
 
 test -n "$libc_type" && enable $libc_type
+
+# hacks for compiler/libc/os combinations
+
+if enabled_all tms470 glibc; then
+    CPPFLAGS="-I${source_path}/compat/tms470 ${CPPFLAGS}"
+    add_cppflags -D__USER_LABEL_PREFIX__=
+    add_cppflags -D__builtin_memset=memset
+    add_cppflags -D__gnuc_va_list=va_list -D_VA_LIST_DEFINED
+    add_cflags   -pds=48    # incompatible redefinition of macro
+fi
 
 esc(){
     echo "$*" | sed 's/%/%25/g;s/:/%3a/g'
@@ -3353,7 +3367,6 @@ EOF
 elif enabled mips; then
 
     check_inline_asm loongson '"dmult.g $1, $2, $3"'
-    enabled mmi && check_inline_asm mmi '"lq $2, 0($2)"'
     enabled mips32r2  && add_cflags "-mips32r2" && add_asflags "-mips32r2" &&
      check_inline_asm mips32r2  '"rotr $t0, $t1, 1"'
     enabled mipsdspr1 && add_cflags "-mdsp" && add_asflags "-mdsp" &&
@@ -3539,6 +3552,7 @@ check_func_headers windows.h PeekNamedPipe
 check_func_headers io.h setmode
 check_func_headers lzo/lzo1x.h lzo1x_999_compress
 check_lib2 "windows.h shellapi.h" CommandLineToArgvW -lshell32
+check_lib2 "windows.h wincrypt.h" CryptGenRandom -ladvapi32
 check_lib2 "windows.h psapi.h" GetProcessMemoryInfo -lpsapi
 check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
@@ -4021,7 +4035,6 @@ if enabled arm; then
     echo "NEON enabled              ${neon-no}"
 fi
 if enabled mips; then
-    echo "MMI enabled               ${mmi-no}"
     echo "MIPS FPU enabled          ${mipsfpu-no}"
     echo "MIPS32R2 enabled          ${mips32r2-no}"
     echo "MIPS DSP R1 enabled       ${mipsdspr1-no}"

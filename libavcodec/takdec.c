@@ -146,9 +146,9 @@ static const struct CParam {
     { 0x1A, 0x1800000, 0x1800000, 0x6800000, 0xC000000 },
 };
 
-static void tak_set_bps(AVCodecContext *avctx)
+static int tak_set_bps(AVCodecContext *avctx, int bps)
 {
-    switch (avctx->bits_per_coded_sample) {
+    switch (bps) {
     case 8:
         avctx->sample_fmt = AV_SAMPLE_FMT_U8P;
         break;
@@ -158,7 +158,12 @@ static void tak_set_bps(AVCodecContext *avctx)
     case 24:
         avctx->sample_fmt = AV_SAMPLE_FMT_S32P;
         break;
+    default:
+        av_log(avctx, AV_LOG_ERROR, "invalid/unsupported bits per sample\n");
+        return AVERROR_INVALIDDATA;
     }
+
+    return 0;
 }
 
 static int get_shift(int sample_rate)
@@ -185,6 +190,7 @@ static int get_scale(int sample_rate, int shift)
 static av_cold int tak_decode_init(AVCodecContext *avctx)
 {
     TAKDecContext *s = avctx->priv_data;
+    int ret;
 
     ff_tak_init_crc();
     ff_dsputil_init(&s->dsp, avctx);
@@ -196,7 +202,8 @@ static av_cold int tak_decode_init(AVCodecContext *avctx)
     s->uval = get_scale(avctx->sample_rate, get_shift(avctx->sample_rate));
     s->subframe_scale = get_scale(avctx->sample_rate, 1);
 
-    tak_set_bps(avctx);
+    if ((ret = tak_set_bps(avctx, avctx->bits_per_coded_sample)) < 0)
+        return ret;
 
     return 0;
 }
@@ -564,10 +571,10 @@ static int decode_channel(TAKDecContext *s, int chan)
     int left = s->nb_samples - 1;
 
     s->sample_shift[chan] = get_b(gb);
-    if (s->sample_shift[chan] >= avctx->bits_per_coded_sample)
+    if (s->sample_shift[chan] >= avctx->bits_per_raw_sample)
         return AVERROR_INVALIDDATA;
 
-    *dst++ = get_code(gb, avctx->bits_per_coded_sample - s->sample_shift[chan]);
+    *dst++ = get_code(gb, avctx->bits_per_raw_sample - s->sample_shift[chan]);
     s->lpc_mode[chan] = get_bits(gb, 2);
     s->nb_subframes   = get_bits(gb, 3) + 1;
 
@@ -773,9 +780,10 @@ static int tak_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR_INVALIDDATA;
     }
 
-    if (s->ti.bps != avctx->bits_per_coded_sample) {
-        avctx->bits_per_coded_sample = s->ti.bps;
-        tak_set_bps(avctx);
+    if (s->ti.bps != avctx->bits_per_raw_sample) {
+        avctx->bits_per_raw_sample = s->ti.bps;
+        if ((ret = tak_set_bps(avctx, avctx->bits_per_raw_sample)) < 0)
+            return ret;
     }
     if (s->ti.sample_rate != avctx->sample_rate) {
         avctx->sample_rate = s->ti.sample_rate;
@@ -793,7 +801,7 @@ static int tak_decode_frame(AVCodecContext *avctx, void *data,
     if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0)
         return ret;
 
-    if (avctx->bits_per_coded_sample <= 16) {
+    if (avctx->bits_per_raw_sample <= 16) {
         av_fast_malloc(&s->decode_buffer, &s->decode_buffer_size,
                        sizeof(*s->decode_buffer) * FFALIGN(s->nb_samples, 8) *
                        avctx->channels + FF_INPUT_BUFFER_PADDING_SIZE);
@@ -811,7 +819,7 @@ static int tak_decode_frame(AVCodecContext *avctx, void *data,
         for (chan = 0; chan < avctx->channels; chan++) {
             p = s->decoded[chan];
             for (i = 0; i < s->nb_samples; i++)
-                *p++ = get_code(gb, avctx->bits_per_coded_sample);
+                *p++ = get_code(gb, avctx->bits_per_raw_sample);
         }
     } else {
         if (s->ti.codec == 2) {
@@ -918,7 +926,7 @@ static int tak_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     // convert to output buffer
-    switch (avctx->bits_per_coded_sample) {
+    switch (avctx->bits_per_raw_sample) {
     case 8:
         for (chan = 0; chan < avctx->channels; chan++) {
             uint8_t *samples = (uint8_t *)s->frame.data[chan];

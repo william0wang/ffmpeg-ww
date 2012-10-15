@@ -275,7 +275,7 @@ static void find_best_state(uint8_t best_state[256][256], const uint8_t one_stat
             occ[j]=1.0;
             for(k=0; k<256; k++){
                 double newocc[256]={0};
-                for(m=0; m<256; m++){
+                for(m=1; m<256; m++){
                     if(occ[m]){
                         len -=occ[m]*(     p *l2tab[    m]
                                       + (1-p)*l2tab[256-m]);
@@ -916,6 +916,7 @@ static int sort_stt(FFV1Context *s, uint8_t stt[256]){
 
 static av_cold int encode_init(AVCodecContext *avctx)
 {
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(avctx->pix_fmt);
     FFV1Context *s = avctx->priv_data;
     int i, j, k, m;
 
@@ -983,7 +984,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
     case AV_PIX_FMT_YUV420P:
     case AV_PIX_FMT_YUV411P:
     case AV_PIX_FMT_YUV410P:
-        s->chroma_planes= av_pix_fmt_descriptors[avctx->pix_fmt].nb_components < 3 ? 0 : 1;
+        s->chroma_planes= desc->nb_components < 3 ? 0 : 1;
         s->colorspace= 0;
         break;
     case AV_PIX_FMT_YUVA444P:
@@ -1119,7 +1120,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
                 }
             }
             gob_count= strtol(p, &next, 0);
-            if(next==p || gob_count <0){
+            if(next==p || gob_count <=0){
                 av_log(avctx, AV_LOG_ERROR, "2Pass file invalid\n");
                 return AVERROR_INVALIDDATA;
             }

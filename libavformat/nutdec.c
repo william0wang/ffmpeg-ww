@@ -361,15 +361,20 @@ static int decode_stream_header(NUTContext *nut)
     case 0:
         st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
         st->codec->codec_id   = av_codec_get_id((const AVCodecTag * const []) {
-                                                    ff_codec_bmp_tags,
                                                     ff_nut_video_tags,
+                                                    ff_codec_bmp_tags,
                                                     0
                                                 },
                                                 tmp);
         break;
     case 1:
         st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        st->codec->codec_id   = ff_codec_get_id(ff_codec_wav_tags, tmp);
+        st->codec->codec_id   = av_codec_get_id((const AVCodecTag * const []) {
+                                                    ff_nut_audio_tags,
+                                                    ff_codec_wav_tags,
+                                                    0
+                                                },
+                                                tmp);
         break;
     case 2:
         st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
@@ -1034,8 +1039,5 @@ AVInputFormat ff_nut_demuxer = {
     .read_close     = nut_read_close,
     .read_seek      = read_seek,
     .extensions     = "nut",
-    .codec_tag      = (const AVCodecTag * const []) {
-        ff_codec_bmp_tags, ff_nut_video_tags, ff_codec_wav_tags,
-        ff_nut_subtitle_tags, 0
-    },
+    .codec_tag      = ff_nut_codec_tags,
 };

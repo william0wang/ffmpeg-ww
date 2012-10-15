@@ -204,21 +204,24 @@ static double get_scene_score(AVFilterContext *ctx, AVFilterBufferRef *picref)
         picref->video->h    == prev_picref->video->h &&
         picref->video->w    == prev_picref->video->w &&
         picref->linesize[0] == prev_picref->linesize[0]) {
-        int x, y;
-        int64_t sad;
+        int x, y, nb_sad = 0;
+        int64_t sad = 0;
         double mafd, diff;
         uint8_t *p1 =      picref->data[0];
         uint8_t *p2 = prev_picref->data[0];
         const int linesize = picref->linesize[0];
 
-        for (sad = y = 0; y < picref->video->h; y += 8)
-            for (x = 0; x < linesize; x += 8)
-                sad += select->c.sad[1](select,
-                                        p1 + y * linesize + x,
-                                        p2 + y * linesize + x,
+        for (y = 0; y < picref->video->h - 8; y += 8) {
+            for (x = 0; x < picref->video->w*3 - 8; x += 8) {
+                sad += select->c.sad[1](select, p1 + x, p2 + x,
                                         linesize, 8);
+                nb_sad += 8 * 8;
+            }
+            p1 += 8 * linesize;
+            p2 += 8 * linesize;
+        }
         emms_c();
-        mafd = sad / (picref->video->h * picref->video->w * 3);
+        mafd = nb_sad ? sad / nb_sad : 0;
         diff = fabs(mafd - select->prev_mafd);
         ret  = av_clipf(FFMIN(mafd, diff) / 100., 0, 1);
         select->prev_mafd = mafd;

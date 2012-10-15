@@ -34,7 +34,8 @@
 #include "tiff.h"
 #include "tiff_data.h"
 #include "faxcompr.h"
-#include "libavutil/common.h"
+#include "mathops.h"
+#include "libavutil/attributes.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avstring.h"
@@ -458,7 +459,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
             memcpy(src2, src, size);
         } else {
             for (i = 0; i < size; i++)
-                src2[i] = av_reverse[src[i]];
+                src2[i] = ff_reverse[src[i]];
         }
         memset(src2 + size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
         switch (s->compr) {
@@ -492,7 +493,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
             } else {
                 int i;
                 for (i = 0; i < width; i++)
-                    dst[i] = av_reverse[src[i]];
+                    dst[i] = ff_reverse[src[i]];
             }
             src += width;
             break;
@@ -606,7 +607,7 @@ static int init_image(TiffContext *s)
             /* make default grayscale pal */
             pal = (uint32_t *) s->picture.data[1];
             for (i = 0; i < 1<<s->bpp; i++)
-                pal[i] = 0xFF << 24 | i * 255 / ((1<<s->bpp) - 1) * 0x010101;
+                pal[i] = 0xFFU << 24 | i * 255 / ((1<<s->bpp) - 1) * 0x010101;
         }
     }
     return 0;
@@ -823,7 +824,7 @@ static int tiff_decode_tag(TiffContext *s)
         for (k = 2; k >= 0; k--) {
             for (i = 0; i < count / 3; i++) {
                 if (k == 2)
-                    pal[i] = 0xff << 24;
+                    pal[i] = 0xFFU << 24;
                 j =  (tget(&s->gb, type, s->le) >> off) << (k * 8);
                 pal[i] |= j;
             }
