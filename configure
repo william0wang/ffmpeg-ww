@@ -691,6 +691,12 @@ add_host_ldflags(){
     append host_ldflags $($host_ldflags_filter "$@")
 }
 
+add_compat(){
+    append compat_objs $1
+    shift
+    map 'add_cppflags -D$v' "$@"
+}
+
 check_cmd(){
     log "$@"
     "$@" >> $logfile 2>&1
@@ -763,11 +769,8 @@ check_ld(){
     log check_ld "$@"
     type=$1
     shift 1
-    flags=''
-    libs=''
-    for f; do
-        test "${f}" = "${f#-l}" && flags="$flags $f" || libs="$libs $f"
-    done
+    flags=$(filter_out '-l*' "$@")
+    libs=$(filter '-l*' "$@")
     check_$type $($cflags_filter $flags) || return
     flags=$($ldflags_filter $flags)
     libs=$($ldflags_filter $libs)
@@ -1275,7 +1278,6 @@ HAVE_LIST="
     asm_types_h
     attribute_may_alias
     attribute_packed
-    broken_snprintf
     cbrtf
     clock_gettime
     closesocket
@@ -1344,6 +1346,7 @@ HAVE_LIST="
     mkstemp
     mm_empty
     mmap
+    mprotect
     msvcrt
     nanosleep
     PeekNamedPipe
@@ -2325,6 +2328,16 @@ strip_default="${cross_prefix}${strip_default}"
 sysinclude_default="${sysroot}/usr/include"
 
 case "$toolchain" in
+    clang-asan)
+        cc_default="clang"
+        add_cflags  -faddress-sanitizer
+        add_ldflags -faddress-sanitizer
+    ;;
+    clang-tsan)
+        cc_default="clang"
+        add_cflags  -fthread-sanitizer
+        add_ldflags -fthread-sanitizer
+    ;;
     msvc)
         cc_default="c99wrap cl"
         ld_default="c99wrap link"
@@ -3212,18 +3225,17 @@ elif check_header _mingw.h; then
         die "ERROR: MinGW runtime version must be >= 3.15."
     if check_cpp_condition _mingw.h "defined(__MINGW64_VERSION_MAJOR) && \
             __MINGW64_VERSION_MAJOR < 3"; then
-        enable broken_snprintf
+        add_compat msvcrt/snprintf.o
         add_cflags "-include $source_path/compat/msvcrt/snprintf.h"
     fi
 elif check_cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
     libc_type=newlib
 elif check_func_headers stdlib.h _get_doserrno; then
     libc_type=msvcrt
-    enable broken_snprintf
-    add_cflags -Dstrtod=avpriv_strtod
-    add_cflags -Dsnprintf=avpriv_snprintf   \
-               -D_snprintf=avpriv_snprintf  \
-               -Dvsnprintf=avpriv_vsnprintf
+    add_compat strtod.o strtod=avpriv_strtod
+    add_compat msvcrt/snprintf.o snprintf=avpriv_snprintf   \
+                                 _snprintf=avpriv_snprintf  \
+                                 vsnprintf=avpriv_vsnprintf
 elif check_cpp_condition stddef.h "defined __KLIBC__"; then
     libc_type=klibc
 fi
@@ -3539,6 +3551,7 @@ check_func  localtime_r
 check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  mkstemp
 check_func  mmap
+check_func  mprotect
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 check_func_headers malloc.h _aligned_malloc     && enable aligned_malloc
 check_func  setrlimit
@@ -4232,6 +4245,7 @@ CFLAGS-ffplay=$sdl_cflags
 ZLIB=$($ldflags_filter -lz)
 LIB_INSTALL_EXTRA_CMD=$LIB_INSTALL_EXTRA_CMD
 EXTRALIBS=$extralibs
+COMPAT_OBJS=$compat_objs
 INSTALL=$install
 LIBTARGET=${LIBTARGET}
 SLIBNAME=${SLIBNAME}
@@ -4251,7 +4265,7 @@ get_version(){
     lcname=$1
     name=$(toupper $lcname)
     file=$source_path/$lcname/version.h
-    eval $(grep "#define ${name}_VERSION_M" "$file" | awk '{ print $2"="$3 }')
+    eval $(awk "/#define ${name}_VERSION_M/ { print \$2 \"=\" \$3 }" "$file")
     eval ${name}_VERSION=\$${name}_VERSION_MAJOR.\$${name}_VERSION_MINOR.\$${name}_VERSION_MICRO
     eval echo "${lcname}_VERSION=\$${name}_VERSION" >> config.mak
     eval echo "${lcname}_VERSION_MAJOR=\$${name}_VERSION_MAJOR" >> config.mak

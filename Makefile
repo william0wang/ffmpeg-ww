@@ -41,7 +41,7 @@ FFLIBS-$(CONFIG_SWSCALE)  += swscale
 FFLIBS := avutil
 
 DATA_FILES := $(wildcard $(SRC_PATH)/presets/*.ffpreset) $(SRC_PATH)/doc/ffprobe.xsd
-EXAMPLES_FILES := $(wildcard $(SRC_PATH)/doc/examples/*.c) $(SRC_PATH)/doc/examples/Makefile
+EXAMPLES_FILES := $(wildcard $(SRC_PATH)/doc/examples/*.c) $(SRC_PATH)/doc/examples/Makefile $(SRC_PATH)/doc/examples/README
 
 SKIPHEADERS = cmdutils_common_opts.h
 
@@ -97,8 +97,8 @@ ffmpeg_g.exe: ffmpeg.o cmdutils.o $(FF_DEP_LIBS) ffmpeg-rc.o
 	$(CC) $(LDFLAGS) -o $@ $< cmdutils.o ffmpeg-rc.o $(FF_EXTRALIBS)
 
 define DOPROG
-OBJS-$(1) += $(1).o
-$(1)$(PROGSSUF)_g$(EXESUF): $(OBJS-$(1))
+OBJS-$(1) += $(1).o cmdutils.o
+$(1)$(PROGSSUF)_g$(EXESUF): $$(OBJS-$(1))
 $$(OBJS-$(1)): CFLAGS  += $(CFLAGS-$(1))
 $(1)$(PROGSSUF)_g$(EXESUF): LDFLAGS += $(LDFLAGS-$(1))
 $(1)$(PROGSSUF)_g$(EXESUF): FF_EXTRALIBS += $(LIBS-$(1))
@@ -107,8 +107,8 @@ endef
 
 $(foreach P,$(PROGS-yes),$(eval $(call DOPROG,$(P))))
 
-%$(PROGSSUF)_g$(EXESUF): %.o cmdutils.o $(FF_DEP_LIBS)
-	$(LD) $(LDFLAGS) $(LD_O) $(OBJS-$*) cmdutils.o $(FF_EXTRALIBS)
+%$(PROGSSUF)_g$(EXESUF): %.o $(FF_DEP_LIBS)
+	$(LD) $(LDFLAGS) $(LD_O) $(OBJS-$*) $(FF_EXTRALIBS)
 
 OBJDIRS += tools
 

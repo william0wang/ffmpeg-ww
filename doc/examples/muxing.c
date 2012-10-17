@@ -98,7 +98,7 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, AVStream *st)
 
     /* open it */
     if (avcodec_open2(c, codec, NULL) < 0) {
-        fprintf(stderr, "could not open codec\n");
+        fprintf(stderr, "Could not open audio codec\n");
         exit(1);
     }
 
@@ -115,6 +115,10 @@ static void open_audio(AVFormatContext *oc, AVCodec *codec, AVStream *st)
     samples = av_malloc(audio_input_frame_size *
                         av_get_bytes_per_sample(c->sample_fmt) *
                         c->channels);
+    if (!samples) {
+        fprintf(stderr, "Could not allocate audio samples buffer\n");
+        exit(1);
+    }
 }
 
 /* Prepare a 16 bit dummy audio frame of 'frame_size' samples and
@@ -139,7 +143,7 @@ static void write_audio_frame(AVFormatContext *oc, AVStream *st)
     AVCodecContext *c;
     AVPacket pkt = { 0 }; // data and size must be 0;
     AVFrame *frame = avcodec_alloc_frame();
-    int got_packet;
+    int got_packet, ret;
 
     av_init_packet(&pkt);
     c = st->codec;
@@ -152,7 +156,12 @@ static void write_audio_frame(AVFormatContext *oc, AVStream *st)
                              av_get_bytes_per_sample(c->sample_fmt) *
                              c->channels, 1);
 
-    avcodec_encode_audio2(c, &pkt, frame, &got_packet);
+    ret = avcodec_encode_audio2(c, &pkt, frame, &got_packet);
+    if (ret < 0) {
+        fprintf(stderr, "Error encoding audio frame\n");
+        exit(1);
+    }
+
     if (!got_packet)
         return;
 
@@ -244,7 +253,7 @@ static void open_video(AVFormatContext *oc, AVCodec *codec, AVStream *st)
 
     /* open the codec */
     if (avcodec_open2(c, codec, NULL) < 0) {
-        fprintf(stderr, "Could not open codec\n");
+        fprintf(stderr, "Could not open video codec\n");
         exit(1);
     }
 
@@ -373,9 +382,6 @@ static void write_video_frame(AVFormatContext *oc, AVStream *st)
 
         /* If size is zero, it means the image was buffered. */
         if (got_output) {
-            if (c->coded_frame->pts != AV_NOPTS_VALUE)
-                pkt.pts = av_rescale_q(c->coded_frame->pts,
-                                       c->time_base, st->time_base);
             if (c->coded_frame->key_frame)
                 pkt.flags |= AV_PKT_FLAG_KEY;
 
@@ -422,8 +428,10 @@ int main(int argc, char **argv)
     if (argc != 2) {
         printf("usage: %s output_file\n"
                "API example program to output a media file with libavformat.\n"
+               "This program generates a synthetic audio and video stream, encodes and\n"
+               "muxes them into a file named output_file.\n"
                "The output format is automatically guessed according to the file extension.\n"
-               "Raw images can also be output by using '%%d' in the filename\n"
+               "Raw images can also be output by using '%%d' in the filename.\n"
                "\n", argv[0]);
         return 1;
     }
@@ -498,7 +506,7 @@ int main(int argc, char **argv)
             write_audio_frame(oc, audio_st);
         } else {
             write_video_frame(oc, video_st);
-            frame->pts++;
+            frame->pts += av_rescale_q(1, video_st->codec->time_base, video_st->time_base);
         }
     }
 

@@ -689,7 +689,9 @@ static int mov_read_wfex(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return 0;
     st = c->fc->streams[c->fc->nb_streams-1];
 
-    ff_get_wav_header(pb, st->codec, atom.size);
+    if (ff_get_wav_header(pb, st->codec, atom.size) < 0) {
+        av_log(c->fc, AV_LOG_WARNING, "get_wav_header failed\n");
+    }
 
     return 0;
 }
@@ -778,14 +780,16 @@ static int mov_read_moof(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return mov_read_default(c, pb, atom);
 }
 
-static void mov_metadata_creation_time(AVDictionary **metadata, time_t time)
+static void mov_metadata_creation_time(AVDictionary **metadata, int64_t time)
 {
     char buffer[32];
     if (time) {
         struct tm *ptm;
+        time_t timet;
         if(time >= 2082844800)
             time -= 2082844800;  /* seconds between 1904-01-01 and Epoch */
-        ptm = gmtime(&time);
+        timet = time;
+        ptm = gmtime(&timet);
         if (!ptm) return;
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", ptm);
         av_dict_set(metadata, "creation_time", buffer, 0);
@@ -799,7 +803,7 @@ static int mov_read_mdhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     int version;
     char language[4] = {0};
     unsigned lang;
-    time_t creation_time;
+    int64_t creation_time;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -834,7 +838,7 @@ static int mov_read_mdhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
 static int mov_read_mvhd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
-    time_t creation_time;
+    int64_t creation_time;
     int version = avio_r8(pb); /* version */
     avio_rb24(pb); /* flags */
 
