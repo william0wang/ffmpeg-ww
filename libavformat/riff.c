@@ -1,5 +1,5 @@
 /*
- * RIFF codec tags
+ * RIFF common functions and data
  * Copyright (c) 2000 Fabrice Bellard
  *
  * This file is part of FFmpeg.
@@ -797,4 +797,52 @@ int ff_read_riff_info(AVFormatContext *s, int64_t size)
     }
 
     return 0;
+}
+
+static int riff_has_valid_tags(AVFormatContext *s)
+{
+    int i;
+    AVDictionaryEntry *t = NULL;
+
+    for (i = 0; *ff_riff_tags[i]; i++) {
+        if ((t = av_dict_get(s->metadata, ff_riff_tags[i], NULL, AV_DICT_MATCH_CASE)))
+            return 1;
+    }
+
+    return 0;
+}
+
+void ff_riff_write_info_tag(AVIOContext *pb, const char *tag, const char *str)
+{
+    int len = strlen(str);
+    if (len > 0) {
+        len++;
+        ffio_wfourcc(pb, tag);
+        avio_wl32(pb, len);
+        avio_put_str(pb, str);
+        if (len & 1)
+            avio_w8(pb, 0);
+    }
+}
+
+void ff_riff_write_info(AVFormatContext *s)
+{
+    AVIOContext *pb = s->pb;
+    int i;
+    int64_t list_pos;
+    AVDictionaryEntry *t = NULL;
+
+    ff_metadata_conv(&s->metadata, ff_riff_info_conv, NULL);
+
+    /* writing empty LIST is not nice and may cause problems */
+    if (!riff_has_valid_tags(s))
+        return;
+
+    list_pos = ff_start_tag(pb, "LIST");
+    ffio_wfourcc(pb, "INFO");
+    for (i = 0; *ff_riff_tags[i]; i++) {
+        if ((t = av_dict_get(s->metadata, ff_riff_tags[i], NULL, AV_DICT_MATCH_CASE)))
+            ff_riff_write_info_tag(s->pb, t->key, t->value);
+    }
+    ff_end_tag(pb, list_pos);
 }

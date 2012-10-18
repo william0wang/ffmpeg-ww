@@ -380,7 +380,7 @@ int locate_option(int argc, char **argv, const OptionDef *options,
              (po->name && !strcmp(optname, po->name)))
             return i;
 
-        if (!po || po->flags & HAS_ARG)
+        if (po->flags & HAS_ARG)
             i++;
     }
     return 0;
@@ -1303,6 +1303,10 @@ int cmdutils_read_file(const char *filename, char **bufptr, size_t *size)
     fseek(f, 0, SEEK_END);
     *size = ftell(f);
     fseek(f, 0, SEEK_SET);
+    if (*size == (size_t)-1) {
+        av_log(NULL, AV_LOG_ERROR, "IO error: %s\n", strerror(errno));
+        return AVERROR(errno);
+    }
     *bufptr = av_malloc(*size + 1);
     if (!*bufptr) {
         av_log(NULL, AV_LOG_ERROR, "Could not allocate file buffer\n");
