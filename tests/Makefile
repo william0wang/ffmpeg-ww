@@ -41,8 +41,24 @@ tests/data/ffprobe-test.nut: ffmpeg$(EXESUF) | tests/data
 
 tests/data/%.sw tests/data/asynth% tests/data/vsynth%.yuv tests/vsynth%/00.pgm tests/data/%.nut: TAG = GEN
 
+ALLYES  = $(strip $(call XYES, $(1)))
+XYES    = $(if $(strip $(1)),                                           \
+               $(if $(CONFIG_$(firstword $(1))),                        \
+                    $(call XYES, $(wordlist 2, $(words $(1)), $(1)))),  \
+               yes)
+
+ENCDEC  = $(call ALLYES, $(firstword $(1))_ENCODER $(lastword $(1))_DECODER  \
+                         $(firstword $(2))_MUXER   $(lastword $(2))_DEMUXER)
+
+ENCDEC2 = $(call ALLYES, $(firstword $(1))_ENCODER $(lastword $(1))_DECODER  \
+                         $(firstword $(2))_ENCODER $(lastword $(2))_DECODER  \
+                         $(firstword $(3))_MUXER   $(lastword $(3))_DEMUXER)
+
 include $(SRC_PATH)/tests/fate/acodec.mak
 include $(SRC_PATH)/tests/fate/vcodec.mak
+include $(SRC_PATH)/tests/fate/avformat.mak
+include $(SRC_PATH)/tests/fate/avfilter.mak
+include $(SRC_PATH)/tests/fate/seek.mak
 
 include $(SRC_PATH)/tests/fate/aac.mak
 include $(SRC_PATH)/tests/fate/ac3.mak
@@ -96,13 +112,6 @@ include $(SRC_PATH)/tests/fate/wavpack.mak
 include $(SRC_PATH)/tests/fate/wma.mak
 
 FATE_LAVF_FATE = $(LAVF_FATE_TESTS:%=fate-lavf-fate-%)
-FATE_LAVF    = $(LAVF_TESTS:%=fate-lavf-%)
-FATE_LAVFI   = $(LAVFI_TESTS:%=fate-lavfi-%)
-FATE_SEEK    = $(SEEK_TESTS:seek_%=fate-seek-%)
-
-FATE_AVCONV += $(FATE_LAVF)                                             \
-               $(FATE_LAVFI)                                            \
-               $(FATE_SEEK)                                             \
 
 FATE_FFMPEG += $(FATE_FFMPEG-yes) $(FATE_AVCONV) $(FATE_AVCONV-yes)
 FATE-$(CONFIG_FFMPEG) += $(FATE_FFMPEG)
@@ -121,19 +130,9 @@ $(FATE_FFMPEG) $(FATE_LAVF_FATE) $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMPEG): 
 
 $(FATE_FFPROBE): ffprobe$(EXESUF)
 
-$(FATE_LAVF):  $(AREF) $(VREF)
-$(FATE_LAVFI): $(VREF) libavfilter/filtfmts-test$(EXESUF)
-$(FATE_SEEK):  fate-acodec fate-vsynth2 fate-lavf libavformat/seek-test$(EXESUF)
-
 $(FATE_LAVF_FATE): CMD = lavffatetest
-$(FATE_LAVF):    CMD = lavftest
-$(FATE_LAVFI):   CMD = lavfitest
-$(FATE_SEEK):    CMD = seektest
 
 fate-lavf-fate: $(FATE_LAVF_FATE)
-fate-lavf:   $(FATE_LAVF)
-fate-lavfi:  $(FATE_LAVFI)
-fate-seek:   $(FATE_SEEK)
 
 ifdef SAMPLES
 FATE += $(FATE_LAVF_FATE)

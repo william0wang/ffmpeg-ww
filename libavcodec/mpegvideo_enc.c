@@ -103,7 +103,7 @@ void ff_convert_matrix(DSPContext *dsp, int (*qmat)[64],
                  *           3444240 >= (1 << 36) / (x) >= 275 */
 
                 qmat[qscale][i] = (int)((UINT64_C(1) << (QMAT_SHIFT + 14)) /
-                                        (ff_aanscales[i] * qscale * quant_matrix[j]));
+                                        (ff_aanscales[i] * (int64_t)qscale * quant_matrix[j]));
             }
         } else {
             for (i = 0; i < 64; i++) {
@@ -1501,7 +1501,8 @@ int ff_MPV_encode_picture(AVCodecContext *avctx, AVPacket *pkt,
 
         s->pict_type = s->new_picture.f.pict_type;
         //emms_c();
-        ff_MPV_frame_start(s, avctx);
+        if (ff_MPV_frame_start(s, avctx) < 0)
+            return -1;
 vbv_retry:
         if (encode_picture(s, s->picture_number) < 0)
             return -1;
