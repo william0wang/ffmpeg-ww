@@ -121,6 +121,10 @@ static void audio_encode_example(const char *filename)
     }
 
     c = avcodec_alloc_context3(codec);
+    if (!c) {
+        fprintf(stderr, "Could not allocate audio codec context\n");
+        exit(1);
+    }
 
     /* put sample parameters */
     c->bit_rate = 64000;
@@ -252,6 +256,10 @@ static void audio_decode_example(const char *outfilename, const char *filename)
     }
 
     c = avcodec_alloc_context3(codec);
+    if (!c) {
+        fprintf(stderr, "Could not allocate audio codec context\n");
+        exit(1);
+    }
 
     /* open it */
     if (avcodec_open2(c, codec, NULL) < 0) {
@@ -346,6 +354,10 @@ static void video_encode_example(const char *filename, int codec_id)
     }
 
     c = avcodec_alloc_context3(codec);
+    if (!c) {
+        fprintf(stderr, "Could not allocate video codec context\n");
+        exit(1);
+    }
 
     /* put sample parameters */
     c->bit_rate = 400000;
@@ -479,9 +491,9 @@ static void video_decode_example(const char *outfilename, const char *filename)
 {
     AVCodec *codec;
     AVCodecContext *c= NULL;
-    int frame, got_picture, len;
+    int frame_count, got_frame, len;
     FILE *f;
-    AVFrame *picture;
+    AVFrame *frame;
     uint8_t inbuf[INBUF_SIZE + FF_INPUT_BUFFER_PADDING_SIZE];
     char buf[1024];
     AVPacket avpkt;
@@ -501,6 +513,11 @@ static void video_decode_example(const char *outfilename, const char *filename)
     }
 
     c = avcodec_alloc_context3(codec);
+    if (!c) {
+        fprintf(stderr, "Could not allocate video codec context\n");
+        exit(1);
+    }
+
     if(codec->capabilities&CODEC_CAP_TRUNCATED)
         c->flags|= CODEC_FLAG_TRUNCATED; /* we do not send complete frames */
 
@@ -514,21 +531,19 @@ static void video_decode_example(const char *outfilename, const char *filename)
         exit(1);
     }
 
-    /* the codec gives us the frame size, in samples */
-
     f = fopen(filename, "rb");
     if (!f) {
         fprintf(stderr, "Could not open %s\n", filename);
         exit(1);
     }
 
-    picture = avcodec_alloc_frame();
-    if (!picture) {
+    frame = avcodec_alloc_frame();
+    if (!frame) {
         fprintf(stderr, "Could not allocate video frame\n");
         exit(1);
     }
 
-    frame = 0;
+    frame_count = 0;
     for(;;) {
         avpkt.size = fread(inbuf, 1, INBUF_SIZE, f);
         if (avpkt.size == 0)
@@ -551,21 +566,21 @@ static void video_decode_example(const char *outfilename, const char *filename)
            feed decoder and see if it could decode a frame */
         avpkt.data = inbuf;
         while (avpkt.size > 0) {
-            len = avcodec_decode_video2(c, picture, &got_picture, &avpkt);
+            len = avcodec_decode_video2(c, frame, &got_frame, &avpkt);
             if (len < 0) {
-                fprintf(stderr, "Error while decoding frame %d\n", frame);
+                fprintf(stderr, "Error while decoding frame %d\n", frame_count);
                 exit(1);
             }
-            if (got_picture) {
-                printf("Saving frame %3d\n", frame);
+            if (got_frame) {
+                printf("Saving frame %3d\n", frame_count);
                 fflush(stdout);
 
                 /* the picture is allocated by the decoder. no need to
                    free it */
-                snprintf(buf, sizeof(buf), outfilename, frame);
-                pgm_save(picture->data[0], picture->linesize[0],
+                snprintf(buf, sizeof(buf), outfilename, frame_count);
+                pgm_save(frame->data[0], frame->linesize[0],
                          c->width, c->height, buf);
-                frame++;
+                frame_count++;
             }
             avpkt.size -= len;
             avpkt.data += len;
@@ -577,24 +592,24 @@ static void video_decode_example(const char *outfilename, const char *filename)
        chance to get the last frame of the video */
     avpkt.data = NULL;
     avpkt.size = 0;
-    len = avcodec_decode_video2(c, picture, &got_picture, &avpkt);
-    if (got_picture) {
-        printf("Saving last frame %3d\n", frame);
+    len = avcodec_decode_video2(c, frame, &got_frame, &avpkt);
+    if (got_frame) {
+        printf("Saving last frame %3d\n", frame_count);
         fflush(stdout);
 
         /* the picture is allocated by the decoder. no need to
            free it */
-        snprintf(buf, sizeof(buf), outfilename, frame);
-        pgm_save(picture->data[0], picture->linesize[0],
+        snprintf(buf, sizeof(buf), outfilename, frame_count);
+        pgm_save(frame->data[0], frame->linesize[0],
                  c->width, c->height, buf);
-        frame++;
+        frame_count++;
     }
 
     fclose(f);
 
     avcodec_close(c);
     av_free(c);
-    avcodec_free_frame(&picture);
+    avcodec_free_frame(&frame);
     printf("\n");
 }
 
@@ -610,8 +625,8 @@ int main(int argc, char **argv)
                "API example program to decode/encode a media stream with libavcodec.\n"
                "This program generates a synthetic stream and encodes it to a file\n"
                "named test.h264, test.mp2 or test.mpg depending on output_type.\n"
-               "The encoded stream is then decoded and written to a raw data output\n."
-               "output_type must be choosen between 'h264', 'mp2', 'mpg'\n",
+               "The encoded stream is then decoded and written to a raw data output.\n"
+               "output_type must be choosen between 'h264', 'mp2', 'mpg'.\n",
                argv[0]);
         return 1;
     }

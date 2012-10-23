@@ -118,11 +118,11 @@ static void filter(AVFilterContext *ctx)
         }
     }
 
-    if      (alpha[0] / (float)alpha[1] > idet->interlace_threshold){
+    if      (alpha[0] > idet->interlace_threshold * alpha[1]){
         type = TFF;
-    }else if(alpha[1] / (float)alpha[0] > idet->interlace_threshold){
+    }else if(alpha[1] > idet->interlace_threshold * alpha[0]){
         type = BFF;
-    }else if(alpha[1] / (float)delta    > idet->progressive_threshold){
+    }else if(alpha[1] > idet->progressive_threshold * delta){
         type = PROGRSSIVE;
     }else{
         type = UNDETERMINED;
@@ -195,7 +195,7 @@ static int end_frame(AVFilterLink *link)
         return 0;
 
     if (!idet->csp)
-        idet->csp = &av_pix_fmt_descriptors[link->format];
+        idet->csp = av_pix_fmt_desc_get(link->format);
     if (idet->csp->comp[0].depth_minus1 / 8 == 1)
         idet->filter_line = (void*)filter_line_c_16bit;
 

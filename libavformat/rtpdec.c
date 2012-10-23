@@ -560,7 +560,8 @@ static int rtp_parse_packet_internal(RTPDemuxContext *s, AVPacket *pkt,
             h = AV_RB32(buf);
             len -= 4;
             buf += 4;
-            av_new_packet(pkt, len);
+            if (av_new_packet(pkt, len) < 0)
+                return AVERROR(ENOMEM);
             memcpy(pkt->data, buf, len);
             break;
         case AV_CODEC_ID_MPEG1VIDEO:
@@ -578,11 +579,13 @@ static int rtp_parse_packet_internal(RTPDemuxContext *s, AVPacket *pkt,
                 buf += 4;
                 len -= 4;
             }
-            av_new_packet(pkt, len);
+            if (av_new_packet(pkt, len) < 0)
+                return AVERROR(ENOMEM);
             memcpy(pkt->data, buf, len);
             break;
         default:
-            av_new_packet(pkt, len);
+            if (av_new_packet(pkt, len) < 0)
+                return AVERROR(ENOMEM);
             memcpy(pkt->data, buf, len);
             break;
         }
@@ -785,7 +788,7 @@ int ff_parse_fmtp(AVStream *stream, PayloadContext *data, const char *p,
     int value_size = strlen(p) + 1;
 
     if (!(value = av_malloc(value_size))) {
-        av_log(stream, AV_LOG_ERROR, "Failed to allocate data for FMTP.\n");
+        av_log(NULL, AV_LOG_ERROR, "Failed to allocate data for FMTP.\n");
         return AVERROR(ENOMEM);
     }
 

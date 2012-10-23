@@ -1416,6 +1416,7 @@ static int mp_decode_layer3(MPADecodeContext *s)
                 g = &s->granules[ch][gr];
                 s->last_buf_size += g->part2_3_length;
                 memset(g->sb_hybrid, 0, sizeof(g->sb_hybrid));
+                compute_imdct(s, g, &s->sb_samples[ch][18 * gr][0], s->mdct_buf[ch]);
             }
         }
         skip = s->last_buf_size - 8 * main_data_begin;
@@ -1615,6 +1616,9 @@ static int mp_decode_frame(MPADecodeContext *s, OUT_INT *samples,
         memcpy(s->last_buf + s->last_buf_size, s->gb.buffer + buf_size - HEADER_SIZE - i, i);
         s->last_buf_size += i;
     }
+
+    if(nb_frames < 0)
+        return nb_frames;
 
     /* get output buffer */
     if (!samples) {

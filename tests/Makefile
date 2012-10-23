@@ -54,6 +54,9 @@ ENCDEC2 = $(call ALLYES, $(firstword $(1))_ENCODER $(lastword $(1))_DECODER  \
                          $(firstword $(2))_ENCODER $(lastword $(2))_DECODER  \
                          $(firstword $(3))_MUXER   $(lastword $(3))_DEMUXER)
 
+DEMDEC  = $(call ALLYES, $(1)_DEMUXER $(2:%=%_DECODER))
+ENCMUX  = $(call ALLYES, $(2:%=%_ENCODER) $(1)_MUXER)
+
 include $(SRC_PATH)/tests/fate/acodec.mak
 include $(SRC_PATH)/tests/fate/vcodec.mak
 include $(SRC_PATH)/tests/fate/avformat.mak
@@ -111,8 +114,6 @@ include $(SRC_PATH)/tests/fate/vqf.mak
 include $(SRC_PATH)/tests/fate/wavpack.mak
 include $(SRC_PATH)/tests/fate/wma.mak
 
-FATE_LAVF_FATE = $(LAVF_FATE_TESTS:%=fate-lavf-fate-%)
-
 FATE_FFMPEG += $(FATE_FFMPEG-yes) $(FATE_AVCONV) $(FATE_AVCONV-yes)
 FATE-$(CONFIG_FFMPEG) += $(FATE_FFMPEG)
 FATE-$(CONFIG_FFPROBE) += $(FATE_FFPROBE)
@@ -120,22 +121,18 @@ FATE-$(CONFIG_FFPROBE) += $(FATE_FFPROBE)
 FATE-$(CONFIG_AVCODEC)  += $(FATE_LIBAVCODEC)
 FATE-$(CONFIG_AVFORMAT) += $(FATE_LIBAVFORMAT)
 
-FATE_EXTERN-$(CONFIG_FFMPEG) += $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMPEG)
+FATE_SAMPLES_AVCONV           += $(FATE_SAMPLES_AVCONV-yes)
+FATE_EXTERN-$(CONFIG_FFMPEG)  += $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMPEG) $(FATE_SAMPLES_FFPROBE)
 FATE_EXTERN += $(FATE_EXTERN-yes)
 
 FATE += $(FATE-yes)
 FATE += $(FATE_LIBAVUTIL)
 
-$(FATE_FFMPEG) $(FATE_LAVF_FATE) $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMPEG): ffmpeg$(EXESUF)
+$(FATE_FFMPEG) $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMPEG): ffmpeg$(EXESUF)
 
-$(FATE_FFPROBE): ffprobe$(EXESUF)
-
-$(FATE_LAVF_FATE): CMD = lavffatetest
-
-fate-lavf-fate: $(FATE_LAVF_FATE)
+$(FATE_FFPROBE) $(FATE_SAMPLES_FFPROBE): ffprobe$(EXESUF)
 
 ifdef SAMPLES
-FATE += $(FATE_LAVF_FATE)
 FATE += $(FATE_FULL) $(FATE_FULL-yes)
 FATE += $(FATE_EXTERN)
 fate-rsync:

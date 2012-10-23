@@ -123,7 +123,8 @@ static int create_filter(AVFilterContext **filt_ctx, AVFilterGraph *ctx, int ind
         return ret;
     }
 
-    if (!strcmp(filt_name, "scale") && args && !strstr(args, "flags")) {
+    if (!strcmp(filt_name, "scale") && args && !strstr(args, "flags")
+        && ctx->scale_sws_opts) {
         snprintf(tmp_args, sizeof(tmp_args), "%s:%s",
                  args, ctx->scale_sws_opts);
         args = tmp_args;
@@ -518,6 +519,9 @@ int avfilter_graph_parse(AVFilterGraph *graph, const char *filters,
     AVFilterInOut *curr_inputs = NULL;
     AVFilterInOut *open_inputs  = open_inputs_ptr  ? *open_inputs_ptr  : NULL;
     AVFilterInOut *open_outputs = open_outputs_ptr ? *open_outputs_ptr : NULL;
+
+    if ((ret = parse_sws_flags(&filters, graph)) < 0)
+        goto end;
 
     do {
         AVFilterContext *filter;

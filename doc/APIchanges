@@ -15,6 +15,13 @@ libavutil:     2011-04-18
 
 API changes, most recent first:
 
+2012-10-21 - xxxxxxx - lavc  54.68.100 - avcodec.h
+                       lavfi  3.20.100 - avfilter.h
+  Add AV_PKT_DATA_STRINGS_METADATA side data type, used to transmit key/value
+  strings between AVPacket and AVFrame, and add metadata field to
+  AVCodecContext (which shall not be accessed by users; see AVFrame metadata
+  instead).
+
 2012-09-27 - a70b493 - lavd 54.3.100 - version.h
   Add LIBAVDEVICE_IDENT symbol.
 
@@ -96,6 +103,9 @@ API changes, most recent first:
 
 2012-03-26 - a67d9cf - lavfi 2.66.100
   Add avfilter_fill_frame_from_{audio_,}buffer_ref() functions.
+
+2012-10-18 - xxxxxxx - lavu 51.45.0 - error.h
+  Add AVERROR_EXPERIMENTAL
 
 2012-10-12 - xxxxxxx - lavu 51.44.0 - pixdesc.h
   Add functions for accessing pixel format descriptors.

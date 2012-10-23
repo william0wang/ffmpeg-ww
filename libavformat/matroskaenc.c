@@ -1015,8 +1015,8 @@ static int ass_get_duration(const uint8_t *p)
     if (sscanf(p, "%*[^,],%d:%d:%d%*c%d,%d:%d:%d%*c%d",
                &sh, &sm, &ss, &sc, &eh, &em, &es, &ec) != 8)
         return 0;
-    start = 3600000*sh + 60000*sm + 1000*ss + 10*sc;
-    end   = 3600000*eh + 60000*em + 1000*es + 10*ec;
+    start = 3600000LL*sh + 60000LL*sm + 1000LL*ss + 10LL*sc;
+    end   = 3600000LL*eh + 60000LL*em + 1000LL*es + 10LL*ec;
     return end - start;
 }
 
@@ -1166,8 +1166,12 @@ static int mkv_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (!s->pb->seekable) {
-        if (!mkv->dyn_bc)
-            avio_open_dyn_buf(&mkv->dyn_bc);
+        if (!mkv->dyn_bc) {
+            if ((ret = avio_open_dyn_buf(&mkv->dyn_bc)) < 0) {
+                av_log(s, AV_LOG_ERROR, "Failed to open dynamic buffer\n");
+                return ret;
+            }
+        }
         pb = mkv->dyn_bc;
     }
 
