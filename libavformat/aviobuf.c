@@ -144,6 +144,7 @@ static void flush_buffer(AVIOContext *s)
 
 void avio_w8(AVIOContext *s, int b)
 {
+    av_assert2(b>=-128 && b<=255);
     *s->buf_ptr++ = b;
     if (s->buf_ptr >= s->buf_end)
         flush_buffer(s);
@@ -283,18 +284,18 @@ int url_feof(AVIOContext *s)
 
 void avio_wl32(AVIOContext *s, unsigned int val)
 {
-    avio_w8(s, val);
-    avio_w8(s, val >> 8);
-    avio_w8(s, val >> 16);
-    avio_w8(s, val >> 24);
+    avio_w8(s, (uint8_t) val       );
+    avio_w8(s, (uint8_t)(val >> 8 ));
+    avio_w8(s, (uint8_t)(val >> 16));
+    avio_w8(s,           val >> 24 );
 }
 
 void avio_wb32(AVIOContext *s, unsigned int val)
 {
-    avio_w8(s, val >> 24);
-    avio_w8(s, val >> 16);
-    avio_w8(s, val >> 8);
-    avio_w8(s, val);
+    avio_w8(s,           val >> 24 );
+    avio_w8(s, (uint8_t)(val >> 16));
+    avio_w8(s, (uint8_t)(val >> 8 ));
+    avio_w8(s, (uint8_t) val       );
 }
 
 int avio_put_str(AVIOContext *s, const char *str)
@@ -338,7 +339,7 @@ void ff_put_v(AVIOContext *bc, uint64_t val){
     int i= ff_get_v_length(val);
 
     while(--i>0)
-        avio_w8(bc, 128 | (val>>(7*i)));
+        avio_w8(bc, 128 | (uint8_t)(val>>(7*i)));
 
     avio_w8(bc, val&127);
 }
@@ -357,26 +358,26 @@ void avio_wb64(AVIOContext *s, uint64_t val)
 
 void avio_wl16(AVIOContext *s, unsigned int val)
 {
-    avio_w8(s, val);
-    avio_w8(s, val >> 8);
+    avio_w8(s, (uint8_t)val);
+    avio_w8(s, (int)val >> 8);
 }
 
 void avio_wb16(AVIOContext *s, unsigned int val)
 {
-    avio_w8(s, val >> 8);
-    avio_w8(s, val);
+    avio_w8(s, (int)val >> 8);
+    avio_w8(s, (uint8_t)val);
 }
 
 void avio_wl24(AVIOContext *s, unsigned int val)
 {
     avio_wl16(s, val & 0xffff);
-    avio_w8(s, val >> 16);
+    avio_w8(s, (int)val >> 16);
 }
 
 void avio_wb24(AVIOContext *s, unsigned int val)
 {
-    avio_wb16(s, val >> 8);
-    avio_w8(s, val);
+    avio_wb16(s, (int)val >> 8);
+    avio_w8(s, (uint8_t)val);
 }
 
 /* Input stream */

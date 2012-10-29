@@ -2016,13 +2016,13 @@ drawtext="fontsize=60:fontfile=FreeSerif.ttf:fontcolor=green:text=g:x=(w-max_gly
 @item
 Show text for 1 second every 3 seconds:
 @example
-drawtext="fontfile=FreeSerif.ttf:fontcolor=white:x=100:y=x/dar:draw=lt(mod(t\\,3)\\,1):text='blink'"
+drawtext="fontfile=FreeSerif.ttf:fontcolor=white:x=100:y=x/dar:draw=lt(mod(t\,3)\,1):text='blink'"
 @end example
 
 @item
 Use fontconfig to set the font. Note that the colons need to be escaped.
 @example
-drawtext='fontfile=Linux Libertine O-40\\:style=Semibold:text=FFmpeg'
+drawtext='fontfile=Linux Libertine O-40\:style=Semibold:text=FFmpeg'
 @end example
 
 @end itemize
@@ -2185,6 +2185,9 @@ This filter accepts the following named parameters:
 
 @item fps
 Desired output framerate.
+
+@item round
+Rounding method. The default is @code{near}.
 
 @end table
 
@@ -2823,7 +2826,7 @@ ffmpeg -i input -i logo1 -i logo2 -filter_complex
 
 # add a transparent color layer on top of the main video,
 # WxH specifies the size of the main input to the overlay filter
-color=red@.3:WxH [over]; [in][over] overlay [out]
+color=red@@.3:WxH [over]; [in][over] overlay [out]
 
 # play an original video and a filtered version (here with the deshake filter)
 # side by side
@@ -4640,6 +4643,9 @@ streams in each segment. Default is 1.
 Set the number of output audio streams, that is also the number of video
 streams in each segment. Default is 0.
 
+@item unsafe
+Activate unsafe mode: do not fail if segments have a different format.
+
 @end table
 
 The filter has @var{v}+@var{a} outputs: first @var{v} video outputs, then
@@ -4701,6 +4707,9 @@ The filter accepts the following named parameters:
 @table @option
 @item size, s
 Specify the video size for the output. Default value is @code{640x480}.
+@item slide
+Specify if the spectrum should slide along the window. Default value is
+@code{0}.
 @end table
 
 The usage is very similar to the showwaves filter; see the examples in that

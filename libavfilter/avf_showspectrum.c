@@ -37,6 +37,7 @@ typedef struct {
     int w, h;
     AVFilterBufferRef *outpicref;
     int req_fullfilled;
+    int sliding;                ///< 1 if sliding mode, 0 otherwise
     int xpos;                   ///< x position (current column)
     RDFTContext *rdft;          ///< Real Discrete Fourier Transform context
     int rdft_bits;              ///< number of bits (RDFT window size = 1<<rdft_bits)
@@ -52,6 +53,7 @@ typedef struct {
 static const AVOption showspectrum_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x480"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x480"}, 0, 0, FLAGS },
+    { "slide", "set sliding mode", OFFSET(sliding), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, FLAGS },
     { NULL },
 };
 
@@ -130,16 +132,20 @@ static int config_output(AVFilterLink *outlink)
 
     /* (re-)configuration if the video output changed (or first init) */
     if (rdft_bits != showspectrum->rdft_bits) {
+        size_t rdft_size;
         AVFilterBufferRef *outpicref;
 
         av_rdft_end(showspectrum->rdft);
         showspectrum->rdft = av_rdft_init(rdft_bits, DFT_R2C);
         showspectrum->rdft_bits = rdft_bits;
 
-        /* RDFT buffers: x2 for each (display) channel buffer */
-        showspectrum->rdft_data =
-            av_realloc_f(showspectrum->rdft_data, 2 * win_size,
-                         sizeof(*showspectrum->rdft_data));
+        /* RDFT buffers: x2 for each (display) channel buffer.
+         * Note: we use free and malloc instead of a realloc-like function to
+         * make sure the buffer is aligned in memory for the FFT functions. */
+        av_freep(&showspectrum->rdft_data);
+        if (av_size_mult(sizeof(*showspectrum->rdft_data), 2 * win_size, &rdft_size) < 0)
+            return AVERROR(EINVAL);
+        showspectrum->rdft_data = av_malloc(rdft_size);
         if (!showspectrum->rdft_data)
             return AVERROR(ENOMEM);
         showspectrum->filled = 0;
@@ -247,16 +253,23 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFilterBufferRef *insampl
 
         for (y = 0; y < outlink->h; y++) {
             // FIXME: bin[0] contains first and last bins
-            const int pos = showspectrum->xpos * 3 + (outlink->h - y - 1) * outpicref->linesize[0];
+            uint8_t *p = outpicref->data[0] + (outlink->h - y - 1) * outpicref->linesize[0];
             const double w = 1. / sqrt(nb_freq);
             int a =                           sqrt(w * MAGNITUDE(RE(0), IM(0)));
             int b = nb_display_channels > 1 ? sqrt(w * MAGNITUDE(RE(1), IM(1))) : a;
 
+            if (showspectrum->sliding) {
+                memmove(p, p + 3, (outlink->w - 1) * 3);
+                p += (outlink->w - 1) * 3;
+            } else {
+                p += showspectrum->xpos * 3;
+            }
+
             a = FFMIN(a, 255);
             b = FFMIN(b, 255);
-            outpicref->data[0][pos]   = a;
-            outpicref->data[0][pos+1] = b;
-            outpicref->data[0][pos+2] = (a + b) / 2;
+            p[0] = a;
+            p[1] = b;
+            p[2] = (a + b) / 2;
         }
         outpicref->pts = insamples->pts +
             av_rescale_q(showspectrum->consumed,

@@ -16,6 +16,8 @@ version <next>:
 - subtitles raw text decoder
 - support for building DLLs using MSVC
 - LVF demuxer
+- ffescape tool
+- metadata (info chunk) support in CAF muxer
 
 
 version 1.0:

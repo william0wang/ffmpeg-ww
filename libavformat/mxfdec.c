@@ -782,17 +782,18 @@ static int mxf_read_index_table_segment(void *arg, AVIOContext *pb, int tag, int
 static void mxf_read_pixel_layout(AVIOContext *pb, MXFDescriptor *descriptor)
 {
     int code, value, ofs = 0;
-    char layout[16] = {0};
+    char layout[16] = {0}; /* not for printing, may end up not terminated on purpose */
 
     do {
         code = avio_r8(pb);
         value = avio_r8(pb);
         av_dlog(NULL, "pixel layout: code %#x\n", code);
 
-        if (ofs < 16) {
+        if (ofs <= 14) {
             layout[ofs++] = code;
             layout[ofs++] = value;
-        }
+        } else
+            break;  /* don't read byte by byte on sneaky files filled with lots of non-zeroes */
     } while (code != 0); /* SMPTE 377M E.2.46 */
 
     ff_mxf_decode_pixel_layout(layout, &descriptor->pix_fmt);
@@ -1645,6 +1646,9 @@ static int mxf_read_local_tags(MXFContext *mxf, KLVPacket *klv, MXFMetadataReadF
         /* Accept the 64k local set limit being exceeded (Avid). Don't accept
          * it extending past the end of the KLV though (zzuf5.mxf). */
         if (avio_tell(pb) > klv_end) {
+            if (ctx_size)
+                av_free(ctx);
+
             av_log(mxf->fc, AV_LOG_ERROR,
                    "local tag %#04x extends past end of local set @ %#"PRIx64"\n",
                    tag, klv->offset);

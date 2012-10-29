@@ -60,26 +60,22 @@ static int srt_write_packet(AVFormatContext *avf, AVPacket *pkt)
 
     srt->index++;
     if (write_ts) {
-        char buf[64];
         int64_t s = pkt->pts, e, d = pkt->duration;
-        int len;
 
         if (d <= 0)
             /* For backward compatibility, fallback to convergence_duration. */
             d = pkt->convergence_duration;
-        if (s == AV_NOPTS_VALUE || d <= 0) {
+        if (s == AV_NOPTS_VALUE || d < 0) {
             av_log(avf, AV_LOG_ERROR, "Insufficient timestamps.\n");
             return AVERROR(EINVAL);
         }
         e = s + d;
-        len = snprintf(buf, sizeof(buf),
-                       "%d\n%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d\n",
+        avio_printf(avf->pb, "%d\n%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d\n",
                        srt->index,
                        (int)(s / 3600000),      (int)(s / 60000) % 60,
                        (int)(s /    1000) % 60, (int)(s %  1000),
                        (int)(e / 3600000),      (int)(e / 60000) % 60,
                        (int)(e /    1000) % 60, (int)(e %  1000));
-        avio_write(avf->pb, buf, len);
     }
     avio_write(avf->pb, pkt->data, pkt->size);
     if (write_ts)
@@ -96,6 +92,6 @@ AVOutputFormat ff_srt_muxer = {
     .priv_data_size = sizeof(SRTContext),
     .write_header   = srt_write_header,
     .write_packet   = srt_write_packet,
-    .flags          = AVFMT_VARIABLE_FPS,
-    .subtitle_codec = AV_CODEC_ID_TEXT,
+    .flags          = AVFMT_VARIABLE_FPS | AVFMT_TS_NONSTRICT,
+    .subtitle_codec = AV_CODEC_ID_SUBRIP,
 };

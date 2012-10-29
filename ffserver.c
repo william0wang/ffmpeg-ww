@@ -801,7 +801,7 @@ static void http_send_too_busy_reply(int fd)
                        "\r\n"
                        "<html><head><title>Too busy</title></head><body>\r\n"
                        "<p>The server is too busy to serve your request at this time.</p>\r\n"
-                       "<p>The number of current connections is %d, and this exceeds the limit of %d.</p>\r\n"
+                       "<p>The number of current connections is %u, and this exceeds the limit of %u.</p>\r\n"
                        "</body></html>\r\n",
                        nb_connections, nb_max_connections);
     av_assert0(len < sizeof(buffer));
@@ -812,7 +812,8 @@ static void http_send_too_busy_reply(int fd)
 static void new_connection(int server_fd, int is_rtsp)
 {
     struct sockaddr_in from_addr;
-    int fd, len;
+    socklen_t len;
+    int fd;
     HTTPContext *c = NULL;
 
     len = sizeof(from_addr);
@@ -1736,7 +1737,8 @@ static int http_parse_request(HTTPContext *c)
                     case REDIR_SDP:
                         {
                             uint8_t *sdp_data;
-                            int sdp_data_size, len;
+                            int sdp_data_size;
+                            socklen_t len;
                             struct sockaddr_in my_addr;
 
                             snprintf(q, c->buffer_size,
@@ -3019,7 +3021,8 @@ static void rtsp_cmd_describe(HTTPContext *c, const char *url)
     char path1[1024];
     const char *path;
     uint8_t *content;
-    int content_length, len;
+    int content_length;
+    socklen_t len;
     struct sockaddr_in my_addr;
 
     /* find which url is asked */
