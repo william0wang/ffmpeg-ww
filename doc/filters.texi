@@ -414,37 +414,34 @@ A description of each shown parameter follows:
 sequential number of the input frame, starting from 0
 
 @item pts
-presentation TimeStamp of the input frame, expressed as a number of
-time base units. The time base unit depends on the filter input pad, and
-is usually 1/@var{sample_rate}.
+Presentation timestamp of the input frame, in time base units; the time base
+depends on the filter input pad, and is usually 1/@var{sample_rate}.
 
 @item pts_time
-presentation TimeStamp of the input frame, expressed as a number of
-seconds
+presentation timestamp of the input frame in seconds
 
 @item pos
 position of the frame in the input stream, -1 if this information in
 unavailable and/or meaningless (for example in case of synthetic audio)
 
 @item fmt
-sample format name
+sample format
 
 @item chlayout
-channel layout description
-
-@item nb_samples
-number of samples (per each channel) contained in the filtered frame
+channel layout
 
 @item rate
 sample rate for the audio frame
 
-@item checksum
-Adler-32 checksum (printed in hexadecimal) of all the planes of the input frame
+@item nb_samples
+number of samples (per channel) in the frame
 
-@item plane_checksum
-Adler-32 checksum (printed in hexadecimal) for each input frame plane,
-expressed in the form "[@var{c0} @var{c1} @var{c2} @var{c3} @var{c4} @var{c5}
-@var{c6} @var{c7}]"
+@item checksum
+Adler-32 checksum (printed in hexadecimal) of the audio data. For planar audio
+the data is treated as if all the planes were concatenated.
+
+@item plane_checksums
+A list of Adler-32 checksums for each data plane.
 @end table
 
 @section asplit
@@ -1729,33 +1726,61 @@ specified file.
 
 Draw a colored box on the input image.
 
-It accepts the syntax:
-@example
-drawbox=@var{x}:@var{y}:@var{width}:@var{height}:@var{color}
-@end example
+The filter accepts parameters as a list of @var{key}=@var{value} pairs,
+separated by ":".
+
+The description of the accepted parameters follows.
 
 @table @option
-
 @item x, y
 Specify the top left corner coordinates of the box. Default to 0.
 
-@item width, height
+@item width, w
+@item height, h
 Specify the width and height of the box, if 0 they are interpreted as
 the input width and height. Default to 0.
 
-@item color
+@item color, c
 Specify the color of the box to write, it can be the name of a color
-(case insensitive match) or a 0xRRGGBB[AA] sequence.
+(case insensitive match) or a 0xRRGGBB[AA] sequence. If the special
+value @code{invert} is used, the box edge color is the same as the
+video with inverted luma.
+
+@item thickness, t
+Set the thickness of the box edge. Default value is @code{4}.
 @end table
 
-Follow some examples:
+If the key of the first options is omitted, the arguments are
+interpreted according to the following syntax:
 @example
-# draw a black box around the edge of the input image
-drawbox
-
-# draw a box with color red and an opacity of 50%
-drawbox=10:20:200:60:red@@0.5"
+drawbox=@var{x}:@var{y}:@var{width}:@var{height}:@var{color}:@var{thickness}
 @end example
+
+Some examples follow:
+@itemize
+@item
+Draw a black box around the edge of the input image:
+@example
+drawbox
+@end example
+
+@item
+Draw a box with color red and an opacity of 50%:
+@example
+drawbox=10:20:200:60:red@@0.5
+@end example
+
+The previous example can be specified as:
+@example
+drawbox=x=10:y=20:w=200:h=60:color=red@@0.5
+@end example
+
+@item
+Fill the box with pink color:
+@example
+drawbox=x=10:y=10:w=100:h=100:color=pink@@0.5:t=max
+@end example
+@end itemize
 
 @section drawtext
 
@@ -2113,6 +2138,31 @@ fade=in:5:20
 
 # fade in alpha over first 25 frames of video
 fade=in:0:25:alpha=1
+@end example
+
+@section field
+
+Extract a single field from an interlaced image using stride
+arithmetic to avoid wasting CPU time. The output frames are marked as
+non-interlaced.
+
+This filter accepts the following named options:
+@table @option
+@item type
+Specify whether to extract the top (if the value is @code{0} or
+@code{top}) or the bottom field (if the value is @code{1} or
+@code{bottom}).
+@end table
+
+If the option key is not specified, the first value sets the @var{type}
+option. For example:
+@example
+field=bottom
+@end example
+
+is equivalent to:
+@example
+field=type=bottom
 @end example
 
 @section fieldorder
@@ -2585,13 +2635,11 @@ The list of the currently supported filters follows:
 @item dsize
 @item eq2
 @item eq
-@item field
 @item fil
 @item fixpts
 @item fspp
 @item geq
 @item harddup
-@item hqdn3d
 @item il
 @item ilpack
 @item ivtc
@@ -2599,13 +2647,11 @@ The list of the currently supported filters follows:
 @item mcdeint
 @item noise
 @item ow
-@item palette
 @item perspective
 @item phase
 @item pp7
 @item pullup
 @item qp
-@item rectangle
 @item sab
 @item softpulldown
 @item softskip
@@ -2615,8 +2661,6 @@ The list of the currently supported filters follows:
 @item tinterlace
 @item unsharp
 @item uspp
-@item yuvcsp
-@item yvu9
 @end table
 
 The parameter syntax and behavior for the listed filters are the same

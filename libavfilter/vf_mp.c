@@ -137,7 +137,6 @@ extern const vf_info_t vf_info_dvbscale;
 extern const vf_info_t vf_info_eq2;
 extern const vf_info_t vf_info_eq;
 extern const vf_info_t vf_info_expand;
-extern const vf_info_t vf_info_field;
 extern const vf_info_t vf_info_fil;
 extern const vf_info_t vf_info_filmdint;
 extern const vf_info_t vf_info_fixpts;
@@ -147,7 +146,6 @@ extern const vf_info_t vf_info_fspp;
 extern const vf_info_t vf_info_geq;
 extern const vf_info_t vf_info_halfpack;
 extern const vf_info_t vf_info_harddup;
-extern const vf_info_t vf_info_hqdn3d;
 extern const vf_info_t vf_info_il;
 extern const vf_info_t vf_info_ilpack;
 extern const vf_info_t vf_info_ivtc;
@@ -158,14 +156,12 @@ extern const vf_info_t vf_info_mcdeint;
 extern const vf_info_t vf_info_noformat;
 extern const vf_info_t vf_info_noise;
 extern const vf_info_t vf_info_ow;
-extern const vf_info_t vf_info_palette;
 extern const vf_info_t vf_info_perspective;
 extern const vf_info_t vf_info_phase;
 extern const vf_info_t vf_info_pp7;
 extern const vf_info_t vf_info_pp;
 extern const vf_info_t vf_info_pullup;
 extern const vf_info_t vf_info_qp;
-extern const vf_info_t vf_info_rectangle;
 extern const vf_info_t vf_info_sab;
 extern const vf_info_t vf_info_scale;
 extern const vf_info_t vf_info_softpulldown;
@@ -181,8 +177,6 @@ extern const vf_info_t vf_info_unsharp;
 extern const vf_info_t vf_info_uspp;
 extern const vf_info_t vf_info_vo;
 extern const vf_info_t vf_info_yadif;
-extern const vf_info_t vf_info_yuvcsp;
-extern const vf_info_t vf_info_yvu9;
 extern const vf_info_t vf_info_zrmjpeg;
 
 
@@ -195,14 +189,12 @@ static const vf_info_t* const filters[]={
     &vf_info_dsize,
     &vf_info_eq2,
     &vf_info_eq,
-    &vf_info_field,
     &vf_info_fil,
 //    &vf_info_filmdint, cmmx.h vd.h ‘opt_screen_size_x’
     &vf_info_fixpts,
     &vf_info_fspp,
     &vf_info_geq,
     &vf_info_harddup,
-    &vf_info_hqdn3d,
     &vf_info_il,
     &vf_info_ilpack,
     &vf_info_ivtc,
@@ -210,14 +202,12 @@ static const vf_info_t* const filters[]={
     &vf_info_mcdeint,
     &vf_info_noise,
     &vf_info_ow,
-    &vf_info_palette,
     &vf_info_perspective,
     &vf_info_phase,
     &vf_info_pp,
     &vf_info_pp7,
     &vf_info_pullup,
     &vf_info_qp,
-    &vf_info_rectangle,
     &vf_info_sab,
     &vf_info_softpulldown,
     &vf_info_softskip,
@@ -228,8 +218,6 @@ static const vf_info_t* const filters[]={
     &vf_info_tinterlace,
     &vf_info_unsharp,
     &vf_info_uspp,
-    &vf_info_yuvcsp,
-    &vf_info_yvu9,
 
     NULL
 };

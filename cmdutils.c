@@ -440,7 +440,8 @@ int opt_default(void *optctx, const char *opt, const char *arg)
     int consumed = 0;
     char opt_stripped[128];
     const char *p;
-    const AVClass *cc = avcodec_get_class(), *fc = avformat_get_class(), *sc, *swr_class;
+    const AVClass *cc = avcodec_get_class(), *fc = avformat_get_class();
+    const AVClass *sc, *swr_class;
 
     if (!(p = strchr(opt, ':')))
         p = opt + strlen(opt);
@@ -524,6 +525,17 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg)
         exit(1);
     }
     av_log_set_level(level);
+    return 0;
+}
+
+int opt_report_file(void *optctx, const char *opt, const char *arg)
+{
+    report_file = fopen(arg, "w");
+    if (!report_file) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to open report \"%s\": %s\n",
+               arg, strerror(errno));
+        return AVERROR(errno);
+    }
     return 0;
 }
 
