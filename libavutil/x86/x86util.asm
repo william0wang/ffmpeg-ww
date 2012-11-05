@@ -23,6 +23,8 @@
 ;* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 ;******************************************************************************
 
+%define cpuflags_mmxext cpuflags_mmx2
+
 %include "libavutil/x86/x86inc.asm"
 
 %macro SBUTTERFLY 4
@@ -317,6 +319,18 @@
     %endif
 %endmacro
 
+%macro PSWAPD 2
+%if cpuflag(mmxext)
+    pshufw    %1, %2, q1032
+%elif cpuflag(3dnowext)
+    pswapd    %1, %2
+%elif cpuflag(3dnow)
+    movq      %1, %2
+    psrlq     %1, 32
+    punpckldq %1, %2
+%endif
+%endmacro
+
 %macro DEINTB 5 ; mask, reg1, mask, reg2, optional src to fill masks from
 %ifnum %5
     pand   m%3, m%5, m%4 ; src .. y6 .. y4
@@ -528,14 +542,14 @@
     movh  [%7+%8], %4
 %endmacro
 
-%macro PMINUB_MMX 3 ; dst, src, tmp
+%macro PMINUB 3 ; dst, src, ignored
+%if cpuflag(mmxext)
+    pminub   %1, %2
+%else ; dst, src, tmp
     mova     %3, %1
     psubusb  %3, %2
     psubb    %1, %3
-%endmacro
-
-%macro PMINUB_MMXEXT 3 ; dst, src, ignored
-    pminub   %1, %2
+%endif
 %endmacro
 
 %macro SPLATW 2-3 0

@@ -1,6 +1,10 @@
-MANPAGES    = $(PROGS-yes:%=doc/%.1)
-PODPAGES    = $(PROGS-yes:%=doc/%.pod)
-HTMLPAGES   = $(PROGS-yes:%=doc/%.html)                                 \
+ifeq ($(CONFIG_AVCODEC),yes)
+DOCLIBS += libavcodec
+endif
+
+MANPAGES    = $(PROGS-yes:%=doc/%.1)    $(DOCLIBS:%=doc/%.3)
+PODPAGES    = $(PROGS-yes:%=doc/%.pod)  $(DOCLIBS:%=doc/%.pod)
+HTMLPAGES   = $(PROGS-yes:%=doc/%.html) $(DOCLIBS:%=doc/%.html)         \
               doc/developer.html                                        \
               doc/faq.html                                              \
               doc/fate.html                                             \
@@ -23,6 +27,7 @@ all-$(CONFIG_DOC): doc
 
 doc: documentation
 
+apidoc: doc/doxy/html
 documentation: $(DOCS)
 
 TEXIDEP = awk '/^@(verbatim)?include/ { printf "$@: $(@D)/%s\n", $$2 }' <$< >$(@:%=%.d)
@@ -49,11 +54,14 @@ doc/%.pod: doc/%.texi $(GENTEXI)
 	$(Q)$(TEXIDEP)
 	$(M)perl $(SRC_PATH)/doc/texi2pod.pl -Idoc $< $@
 
-doc/%.1: TAG = MAN
-doc/%.1: doc/%.pod $(GENTEXI)
+doc/%.1 doc/%.3: TAG = MAN
+doc/%.1 doc/%.3: doc/%.pod $(GENTEXI)
 	$(M)pod2man --section=1 --center=" " --release=" " $< > $@
 
-$(DOCS): | doc/
+$(DOCS) doc/doxy/html: | doc/
+
+doc/doxy/html: $(SRC_PATH)/doc/Doxyfile $(INSTHEADERS)
+	$(M)$(SRC_PATH)/doc/doxy-wrapper.sh $(SRC_PATH) $^
 
 install-man:
 
@@ -72,7 +80,8 @@ uninstall-man:
 
 clean::
 	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 $(CLEANSUFFIXES:%=doc/%) doc/avoptions_*.texi
+	$(RM) -r doc/doxy/html
 
 -include $(wildcard $(DOCS:%=%.d))
 
-.PHONY: doc documentation
+.PHONY: apidoc doc documentation

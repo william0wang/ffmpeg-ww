@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/audioconvert.h"
 #include "avcodec.h"
 #include "libavutil/avstring.h"
 #include "libavutil/common.h"
@@ -33,10 +34,14 @@ static void amr_decode_fix_avctx(AVCodecContext *avctx)
     if (!avctx->sample_rate)
         avctx->sample_rate = 8000 * is_amr_wb;
 
-    if (!avctx->channels)
-        avctx->channels = 1;
+    if (avctx->channels > 1) {
+        av_log_missing_feature(avctx, "multi-channel AMR", 0);
+        return;
+    }
 
-    avctx->sample_fmt = AV_SAMPLE_FMT_S16;
+    avctx->channels       = 1;
+    avctx->channel_layout = AV_CH_LAYOUT_MONO;
+    avctx->sample_fmt     = AV_SAMPLE_FMT_S16;
 }
 
 #if CONFIG_LIBOPENCORE_AMRNB
@@ -188,7 +193,7 @@ static av_cold int amr_nb_encode_init(AVCodecContext *avctx)
 {
     AMRContext *s = avctx->priv_data;
 
-    if (avctx->sample_rate != 8000) {
+    if (avctx->sample_rate != 8000 && avctx->strict_std_compliance > FF_COMPLIANCE_UNOFFICIAL) {
         av_log(avctx, AV_LOG_ERROR, "Only 8000Hz sample rate supported\n");
         return AVERROR(ENOSYS);
     }

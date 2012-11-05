@@ -129,6 +129,8 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
                                   insamples->audio->nb_samples);
     int ret;
 
+    if (!outsamples)
+        return AVERROR(ENOMEM);
     avfilter_copy_buffer_ref_props(outsamples, insamples);
 
     taps  = ((EarwaxContext *)inlink->dst->priv)->taps;
@@ -141,7 +143,7 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 
     // process current input
     endin = in + insamples->audio->nb_samples * 2 - NUMTAPS;
-    out   = scalarproduct(in, endin, out);
+    scalarproduct(in, endin, out);
 
     // save part of input for next round
     memcpy(taps, endin, NUMTAPS * sizeof(*taps));
