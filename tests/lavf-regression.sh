@@ -240,6 +240,11 @@ fi
 
 if [ -n "$do_pam" ] ; then
 do_image_formats pam
+do_image_formats pam "-pix_fmt rgba"
+do_image_formats pam "-pix_fmt gray"
+do_image_formats pam "-pix_fmt gray16be"
+do_image_formats pam "-pix_fmt rgb48be"
+do_image_formats pam "-pix_fmt monob"
 fi
 
 if [ -n "$do_pcx" ] ; then
@@ -254,6 +259,13 @@ fi
 
 if [ -n "$do_xwd" ] ; then
 do_image_formats xwd
+do_image_formats xwd "-pix_fmt rgba"
+do_image_formats xwd "-pix_fmt rgb565be"
+do_image_formats xwd "-pix_fmt rgb555be"
+do_image_formats xwd "-pix_fmt rgb8"
+do_image_formats xwd "-pix_fmt rgb4_byte"
+do_image_formats xwd "-pix_fmt gray"
+do_image_formats xwd "-pix_fmt monow"
 fi
 
 if [ -n "$do_sunrast" ] ; then
@@ -300,6 +312,10 @@ fi
 
 if [ -n "$do_rso" ] ; then
 do_audio_only rso
+fi
+
+if [ -n "$do_smjpeg" ] ; then
+do_lavf smjpeg "" "-f smjpeg"
 fi
 
 if [ -n "$do_sox" ] ; then

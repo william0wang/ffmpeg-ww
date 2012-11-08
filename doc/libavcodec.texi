@@ -12,9 +12,13 @@
 @chapter Description
 @c man begin DESCRIPTION
 
-libavcodec is a library providing a generic encoding/decoding
-framework, and containing decoders and encoders for audio, video and
+The libavcodec library provides a generic encoding/decoding framework
+and contains multiple decoders and encoders for audio, video and
 subtitle streams.
+
+The shared architecture provides various services ranging from bit
+stream I/O to DSP optimizations, and makes it suitable for
+implementing robust and fast codecs as well as for experimentation.
 
 @c man end DESCRIPTION
 
@@ -1109,14 +1113,14 @@ Set sample format audio decoders should prefer. Default value is
 @ignore
 
 @setfilename libavcodec
-@settitle multimedia streams decoding and encoding library
+@settitle media streams decoding and encoding library
 
 @c man begin SEEALSO
 ffmpeg(1), ffplay(1), ffprobe(1), ffserver(1)
 @c man end
 
 @c man begin AUTHORS
-See git history
+See Git history (git://source.ffmpeg.org/ffmpeg)
 @c man end
 
 @end ignore

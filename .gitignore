@@ -37,6 +37,7 @@
 /ffserver_g
 /config.*
 /doc/*.1
+/doc/*.3
 /doc/*.html
 /doc/*.pod
 /doc/avoptions_codec.texi
