@@ -1,4 +1,6 @@
+DOCLIBS-$(CONFIG_AVUTIL)  += libavutil
 DOCLIBS-$(CONFIG_AVCODEC) += libavcodec
+DOCLIBS-$(CONFIG_AVFILTER) += libavfilter
 
 MANPAGES    = $(PROGS-yes:%=doc/%.1)    $(DOCLIBS-yes:%=doc/%.3)
 PODPAGES    = $(PROGS-yes:%=doc/%.pod)  $(DOCLIBS-yes:%=doc/%.pod)
@@ -53,8 +55,10 @@ doc/%.pod: doc/%.texi $(GENTEXI)
 	$(M)perl $(SRC_PATH)/doc/texi2pod.pl -Idoc $< $@
 
 doc/%.1 doc/%.3: TAG = MAN
-doc/%.1 doc/%.3: doc/%.pod $(GENTEXI)
+doc/%.1: doc/%.pod $(GENTEXI)
 	$(M)pod2man --section=1 --center=" " --release=" " $< > $@
+doc/%.3: doc/%.pod $(GENTEXI)
+	$(M)pod2man --section=3 --center=" " --release=" " $< > $@
 
 $(DOCS) doc/doxy/html: | doc/
 

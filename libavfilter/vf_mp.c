@@ -139,11 +139,9 @@ extern const vf_info_t vf_info_eq;
 extern const vf_info_t vf_info_expand;
 extern const vf_info_t vf_info_fil;
 extern const vf_info_t vf_info_filmdint;
-extern const vf_info_t vf_info_fixpts;
 extern const vf_info_t vf_info_flip;
 extern const vf_info_t vf_info_format;
 extern const vf_info_t vf_info_fspp;
-extern const vf_info_t vf_info_geq;
 extern const vf_info_t vf_info_halfpack;
 extern const vf_info_t vf_info_harddup;
 extern const vf_info_t vf_info_il;
@@ -171,7 +169,6 @@ extern const vf_info_t vf_info_stereo3d;
 extern const vf_info_t vf_info_telecine;
 extern const vf_info_t vf_info_test;
 extern const vf_info_t vf_info_tfields;
-extern const vf_info_t vf_info_tile;
 extern const vf_info_t vf_info_tinterlace;
 extern const vf_info_t vf_info_unsharp;
 extern const vf_info_t vf_info_uspp;
@@ -191,9 +188,7 @@ static const vf_info_t* const filters[]={
     &vf_info_eq,
     &vf_info_fil,
 //    &vf_info_filmdint, cmmx.h vd.h ‘opt_screen_size_x’
-    &vf_info_fixpts,
     &vf_info_fspp,
-    &vf_info_geq,
     &vf_info_harddup,
     &vf_info_il,
     &vf_info_ilpack,
@@ -214,7 +209,6 @@ static const vf_info_t* const filters[]={
     &vf_info_spp,
     &vf_info_stereo3d,
     &vf_info_telecine,
-    &vf_info_tile,
     &vf_info_tinterlace,
     &vf_info_unsharp,
     &vf_info_uspp,

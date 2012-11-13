@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/audioconvert.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/float_dsp.h"
 #include "avcodec.h"
 #include "get_bits.h"
@@ -1141,6 +1141,11 @@ static av_cold int twin_decode_init(AVCodecContext *avctx)
                                                    AV_CH_LAYOUT_STEREO;
 
     ibps = avctx->bit_rate / (1000 * avctx->channels);
+
+    if (ibps > 255U) {
+        av_log(avctx, AV_LOG_ERROR, "unsupported per channel bitrate %dkbps\n", ibps);
+        return AVERROR_INVALIDDATA;
+    }
 
     switch ((isampf << 8) +  ibps) {
     case (8 <<8) +  8: tctx->mtab = &mode_08_08; break;

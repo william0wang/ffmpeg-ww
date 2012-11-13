@@ -371,6 +371,10 @@ static av_cold int decode_init(AVCodecContext *avctx)
 static void decodeplane8(uint8_t *dst, const uint8_t *buf, int buf_size, int plane)
 {
     const uint64_t *lut = plane8_lut[plane];
+    if (plane >= 8) {
+        av_log(0, AV_LOG_WARNING, "Ignoring extra planes beyond 8\n");
+        return;
+    }
     do {
         uint64_t v = AV_RN64A(dst) | lut[*buf++];
         AV_WN64A(dst, v);
@@ -571,13 +575,13 @@ static int decode_frame_ilbm(AVCodecContext *avctx,
         }
     } else if (avctx->codec_tag == MKTAG('P','B','M',' ')) { // IFF-PBM
         if (avctx->pix_fmt == AV_PIX_FMT_PAL8 || avctx->pix_fmt == AV_PIX_FMT_GRAY8) {
-            for(y = 0; y < avctx->height; y++ ) {
+            for(y = 0; y < avctx->height && buf_end > buf; y++ ) {
                 uint8_t *row = &s->frame.data[0][y * s->frame.linesize[0]];
                 memcpy(row, buf, FFMIN(avctx->width, buf_end - buf));
                 buf += avctx->width + (avctx->width % 2); // padding if odd
             }
         } else if (s->ham) { // IFF-PBM: HAM to AV_PIX_FMT_BGR32
-            for (y = 0; y < avctx->height; y++) {
+            for (y = 0; y < avctx->height && buf_end > buf; y++) {
                 uint8_t *row = &s->frame.data[0][ y*s->frame.linesize[0] ];
                 memcpy(s->ham_buf, buf, FFMIN(avctx->width, buf_end - buf));
                 buf += avctx->width + (avctx->width & 1); // padding if odd

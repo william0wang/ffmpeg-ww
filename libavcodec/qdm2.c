@@ -36,7 +36,7 @@
 #include <stdio.h>
 
 #define BITSTREAM_READER_LE
-#include "libavutil/audioconvert.h"
+#include "libavutil/channel_layout.h"
 #include "avcodec.h"
 #include "get_bits.h"
 #include "dsputil.h"
@@ -794,6 +794,11 @@ static int synthfilt_build_sb_samples (QDM2Context *q, GetBitContext *gb, int le
             if (get_bits_left(gb) >= 16)
                 for (j = 0; j < 16; j++)
                     sign_bits[j] = get_bits1 (gb);
+
+            if (q->coding_method[0][sb][0] <= 0) {
+                av_log(NULL, AV_LOG_ERROR, "coding method invalid\n");
+                return AVERROR_INVALIDDATA;
+            }
 
             for (j = 0; j < 64; j++)
                 if (q->coding_method[1][sb][j] > q->coding_method[0][sb][j])
