@@ -491,7 +491,8 @@ static int video_get_buffer(AVCodecContext *s, AVFrame *pic)
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(s->pix_fmt);
         const int pixel_size = desc->comp[0].step_minus1 + 1;
 
-        avcodec_get_chroma_sub_sample(s->pix_fmt, &h_chroma_shift, &v_chroma_shift);
+        av_pix_fmt_get_chroma_sub_sample(s->pix_fmt, &h_chroma_shift,
+                                         &v_chroma_shift);
 
         avcodec_align_dimensions2(s, &w, &h, stride_align);
 
@@ -689,9 +690,15 @@ int avcodec_default_execute2(AVCodecContext *c, int (*func)(AVCodecContext *c2, 
     return 0;
 }
 
+static int is_hwaccel_pix_fmt(enum AVPixelFormat pix_fmt)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
+    return desc->flags & PIX_FMT_HWACCEL;
+}
+
 enum AVPixelFormat avcodec_default_get_format(struct AVCodecContext *s, const enum AVPixelFormat *fmt)
 {
-    while (*fmt != AV_PIX_FMT_NONE && ff_is_hwaccel_pix_fmt(*fmt))
+    while (*fmt != AV_PIX_FMT_NONE && is_hwaccel_pix_fmt(*fmt))
         ++fmt;
     return fmt[0];
 }
@@ -2300,10 +2307,12 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_PCM_ALAW:
     case AV_CODEC_ID_PCM_MULAW:
     case AV_CODEC_ID_PCM_S8:
+    case AV_CODEC_ID_PCM_S8_PLANAR:
     case AV_CODEC_ID_PCM_U8:
     case AV_CODEC_ID_PCM_ZORK:
         return 8;
     case AV_CODEC_ID_PCM_S16BE:
+    case AV_CODEC_ID_PCM_S16BE_PLANAR:
     case AV_CODEC_ID_PCM_S16LE:
     case AV_CODEC_ID_PCM_S16LE_PLANAR:
     case AV_CODEC_ID_PCM_U16BE:
@@ -2312,11 +2321,13 @@ int av_get_exact_bits_per_sample(enum AVCodecID codec_id)
     case AV_CODEC_ID_PCM_S24DAUD:
     case AV_CODEC_ID_PCM_S24BE:
     case AV_CODEC_ID_PCM_S24LE:
+    case AV_CODEC_ID_PCM_S24LE_PLANAR:
     case AV_CODEC_ID_PCM_U24BE:
     case AV_CODEC_ID_PCM_U24LE:
         return 24;
     case AV_CODEC_ID_PCM_S32BE:
     case AV_CODEC_ID_PCM_S32LE:
+    case AV_CODEC_ID_PCM_S32LE_PLANAR:
     case AV_CODEC_ID_PCM_U32BE:
     case AV_CODEC_ID_PCM_U32LE:
     case AV_CODEC_ID_PCM_F32BE:

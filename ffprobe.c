@@ -74,7 +74,7 @@ static char *stream_specifier;
 /* section structure definition */
 
 struct section {
-    int id;             ///< unique id indentifying a section
+    int id;             ///< unique id identifying a section
     const char *name;
 
 #define SECTION_FLAG_IS_WRAPPER      1 ///< the section only contains other sections, but has no data at its own level
@@ -103,7 +103,7 @@ typedef enum {
     SECTION_ID_STREAM,
     SECTION_ID_STREAM_DISPOSITION,
     SECTION_ID_STREAMS,
-    SECTION_ID_STREAM_TAGS
+    SECTION_ID_STREAM_TAGS,
 } SectionID;
 
 static const struct section sections[] = {

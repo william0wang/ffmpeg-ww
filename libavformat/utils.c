@@ -295,6 +295,10 @@ AVInputFormat *av_probe_input_format3(AVProbeData *pd, int is_opened, int *score
     AVProbeData lpd = *pd;
     AVInputFormat *fmt1 = NULL, *fmt;
     int score, nodat = 0, score_max=0;
+    const static uint8_t zerobuffer[AVPROBE_PADDING_SIZE];
+
+    if (!lpd.buf)
+        lpd.buf = zerobuffer;
 
     if (lpd.buf_size > 10 && ff_id3v2_match(lpd.buf, ID3v2_DEFAULT_MAGIC)) {
         int id3len = ff_id3v2_tag_len(lpd.buf);
@@ -557,6 +561,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
 
     if ((ret = init_input(s, filename, &tmp)) < 0)
         goto fail;
+    avio_skip(s->pb, s->skip_initial_bytes);
 
     /* check filename in case an image number is expected */
     if (s->iformat->flags & AVFMT_NEEDNUMBER) {
@@ -2945,7 +2950,7 @@ int av_find_best_stream(AVFormatContext *ic,
                         int flags)
 {
     int i, nb_streams = ic->nb_streams;
-    int ret = AVERROR_STREAM_NOT_FOUND, best_count = -1;
+    int ret = AVERROR_STREAM_NOT_FOUND, best_count = -1, best_bitrate = -1, best_multiframe = -1, count, bitrate, multiframe;
     unsigned *program = NULL;
     AVCodec *decoder = NULL, *best_decoder = NULL;
 
@@ -2974,9 +2979,16 @@ int av_find_best_stream(AVFormatContext *ic,
                 continue;
             }
         }
-        if (best_count >= st->codec_info_nb_frames)
+        count = st->codec_info_nb_frames;
+        bitrate = avctx->bit_rate;
+        multiframe = FFMIN(5, count);
+        if ((best_multiframe >  multiframe) ||
+            (best_multiframe == multiframe && best_bitrate >  bitrate) ||
+            (best_multiframe == multiframe && best_bitrate == bitrate && best_count >= count))
             continue;
-        best_count = st->codec_info_nb_frames;
+        best_count = count;
+        best_bitrate = bitrate;
+        best_multiframe = multiframe;
         ret = real_stream_index;
         best_decoder = decoder;
         if (program && i == nb_streams - 1 && ret < 0) {
@@ -3581,7 +3593,7 @@ void av_url_split(char *proto, int proto_size,
                   char *path, int path_size,
                   const char *url)
 {
-    const char *p, *ls, *ls2, *at, *col, *brk;
+    const char *p, *ls, *ls2, *at, *at2, *col, *brk;
 
     if (port_ptr)               *port_ptr = -1;
     if (proto_size > 0)         proto[0] = 0;
@@ -3616,9 +3628,10 @@ void av_url_split(char *proto, int proto_size,
     /* the rest is hostname, use that to parse auth/port */
     if (ls != p) {
         /* authorization (user[:pass]@hostname) */
-        if ((at = strchr(p, '@')) && at < ls) {
-            av_strlcpy(authorization, p,
-                       FFMIN(authorization_size, at + 1 - p));
+        at2 = p;
+        while ((at = strchr(p, '@')) && at < ls) {
+            av_strlcpy(authorization, at2,
+                       FFMIN(authorization_size, at + 1 - at2));
             p = at + 1; /* skip '@' */
         }
 

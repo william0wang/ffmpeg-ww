@@ -428,7 +428,7 @@ static int decode_p_frame(FourXContext *f, const uint8_t *buf, int length)
         bytestream_size = FFMAX(length - bitstream_size - wordstream_size, 0);
     }
 
-    if (bitstream_size > length ||
+    if (bitstream_size > length || bitstream_size >= INT_MAX/8 ||
         bytestream_size > length - bitstream_size ||
         wordstream_size > length - bytestream_size - bitstream_size ||
         extra > length - bytestream_size - bitstream_size - wordstream_size) {
@@ -941,7 +941,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     if (avctx->extradata_size != 4 || !avctx->extradata) {
         av_log(avctx, AV_LOG_ERROR, "extradata wrong or missing\n");
-        return 1;
+        return AVERROR_INVALIDDATA;
     }
     if((avctx->width % 16) || (avctx->height % 16)) {
         av_log(avctx, AV_LOG_ERROR, "unsupported width/height\n");

@@ -33,6 +33,7 @@
 #include "internal.h"
 #include "libavcodec/dv_profile.h"
 #include "libavcodec/dvdata.h"
+#include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/timecode.h"
@@ -140,6 +141,11 @@ static int dv_extract_audio(uint8_t* frame, uint8_t* ppcm[4],
     /* We work with 720p frames split in half, thus even frames have
      * channels 0,1 and odd 2,3. */
     ipcm = (sys->height == 720 && !(frame[1] & 0x0C)) ? 2 : 0;
+
+    if (ipcm + sys->n_difchan > (quant == 1 ? 2 : 4)) {
+        av_log(NULL, AV_LOG_ERROR, "too many dv pcm frames\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     /* for each DIF channel */
     for (chan = 0; chan < sys->n_difchan; chan++) {
@@ -252,6 +258,7 @@ static int dv_extract_audio_info(DVDemuxContext* c, uint8_t* frame)
         }
         c->ast[i]->codec->sample_rate = dv_audio_frequency[freq];
         c->ast[i]->codec->channels    = 2;
+        c->ast[i]->codec->channel_layout = AV_CH_LAYOUT_STEREO;
         c->ast[i]->codec->bit_rate    = 2 * dv_audio_frequency[freq] * 16;
         c->ast[i]->start_time         = 0;
     }

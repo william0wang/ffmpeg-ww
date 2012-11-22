@@ -78,6 +78,7 @@ Help options:
 Standard options:
   --logfile=FILE           log tests and output to FILE [config.log]
   --disable-logging        do not log configure debug information
+  --fatal-warnings         fail if any configure warning is generated
   --prefix=PREFIX          install in PREFIX [$prefix]
   --bindir=DIR             install binaries in DIR [PREFIX/bin]
   --datadir=DIR            install data files in DIR [PREFIX/share/ffmpeg]
@@ -101,6 +102,13 @@ Configuration options:
   --enable-gray            enable full grayscale support (slower color)
   --disable-swscale-alpha  disable alpha channel support in swscale
 
+Program options:
+  --disable-programs       do not build command line programs
+  --disable-ffmpeg         disable ffmpeg build
+  --disable-ffplay         disable ffplay build
+  --disable-ffprobe        disable ffprobe build
+  --disable-ffserver       disable ffserver build
+
 Documentation options:
   --disable-doc            do not build documentation
   --disable-htmlpages      do not build HTML documentation pages
@@ -109,10 +117,6 @@ Documentation options:
   --disable-txtpages       do not build text documentation pages
 
 Component options:
-  --disable-ffmpeg         disable ffmpeg build
-  --disable-ffplay         disable ffplay build
-  --disable-ffprobe        disable ffprobe build
-  --disable-ffserver       disable ffserver build
   --disable-avdevice       disable libavdevice build
   --disable-avcodec        disable libavcodec build
   --disable-avformat       disable libavformat build
@@ -638,11 +642,10 @@ print_config(){
 }
 
 print_enabled(){
-    test x"$1" = x-n && end=" " && shift || end="\n"
     suf=$1
     shift
     for v; do
-        enabled $v && printf "%s$end" ${v%$suf};
+        enabled $v && printf "%s\n" ${v%$suf};
     done
 }
 
@@ -1196,6 +1199,7 @@ THREADS_LIST='
 '
 
 ARCH_LIST='
+    aarch64
     alpha
     arm
     avr32
@@ -2201,6 +2205,9 @@ for opt do
     ;;
     --enable-debug=*) debuglevel="$optval"
     ;;
+    --disable-programs)
+    disable $PROGRAM_LIST
+    ;;
     --disable-everything)
     map 'eval unset \${$(toupper ${v%s})_LIST}' $COMPONENT_LIST
     ;;
@@ -2217,7 +2224,9 @@ for opt do
     is_in "${thing}s" $COMPONENT_LIST || die_unknown "$opt"
     eval list=\$$(toupper $thing)_LIST
     name=$(echo "${optval}" | sed "s/,/_${thing}|/g")_${thing}
-    $action $(filter "$name" $list)
+    list=$(filter "$name" $list)
+    [ "$list" = "" ] && warn "Option $opt did not match anything"
+    $action $list
     ;;
     --enable-?*|--disable-?*)
     eval $(echo "$opt" | sed 's/--/action=/;s/-/ option=/;s/-/_/g')
@@ -2237,6 +2246,8 @@ for opt do
         eval show_list $NAME \$$(toupper $NAME)_LIST
     ;;
     --help|-h) show_help
+    ;;
+    --fatal-warnings) enable fatal_warnings
     ;;
     *)
     optname="${opt%%=*}"
@@ -2728,6 +2739,9 @@ fi
 
 # Deal with common $arch aliases
 case "$arch" in
+    aarch64|arm64)
+        arch="aarch64"
+    ;;
     arm*|iPad*)
         arch="arm"
     ;;
@@ -2779,20 +2793,20 @@ elif enabled ppc; then
             disable altivec
         ;;
         g3|75*|ppc75*|powerpc75*)
-            cpuflags="-mcpu=750 -mpowerpc-gfxopt"
+            cpuflags="-mcpu=750"
             disable altivec
         ;;
         g4|745*|ppc745*|powerpc745*)
-            cpuflags="-mcpu=7450 -mpowerpc-gfxopt"
+            cpuflags="-mcpu=7450"
         ;;
         74*|ppc74*|powerpc74*)
-            cpuflags="-mcpu=7400 -mpowerpc-gfxopt"
+            cpuflags="-mcpu=7400"
         ;;
         g5|970|ppc970|powerpc970)
-            cpuflags="-mcpu=970 -mpowerpc-gfxopt -mpowerpc64"
+            cpuflags="-mcpu=970"
         ;;
         power[3-7]*)
-            cpuflags="-mcpu=$cpu -mpowerpc-gfxopt -mpowerpc64"
+            cpuflags="-mcpu=$cpu"
         ;;
         cell)
             cpuflags="-mcpu=cell"
@@ -2922,6 +2936,17 @@ elif enabled avr32; then
         uc)
             subarch="avr32_uc"
             cpuflags="-march=$cpu"
+        ;;
+    esac
+
+elif enabled aarch64; then
+
+    case $cpu in
+        armv*)
+            cpuflags="-march=$cpu"
+        ;;
+        *)
+            cpuflags="-mcpu=$cpu"
         ;;
     esac
 
@@ -3137,7 +3162,6 @@ case $target_os in
         SHFLAGS='-shared -Wl,--out-implib,$(SUBDIR)lib$(FULLNAME).dll.a'
         objformat="win32"
         enable dos_paths
-        add_cppflags -U__STRICT_ANSI__
         ;;
     *-dos|freedos|opendos)
         network_extralibs="-lsocket"
@@ -3146,7 +3170,6 @@ case $target_os in
         add_cppflags -U__STRICT_ANSI__
         ;;
     linux)
-        add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
         enable dv1394
         ;;
     irix*)
@@ -3179,10 +3202,9 @@ case $target_os in
         enable_weak os2threads
         ;;
     gnu/kfreebsd)
-        add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
+        add_cppflags -D_BSD_SOURCE
         ;;
     gnu)
-        add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
         ;;
     qnx)
         add_cppflags -D_QNX_SOURCE
@@ -3230,8 +3252,10 @@ esac
 
 if check_cpp_condition features.h "defined __UCLIBC__"; then
     libc_type=uclibc
+    add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
 elif check_cpp_condition features.h "defined __GLIBC__"; then
     libc_type=glibc
+    add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
 elif check_header _mingw.h; then
     libc_type=mingw
     check_cpp_condition _mingw.h \
@@ -3245,6 +3269,7 @@ elif check_header _mingw.h; then
     fi
 elif check_cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
     libc_type=newlib
+    add_cppflags -U__STRICT_ANSI__
 elif check_func_headers stdlib.h _get_doserrno; then
     libc_type=msvcrt
     add_compat strtod.o strtod=avpriv_strtod
@@ -3402,6 +3427,14 @@ elif enabled mips; then
      check_inline_asm mipsdspr2 '"absq_s.qb $t0, $t1"'
     enabled mipsfpu   && add_cflags "-mhard-float" && add_asflags "-mhard-float" &&
      check_inline_asm mipsfpu   '"madd.d $f0, $f2, $f4, $f6"'
+
+elif enabled parisc; then
+
+    if enabled gcc; then
+        case $($cc -dumpversion) in
+            4.[3-8].*) check_cflags -fno-optimize-sibling-calls ;;
+        esac
+    fi
 
 elif enabled ppc; then
 
@@ -3954,6 +3987,8 @@ elif enabled llvm_gcc; then
 elif enabled clang; then
     check_cflags -mllvm -stack-alignment=16
     check_cflags -Qunused-arguments
+    check_cflags -Werror=implicit-function-declaration
+    check_cflags -Werror=missing-prototypes
 elif enabled armcc; then
     # 2523: use of inline assembler is deprecated
     add_cflags -W${armcc_opt},--diag_suppress=2523
@@ -4367,7 +4402,10 @@ echo "#endif /* AVUTIL_AVCONFIG_H */" >> $TMPH
 
 cp_if_changed $TMPH libavutil/avconfig.h
 
-test -n "$WARNINGS" && printf "\n$WARNINGS"
+if test -n "$WARNINGS"; then
+    printf "\n$WARNINGS"
+    enabled fatal_warnings && exit 1
+fi
 
 # build pkg-config files
 

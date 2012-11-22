@@ -39,7 +39,7 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .id        = AV_CODEC_ID_MPEG2VIDEO,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "mpeg2video",
-        .long_name = NULL_IF_CONFIG_SMALL("MPEG-1 video"),
+        .long_name = NULL_IF_CONFIG_SMALL("MPEG-2 video"),
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
@@ -1321,6 +1321,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "xface",
         .long_name = NULL_IF_CONFIG_SMALL("X-face image"),
     },
+    {
+        .id        = AV_CODEC_ID_BRENDER_PIX,
+        .type      = AVMEDIA_TYPE_VIDEO,
+        .name      = "brender_pix",
+        .long_name = NULL_IF_CONFIG_SMALL("BRender PIX image"),
+    },
 
     /* various PCM "codecs" */
     {
@@ -1448,10 +1454,31 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .props     = AV_CODEC_PROP_LOSSY,
     },
     {
+        .id        = AV_CODEC_ID_PCM_S16BE_PLANAR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_s16be_planar",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 16-bit big-endian planar"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
         .id        = AV_CODEC_ID_PCM_S16LE_PLANAR,
         .type      = AVMEDIA_TYPE_AUDIO,
         .name      = "pcm_s16le_planar",
-        .long_name = NULL_IF_CONFIG_SMALL("PCM 16-bit little-endian planar"),
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 16-bit little-endian planar"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_PCM_S24LE_PLANAR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_s24le_planar",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 24-bit little-endian planar"),
+        .props     = AV_CODEC_PROP_LOSSLESS,
+    },
+    {
+        .id        = AV_CODEC_ID_PCM_S32LE_PLANAR,
+        .type      = AVMEDIA_TYPE_AUDIO,
+        .name      = "pcm_s32le_planar",
+        .long_name = NULL_IF_CONFIG_SMALL("PCM signed 32-bit little-endian planar"),
         .props     = AV_CODEC_PROP_LOSSLESS,
     },
     {

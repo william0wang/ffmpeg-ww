@@ -16,6 +16,7 @@ HEADERS = avcodec.h                                                     \
 OBJS = allcodecs.o                                                      \
        audioconvert.o                                                   \
        avpacket.o                                                       \
+       avpicture.o                                                      \
        bitstream.o                                                      \
        bitstream_filter.o                                               \
        codec_desc.o                                                     \
@@ -135,6 +136,7 @@ OBJS-$(CONFIG_BMP_DECODER)             += bmp.o msrledec.o
 OBJS-$(CONFIG_BMP_ENCODER)             += bmpenc.o
 OBJS-$(CONFIG_BMV_VIDEO_DECODER)       += bmv.o
 OBJS-$(CONFIG_BMV_AUDIO_DECODER)       += bmv.o
+OBJS-$(CONFIG_BRENDER_PIX_DECODER)     += brender_pix.o
 OBJS-$(CONFIG_C93_DECODER)             += c93.o
 OBJS-$(CONFIG_CAVS_DECODER)            += cavs.o cavsdec.o cavsdsp.o \
                                           cavsdata.o mpeg12data.o
@@ -521,22 +523,30 @@ OBJS-$(CONFIG_PCM_MULAW_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_MULAW_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S8_DECODER)             += pcm.o
 OBJS-$(CONFIG_PCM_S8_ENCODER)             += pcm.o
-OBJS-$(CONFIG_PCM_S8_PLANAR_DECODER)      += 8svx.o
+OBJS-$(CONFIG_PCM_S8_PLANAR_DECODER)      += pcm.o
+OBJS-$(CONFIG_PCM_S8_PLANAR_ENCODER)      += pcm.o
 OBJS-$(CONFIG_PCM_S16BE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S16BE_ENCODER)          += pcm.o
+OBJS-$(CONFIG_PCM_S16BE_PLANAR_DECODER)   += pcm.o
+OBJS-$(CONFIG_PCM_S16BE_PLANAR_ENCODER)   += pcm.o
 OBJS-$(CONFIG_PCM_S16LE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S16LE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S16LE_PLANAR_DECODER)   += pcm.o
+OBJS-$(CONFIG_PCM_S16LE_PLANAR_ENCODER)   += pcm.o
 OBJS-$(CONFIG_PCM_S24BE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S24BE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S24DAUD_DECODER)        += pcm.o
 OBJS-$(CONFIG_PCM_S24DAUD_ENCODER)        += pcm.o
 OBJS-$(CONFIG_PCM_S24LE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S24LE_ENCODER)          += pcm.o
+OBJS-$(CONFIG_PCM_S24LE_PLANAR_DECODER)   += pcm.o
+OBJS-$(CONFIG_PCM_S24LE_PLANAR_ENCODER)   += pcm.o
 OBJS-$(CONFIG_PCM_S32BE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S32BE_ENCODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S32LE_DECODER)          += pcm.o
 OBJS-$(CONFIG_PCM_S32LE_ENCODER)          += pcm.o
+OBJS-$(CONFIG_PCM_S32LE_PLANAR_DECODER)   += pcm.o
+OBJS-$(CONFIG_PCM_S32LE_PLANAR_ENCODER)   += pcm.o
 OBJS-$(CONFIG_PCM_U8_DECODER)             += pcm.o
 OBJS-$(CONFIG_PCM_U8_ENCODER)             += pcm.o
 OBJS-$(CONFIG_PCM_U16BE_DECODER)          += pcm.o
@@ -774,6 +784,7 @@ TESTPROGS = cabac                                                       \
             fft-fixed                                                   \
             golomb                                                      \
             iirfilter                                                   \
+            imgconvert                                                  \
             rangecoder                                                  \
             snowenc                                                     \
 

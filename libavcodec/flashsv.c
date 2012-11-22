@@ -45,7 +45,6 @@
 typedef struct BlockInfo {
     uint8_t *pos;
     int      size;
-    int      unp_size;
 } BlockInfo;
 
 typedef struct FlashSVContext {
@@ -122,8 +121,7 @@ static av_cold int flashsv_decode_init(AVCodecContext *avctx)
 }
 
 
-static int flashsv2_prime(FlashSVContext *s, uint8_t *src,
-                          int size, int unp_size)
+static int flashsv2_prime(FlashSVContext *s, uint8_t *src, int size)
 {
     z_stream zs;
     int zret; // Zlib return code
@@ -175,8 +173,9 @@ static int flashsv_decode_block(AVCodecContext *avctx, AVPacket *avpkt,
         return AVERROR_UNKNOWN;
     }
     if (s->zlibprime_curr || s->zlibprime_prev) {
-        ret = flashsv2_prime(s, s->blocks[blk_idx].pos, s->blocks[blk_idx].size,
-                       s->blocks[blk_idx].unp_size);
+        ret = flashsv2_prime(s,
+                             s->blocks[blk_idx].pos,
+                             s->blocks[blk_idx].size);
         if (ret < 0)
             return ret;
     }
@@ -198,7 +197,6 @@ static int flashsv_decode_block(AVCodecContext *avctx, AVPacket *avpkt,
     if (s->is_keyframe) {
         s->blocks[blk_idx].pos      = s->keyframedata + (get_bits_count(gb) / 8);
         s->blocks[blk_idx].size     = block_size;
-        s->blocks[blk_idx].unp_size = s->block_size * 3 - s->zstream.avail_out;
     }
     if (!s->color_depth) {
         /* Flash Screen Video stores the image upside down, so copy
@@ -321,10 +319,11 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
     if (s->is_keyframe) {
         s->keyframedata = av_realloc(s->keyframedata, avpkt->size);
         memcpy(s->keyframedata, avpkt->data, avpkt->size);
-        s->blocks = av_realloc(s->blocks,
-                               (v_blocks + !!v_part) * (h_blocks + !!h_part)
-                               * sizeof(s->blocks[0]));
     }
+    if(s->ver == 2)
+        s->blocks = av_realloc(s->blocks,
+                                (v_blocks + !!v_part) * (h_blocks + !!h_part)
+                                * sizeof(s->blocks[0]));
 
     av_dlog(avctx, "image: %dx%d block: %dx%d num: %dx%d part: %dx%d\n",
             s->image_width, s->image_height, s->block_width, s->block_height,

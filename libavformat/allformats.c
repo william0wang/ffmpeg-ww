@@ -64,6 +64,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (APE, ape);
     REGISTER_MUXDEMUX (ASF, asf);
     REGISTER_MUXDEMUX (ASS, ass);
+    REGISTER_DEMUXER  (AST, ast);
     REGISTER_MUXER    (ASF_STREAM, asf_stream);
     REGISTER_MUXDEMUX (AU, au);
     REGISTER_MUXDEMUX (AVI, avi);
@@ -114,7 +115,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (H261, h261);
     REGISTER_MUXDEMUX (H263, h263);
     REGISTER_MUXDEMUX (H264, h264);
-    REGISTER_DEMUXER  (HLS, hls);
+    REGISTER_MUXDEMUX (HLS, hls);
     REGISTER_MUXDEMUX (ICO, ico);
     REGISTER_DEMUXER  (IDCIN, idcin);
     REGISTER_DEMUXER  (IDF, idf);
@@ -268,10 +269,6 @@ void av_register_all(void)
     REGISTER_DEMUXER  (YOP, yop);
     REGISTER_MUXDEMUX (YUV4MPEGPIPE, yuv4mpegpipe);
 
-    /* external libraries */
-#if CONFIG_LIBMODPLUG
-    REGISTER_DEMUXER  (LIBMODPLUG, libmodplug);
-#endif
     /* protocols */
 #if FF_API_APPLEHTTP_PROTO
     REGISTER_PROTOCOL (APPLEHTTP, applehttp);
@@ -305,6 +302,7 @@ void av_register_all(void)
     REGISTER_PROTOCOL (UDP, udp);
 
     /* external libraries */
+    REGISTER_DEMUXER  (LIBMODPLUG, libmodplug);
     REGISTER_MUXDEMUX (LIBNUT, libnut);
     REGISTER_PROTOCOL (LIBRTMP, librtmp);
     REGISTER_PROTOCOL (LIBRTMPE, librtmpe);
