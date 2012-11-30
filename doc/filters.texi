@@ -2075,6 +2075,16 @@ The following functions are available:
 
 @table @command
 
+@item expr, e
+The expression evaluation result.
+
+It must take one argument specifying the expression to be evaluated,
+which accepts the same constants and functions as the @var{x} and
+@var{y} values. Note that not all constants should be used, for
+example the text size is not known when evaluating the expression, so
+the constants @var{text_w} and @var{text_h} will have an undefined
+value.
+
 @item gmtime
 The time at which the filter is running, expressed in UTC.
 It can accept an argument: a strftime() format string.
@@ -2082,6 +2092,9 @@ It can accept an argument: a strftime() format string.
 @item localtime
 The time at which the filter is running, expressed in the local time zone.
 It can accept an argument: a strftime() format string.
+
+@item n, frame_num
+The frame number, starting from 0.
 
 @item pts
 The timestamp of the current frame, in seconds, with microsecond accuracy.
@@ -3692,21 +3705,6 @@ Adler-32 checksum (printed in hexadecimal) of all the planes of the input frame
 Adler-32 checksum (printed in hexadecimal) of each plane of the input frame,
 expressed in the form "[@var{c0} @var{c1} @var{c2} @var{c3}]"
 @end table
-
-@section slicify
-
-Pass the images of input video on to next video filter as multiple
-slices.
-
-@example
-ffmpeg -i in.avi -vf "slicify=32" out.avi
-@end example
-
-The filter accepts the slice height as parameter. If the parameter is
-not specified it will use the default value of 16.
-
-Adding this in the beginning of filter chains should make filtering
-faster due to better use of the memory cache.
 
 @section smartblur
 

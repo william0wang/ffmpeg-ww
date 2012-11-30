@@ -188,9 +188,7 @@ inline static void push_frame(AVFilterLink *outlink)
     showspectrum->filled = 0;
     showspectrum->req_fullfilled = 1;
 
-    ff_start_frame(outlink, avfilter_ref_buffer(showspectrum->outpicref, ~AV_PERM_WRITE));
-    ff_draw_slice(outlink, 0, outlink->h, 1);
-    ff_end_frame(outlink);
+    ff_filter_frame(outlink, avfilter_ref_buffer(showspectrum->outpicref, ~AV_PERM_WRITE));
 }
 
 static int request_frame(AVFilterLink *outlink)
@@ -281,7 +279,7 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFilterBufferRef *insampl
     return add_samples;
 }
 
-static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
+static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
     ShowSpectrumContext *showspectrum = ctx->priv;
@@ -298,6 +296,26 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     return 0;
 }
 
+static const AVFilterPad showspectrum_inputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .filter_frame = filter_frame,
+        .min_perms    = AV_PERM_READ,
+    },
+    { NULL }
+};
+
+static const AVFilterPad showspectrum_outputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_VIDEO,
+        .config_props  = config_output,
+        .request_frame = request_frame,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_avf_showspectrum = {
     .name           = "showspectrum",
     .description    = NULL_IF_CONFIG_SMALL("Convert input audio to a spectrum video output."),
@@ -305,26 +323,7 @@ AVFilter avfilter_avf_showspectrum = {
     .uninit         = uninit,
     .query_formats  = query_formats,
     .priv_size      = sizeof(ShowSpectrumContext),
-
-    .inputs  = (const AVFilterPad[]) {
-        {
-            .name           = "default",
-            .type           = AVMEDIA_TYPE_AUDIO,
-            .filter_samples = filter_samples,
-            .min_perms      = AV_PERM_READ,
-        },
-        { .name = NULL }
-    },
-
-    .outputs = (const AVFilterPad[]) {
-        {
-            .name           = "default",
-            .type           = AVMEDIA_TYPE_VIDEO,
-            .config_props   = config_output,
-            .request_frame  = request_frame,
-        },
-        { .name = NULL }
-    },
-
-    .priv_class = &showspectrum_class,
+    .inputs         = showspectrum_inputs,
+    .outputs        = showspectrum_outputs,
+    .priv_class     = &showspectrum_class,
 };

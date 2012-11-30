@@ -436,7 +436,7 @@ static int gate_update(struct integrator *integ, double power,
     return gate_hist_pos;
 }
 
-static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
+static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 {
     int i, ch;
     AVFilterContext *ctx = inlink->dst;
@@ -625,9 +625,8 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 
                 /* set pts and push frame */
                 pic->pts = pts;
-                if ((ret = ff_start_frame(outlink, avfilter_ref_buffer(pic, ~AV_PERM_WRITE))) < 0 ||
-                    (ret = ff_draw_slice(outlink, 0, outlink->h, 1)) < 0 ||
-                    (ret = ff_end_frame(outlink)) < 0)
+                ret = ff_filter_frame(outlink, avfilter_ref_buffer(pic, ~AV_PERM_WRITE));
+                if (ret < 0)
                     return ret;
             }
 
@@ -638,7 +637,7 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
         }
     }
 
-    return ff_filter_samples(ctx->outputs[ebur128->do_video], insamples);
+    return ff_filter_frame(ctx->outputs[ebur128->do_video], insamples);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -728,6 +727,16 @@ static av_cold void uninit(AVFilterContext *ctx)
     avfilter_unref_bufferp(&ebur128->outpicref);
 }
 
+static const AVFilterPad ebur128_inputs[] = {
+    {
+        .name             = "default",
+        .type             = AVMEDIA_TYPE_AUDIO,
+        .get_audio_buffer = ff_null_get_audio_buffer,
+        .filter_frame     = filter_frame,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_af_ebur128 = {
     .name          = "ebur128",
     .description   = NULL_IF_CONFIG_SMALL("EBU R128 scanner."),
@@ -735,13 +744,7 @@ AVFilter avfilter_af_ebur128 = {
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,
-
-    .inputs = (const AVFilterPad[]) {
-        { .name             = "default",
-          .type             = AVMEDIA_TYPE_AUDIO,
-          .get_audio_buffer = ff_null_get_audio_buffer,
-          .filter_samples   = filter_samples, },
-        { .name = NULL }
-    },
-    .outputs = NULL,
+    .inputs        = ebur128_inputs,
+    .outputs       = NULL,
+    .priv_class    = &ebur128_class,
 };

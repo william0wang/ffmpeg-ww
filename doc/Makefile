@@ -1,10 +1,23 @@
-DOCLIBS-$(CONFIG_AVUTIL)  += libavutil
-DOCLIBS-$(CONFIG_AVCODEC) += libavcodec
-DOCLIBS-$(CONFIG_AVFILTER) += libavfilter
+LIBRARIES-$(CONFIG_AVUTIL)     += libavutil
+LIBRARIES-$(CONFIG_SWSCALE)    += libswscale
+LIBRARIES-$(CONFIG_SWRESAMPLE) += libswresample
+LIBRARIES-$(CONFIG_AVCODEC)    += libavcodec
+LIBRARIES-$(CONFIG_AVFORMAT)   += libavformat
+LIBRARIES-$(CONFIG_AVDEVICE)   += libavdevice
+LIBRARIES-$(CONFIG_AVFILTER)   += libavfilter
 
-MANPAGES    = $(PROGS-yes:%=doc/%.1)    $(DOCLIBS-yes:%=doc/%.3)
-PODPAGES    = $(PROGS-yes:%=doc/%.pod)  $(DOCLIBS-yes:%=doc/%.pod)
-HTMLPAGES   = $(PROGS-yes:%=doc/%.html) $(DOCLIBS-yes:%=doc/%.html)     \
+COMPONENTS-yes = $(PROGS-yes)
+COMPONENTS-$(CONFIG_AVUTIL)     += ffmpeg-utils
+COMPONENTS-$(CONFIG_SWSCALE)    += ffmpeg-scaler
+COMPONENTS-$(CONFIG_SWRESAMPLE) += ffmpeg-resampler
+COMPONENTS-$(CONFIG_AVCODEC)    += ffmpeg-codecs ffmpeg-bitstream-filters
+COMPONENTS-$(CONFIG_AVFORMAT)   += ffmpeg-formats ffmpeg-protocols
+COMPONENTS-$(CONFIG_AVDEVICE)   += ffmpeg-devices
+COMPONENTS-$(CONFIG_AVFILTER)   += ffmpeg-filters
+
+MANPAGES    = $(COMPONENTS-yes:%=doc/%.1)    $(LIBRARIES-yes:%=doc/%.3)
+PODPAGES    = $(COMPONENTS-yes:%=doc/%.pod)  $(LIBRARIES-yes:%=doc/%.pod)
+HTMLPAGES   = $(COMPONENTS-yes:%=doc/%.html) $(LIBRARIES-yes:%=doc/%.html)     \
               doc/developer.html                                        \
               doc/faq.html                                              \
               doc/fate.html                                             \

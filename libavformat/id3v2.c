@@ -584,8 +584,10 @@ static void ff_id3v2_parse(AVFormatContext *s, int len, uint8_t version, uint8_t
     unsigned char *buffer = NULL;
     int buffer_size = 0;
     const ID3v2EMFunc *extra_func = NULL;
-    unsigned char *compressed_buffer = NULL;
-    int compressed_buffer_size = 0;
+    unsigned char *uncompressed_buffer = NULL;
+    int uncompressed_buffer_size = 0;
+
+    av_log(s, AV_LOG_DEBUG, "id3v2 ver:%d flags:%02X len:%d\n", version, flags, len);
 
     switch (version) {
     case 2:
@@ -688,54 +690,63 @@ static void ff_id3v2_parse(AVFormatContext *s, int len, uint8_t version, uint8_t
             avio_skip(s->pb, tlen);
         /* check for text tag or supported special meta tag */
         } else if (tag[0] == 'T' || (extra_meta && (extra_func = get_extra_meta_func(tag, isv34)))) {
-            if (unsync || tunsync || tcomp) {
-                int i, j;
+            pbx = s->pb;
 
-                av_fast_malloc(&buffer, &buffer_size, dlen);
+            if (unsync || tunsync || tcomp) {
+                av_fast_malloc(&buffer, &buffer_size, tlen);
                 if (!buffer) {
-                    av_log(s, AV_LOG_ERROR, "Failed to alloc %ld bytes\n", dlen);
+                    av_log(s, AV_LOG_ERROR, "Failed to alloc %d bytes\n", tlen);
                     goto seek;
                 }
+            }
+            if (unsync || tunsync) {
+                int64_t end = avio_tell(s->pb) + tlen;
+                uint8_t *b;
+
+                b = buffer;
+                while (avio_tell(s->pb) < end && b - buffer < tlen) {
+                    *b++ = avio_r8(s->pb);
+                    if (*(b - 1) == 0xff && avio_tell(s->pb) < end - 1 && b - buffer < tlen) {
+                        uint8_t val = avio_r8(s->pb);
+                        *b++ = val ? val : avio_r8(s->pb);
+                    }
+                }
+                ffio_init_context(&pb, buffer, b - buffer, 0, NULL, NULL, NULL, NULL);
+                tlen = b - buffer;
+                pbx = &pb; // read from sync buffer
+            }
+
 #if CONFIG_ZLIB
                 if (tcomp) {
-                    int n, err;
+                    int err;
 
                     av_log(s, AV_LOG_DEBUG, "Compresssed frame %s tlen=%d dlen=%ld\n", tag, tlen, dlen);
 
-                    av_fast_malloc(&compressed_buffer, &compressed_buffer_size, tlen);
-                    if (!compressed_buffer) {
-                        av_log(s, AV_LOG_ERROR, "Failed to alloc %d bytes\n", tlen);
+                    av_fast_malloc(&uncompressed_buffer, &uncompressed_buffer_size, dlen);
+                    if (!uncompressed_buffer) {
+                        av_log(s, AV_LOG_ERROR, "Failed to alloc %ld bytes\n", dlen);
                         goto seek;
                     }
 
-                    n = avio_read(s->pb, compressed_buffer, tlen);
-                    if (n < 0) {
-                        av_log(s, AV_LOG_ERROR, "Failed to read compressed tag\n");
-                        goto seek;
+                    if (!(unsync || tunsync)) {
+                        err = avio_read(s->pb, buffer, tlen);
+                        if (err < 0) {
+                            av_log(s, AV_LOG_ERROR, "Failed to read compressed tag\n");
+                            goto seek;
+                        }
+                        tlen = err;
                     }
 
-                    err = uncompress(buffer, &dlen, compressed_buffer, n);
+                    err = uncompress(uncompressed_buffer, &dlen, buffer, tlen);
                     if (err != Z_OK) {
                         av_log(s, AV_LOG_ERROR, "Failed to uncompress tag: %d\n", err);
                         goto seek;
                     }
+                    ffio_init_context(&pb, uncompressed_buffer, dlen, 0, NULL, NULL, NULL, NULL);
+                    tlen = dlen;
+                    pbx = &pb; // read from sync buffer
                 }
 #endif
-
-                for (i = 0, j = 0; i < dlen; i++, j++) {
-                    if (!tcomp)
-                        buffer[j] = avio_r8(s->pb);
-                    if (j > 0 && !buffer[j] && buffer[j - 1] == 0xff) {
-                        /* Unsynchronised byte, skip it */
-                        j--;
-                    }
-                }
-                ffio_init_context(&pb, buffer, j, 0, NULL, NULL, NULL, NULL);
-                tlen = j;
-                pbx = &pb; // read from sync buffer
-            } else {
-                pbx = s->pb; // read straight from input
-            }
             if (tag[0] == 'T')
                 /* parse text tag */
                 read_ttag(s, pbx, tlen, tag);
@@ -762,7 +773,7 @@ seek:
         av_log(s, AV_LOG_INFO, "ID3v2.%d tag skipped, cannot handle %s\n", version, reason);
     avio_seek(s->pb, end, SEEK_SET);
     av_free(buffer);
-    av_free(compressed_buffer);
+    av_free(uncompressed_buffer);
     return;
 }
 

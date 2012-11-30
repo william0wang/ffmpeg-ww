@@ -387,6 +387,7 @@ void avcodec_register_all(void)
     /* ADPCM codecs */
     REGISTER_DECODER (ADPCM_4XM, adpcm_4xm);
     REGISTER_ENCDEC  (ADPCM_ADX, adpcm_adx);
+    REGISTER_DECODER (ADPCM_AFC, adpcm_afc);
     REGISTER_DECODER (ADPCM_CT, adpcm_ct);
     REGISTER_DECODER (ADPCM_EA, adpcm_ea);
     REGISTER_DECODER (ADPCM_EA_MAXIS_XA, adpcm_ea_maxis_xa);
@@ -403,6 +404,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER (ADPCM_IMA_EA_EACS, adpcm_ima_ea_eacs);
     REGISTER_DECODER (ADPCM_IMA_EA_SEAD, adpcm_ima_ea_sead);
     REGISTER_DECODER (ADPCM_IMA_ISS, adpcm_ima_iss);
+    REGISTER_DECODER (ADPCM_IMA_OKI, adpcm_ima_oki);
     REGISTER_ENCDEC  (ADPCM_IMA_QT, adpcm_ima_qt);
     REGISTER_DECODER (ADPCM_IMA_SMJPEG, adpcm_ima_smjpeg);
     REGISTER_ENCDEC  (ADPCM_IMA_WAV, adpcm_ima_wav);

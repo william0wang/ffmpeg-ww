@@ -120,6 +120,7 @@ Component options:
   --disable-avdevice       disable libavdevice build
   --disable-avcodec        disable libavcodec build
   --disable-avformat       disable libavformat build
+  --disable-avutil         disable libavutil build
   --disable-swresample     disable libswresample build
   --disable-swscale        disable libswscale build
   --disable-postproc       disable libpostproc build
@@ -1091,6 +1092,17 @@ DOCUMENT_LIST="
     txtpages
 "
 
+LIBRARY_LIST="
+    avcodec
+    avdevice
+    avfilter
+    avformat
+    avresample
+    avutil
+    swresample
+    swscale
+"
+
 PROGRAM_LIST="
     ffplay
     ffprobe
@@ -1101,12 +1113,8 @@ PROGRAM_LIST="
 CONFIG_LIST="
     $COMPONENT_LIST
     $DOCUMENT_LIST
+    $LIBRARY_LIST
     $PROGRAM_LIST
-    avcodec
-    avdevice
-    avfilter
-    avformat
-    avresample
     avisynth
     bzlib
     crystalhd
@@ -1179,8 +1187,6 @@ CONFIG_LIST="
     small
     sram
     static
-    swresample
-    swscale
     swscale_alpha
     thumb
     vaapi
@@ -1304,6 +1310,7 @@ HAVE_LIST="
     $HAVE_LIST_PUB
     $THREADS_LIST
     $MATH_FUNCS
+    access
     aligned_malloc
     aligned_stack
     alsa_asoundlib_h
@@ -1431,7 +1438,6 @@ HAVE_LIST="
 CONFIG_EXTRA="
     aandcttables
     ac3dsp
-    avutil
     error_resilience
     gcrypt
     golomb
@@ -1965,9 +1971,13 @@ tinterlace_merge_test_deps="tinterlace_filter"
 tinterlace_pad_test_deps="tinterlace_filter"
 
 # libraries
-avdevice_deps="avcodec avformat"
-avformat_deps="avcodec"
+avcodec_deps="avutil"
+avdevice_deps="avutil avcodec avformat"
+avfilter_deps="avutil"
+avformat_deps="avutil avcodec"
+avresample_deps="avutil"
 postproc_deps="gpl"
+swscale_deps="avutil"
 
 # programs
 ffmpeg_deps="avcodec avfilter avformat swscale swresample"
@@ -2034,16 +2044,9 @@ ALT_PP_VER=$ALT_PP_VER_MAJOR.$ALT_PP_VER_MINOR.$ALT_PP_VER_MICRO
 # configurable options
 enable $PROGRAM_LIST
 enable $DOCUMENT_LIST
-
-enable avcodec
-enable avdevice
-enable avfilter
-enable avformat
-enable avutil
+enable $(filter_out avresample $LIBRARY_LIST)
 enable postproc
 enable stripping
-enable swresample
-enable swscale
 
 enable asm
 enable debug
@@ -2389,6 +2392,24 @@ EOF
     die "Sanity test failed."
 fi
 
+ccc_flags(){
+    for flag; do
+        case $flag in
+            -std=c99)           echo -c99                       ;;
+            -mcpu=*)            echo -arch ${flag#*=}           ;;
+            -mieee)             echo -ieee                      ;;
+            -O*|-fast)          echo $flag                      ;;
+            -fno-math-errno)    echo -assume nomath_errno       ;;
+            -g)                 echo -g3                        ;;
+            -Wall)              echo -msg_enable level2         ;;
+            -Wno-pointer-sign)  echo -msg_disable ptrmismatch1  ;;
+            -Wl,*)              echo $flag                      ;;
+            -f*|-W*)                                            ;;
+            *)                  echo $flag                      ;;
+        esac
+   done
+}
+
 msvc_flags(){
     for flag; do
         case $flag in
@@ -2440,6 +2461,8 @@ suncc_flags(){
                     prescott|nocona)    echo -xarch=sse3 -xchip=pentium4 ;;
                     *-sse3)             echo -xarch=sse3                 ;;
                     core2)              echo -xarch=ssse3 -xchip=core2   ;;
+                    corei7)           echo -xarch=sse4_2 -xchip=nehalem  ;;
+                    corei7-avx)       echo -xarch=avx -xchip=sandybridge ;;
                     amdfam10|barcelona|bdver*) echo -xarch=sse4_1        ;;
                     athlon-4|athlon-[mx]p)    echo -xarch=ssea           ;;
                     k8|opteron|athlon64|athlon-fx)
@@ -2530,10 +2553,9 @@ probe_cc(){
         _type=ccc
         _ident=$($_cc -V | head -n1 | cut -d' ' -f1-3)
         _DEPFLAGS='-M'
-        debuglevel=3
-        _ldflags='-Wl,-z,now' # calls to libots crash without this
         _cflags_speed='-fast'
         _cflags_size='-O1'
+        _flags_filter=ccc_flags
     elif $_cc --vsn 2>/dev/null | grep -q "ARM C/C++ Compiler"; then
         test -d "$sysroot" || die "No valid sysroot specified."
         _type=armcc
@@ -2777,6 +2799,93 @@ enable $arch
 # Add processor-specific flags
 if test "$cpu" = generic; then
     : do nothing
+
+elif enabled aarch64; then
+
+    case $cpu in
+        armv*)
+            cpuflags="-march=$cpu"
+        ;;
+        *)
+            cpuflags="-mcpu=$cpu"
+        ;;
+    esac
+
+elif enabled alpha; then
+
+    cpuflags="-mcpu=$cpu"
+
+elif enabled arm; then
+
+    case $cpu in
+        armv*)
+            cpuflags="-march=$cpu"
+            subarch=$(echo $cpu | sed 's/[^a-z0-9]//g')
+        ;;
+        *)
+            cpuflags="-mcpu=$cpu"
+            case $cpu in
+                cortex-a*)                               subarch=armv7a  ;;
+                cortex-r*)                               subarch=armv7r  ;;
+                cortex-m*)                 enable thumb; subarch=armv7m  ;;
+                arm11*)                                  subarch=armv6   ;;
+                arm[79]*e*|arm9[24]6*|arm96*|arm102[26]) subarch=armv5te ;;
+                armv4*|arm7*|arm9[24]*)                  subarch=armv4   ;;
+            esac
+        ;;
+    esac
+
+elif enabled avr32; then
+
+    case $cpu in
+        ap7[02]0[0-2])
+            subarch="avr32_ap"
+            cpuflags="-mpart=$cpu"
+        ;;
+        ap)
+            subarch="avr32_ap"
+            cpuflags="-march=$cpu"
+        ;;
+        uc3[ab]*)
+            subarch="avr32_uc"
+            cpuflags="-mcpu=$cpu"
+        ;;
+        uc)
+            subarch="avr32_uc"
+            cpuflags="-march=$cpu"
+        ;;
+    esac
+
+elif enabled bfin; then
+
+    cpuflags="-mcpu=$cpu"
+
+elif enabled mips; then
+
+    cpuflags="-march=$cpu"
+
+    case $cpu in
+        24kc)
+            disable mipsfpu
+            disable mipsdspr1
+            disable mipsdspr2
+        ;;
+        24kf*)
+            disable mipsdspr1
+            disable mipsdspr2
+        ;;
+        24kec|34kc|1004kc)
+            disable mipsfpu
+            disable mipsdspr2
+        ;;
+        24kef*|34kf*|1004kf*)
+            disable mipsdspr2
+        ;;
+        74kc)
+            disable mipsfpu
+        ;;
+    esac
+
 elif enabled ppc; then
 
     case $(tolower $cpu) in
@@ -2826,6 +2935,18 @@ elif enabled ppc; then
         ;;
     esac
 
+elif enabled sparc; then
+
+    case $cpu in
+        cypress|f93[04]|tsc701|sparcl*|supersparc|hypersparc|niagara|v[789])
+            cpuflags="-mcpu=$cpu"
+            disable vis
+        ;;
+        ultrasparc*|niagara[234])
+            cpuflags="-mcpu=$cpu"
+        ;;
+    esac
+
 elif enabled x86; then
 
     case $cpu in
@@ -2839,7 +2960,7 @@ elif enabled x86; then
             disable cmov
         ;;
         # targets that do support conditional mov (cmov)
-        i686|pentiumpro|pentium[23]|pentium-m|athlon|athlon-tbird|athlon-4|athlon-[mx]p|athlon64*|k8*|opteron*|athlon-fx|core2|amdfam10|barcelona|atom|bdver*)
+        i686|pentiumpro|pentium[23]|pentium-m|athlon|athlon-tbird|athlon-4|athlon-[mx]p|athlon64*|k8*|opteron*|athlon-fx|core2|corei7*|amdfam10|barcelona|atom|bdver*)
             cpuflags="-march=$cpu"
             enable cmov
             enable fast_cmov
@@ -2849,104 +2970,6 @@ elif enabled x86; then
             cpuflags="-march=$cpu"
             enable cmov
             disable fast_cmov
-        ;;
-    esac
-
-elif enabled sparc; then
-
-    case $cpu in
-        cypress|f93[04]|tsc701|sparcl*|supersparc|hypersparc|niagara|v[789])
-            cpuflags="-mcpu=$cpu"
-            disable vis
-        ;;
-        ultrasparc*|niagara[234])
-            cpuflags="-mcpu=$cpu"
-        ;;
-    esac
-
-elif enabled arm; then
-
-    case $cpu in
-        armv*)
-            cpuflags="-march=$cpu"
-            subarch=$(echo $cpu | sed 's/[^a-z0-9]//g')
-        ;;
-        *)
-            cpuflags="-mcpu=$cpu"
-            case $cpu in
-                cortex-a*)                               subarch=armv7a  ;;
-                cortex-r*)                               subarch=armv7r  ;;
-                cortex-m*)                 enable thumb; subarch=armv7m  ;;
-                arm11*)                                  subarch=armv6   ;;
-                arm[79]*e*|arm9[24]6*|arm96*|arm102[26]) subarch=armv5te ;;
-                armv4*|arm7*|arm9[24]*)                  subarch=armv4   ;;
-            esac
-        ;;
-    esac
-
-elif enabled alpha; then
-
-    enabled ccc && cpuflags="-arch $cpu" || cpuflags="-mcpu=$cpu"
-
-elif enabled bfin; then
-
-    cpuflags="-mcpu=$cpu"
-
-elif enabled mips; then
-
-    cpuflags="-march=$cpu"
-
-    case $cpu in
-        24kc)
-            disable mipsfpu
-            disable mipsdspr1
-            disable mipsdspr2
-        ;;
-        24kf*)
-            disable mipsdspr1
-            disable mipsdspr2
-        ;;
-        24kec|34kc|1004kc)
-            disable mipsfpu
-            disable mipsdspr2
-        ;;
-        24kef*|34kf*|1004kf*)
-            disable mipsdspr2
-        ;;
-        74kc)
-            disable mipsfpu
-        ;;
-    esac
-
-elif enabled avr32; then
-
-    case $cpu in
-        ap7[02]0[0-2])
-            subarch="avr32_ap"
-            cpuflags="-mpart=$cpu"
-        ;;
-        ap)
-            subarch="avr32_ap"
-            cpuflags="-march=$cpu"
-        ;;
-        uc3[ab]*)
-            subarch="avr32_uc"
-            cpuflags="-mcpu=$cpu"
-        ;;
-        uc)
-            subarch="avr32_uc"
-            cpuflags="-march=$cpu"
-        ;;
-    esac
-
-elif enabled aarch64; then
-
-    case $cpu in
-        armv*)
-            cpuflags="-march=$cpu"
-        ;;
-        *)
-            cpuflags="-mcpu=$cpu"
         ;;
     esac
 
@@ -3292,6 +3315,10 @@ if enabled_all tms470 glibc; then
     add_cflags   -pds=48    # incompatible redefinition of macro
 fi
 
+if enabled_all ccc glibc; then
+    add_ldflags -Wl,-z,now  # calls to libots crash without this
+fi
+
 esc(){
     echo "$*" | sed 's/%/%25/g;s/:/%3a/g'
 }
@@ -3584,6 +3611,7 @@ fi
 # Solaris has nanosleep in -lrt, OpenSolaris no longer needs that
 check_func nanosleep || { check_func nanosleep -lrt && add_extralibs -lrt; }
 
+check_func  access
 check_func  clock_gettime || { check_func clock_gettime -lrt && add_extralibs -lrt; }
 check_func  fcntl
 check_func  fork
@@ -3971,12 +3999,10 @@ if enabled icc; then
     fi
 elif enabled ccc; then
     # disable some annoying warnings
-    add_cflags -msg_disable cvtu32to64
-    add_cflags -msg_disable embedcomment
-    add_cflags -msg_disable needconstext
-    add_cflags -msg_disable nomainieee
-    add_cflags -msg_disable ptrmismatch1
-    add_cflags -msg_disable unreachcode
+    add_cflags -msg_disable bitnotint
+    add_cflags -msg_disable mixfuncvoid
+    add_cflags -msg_disable nonstandcast
+    add_cflags -msg_disable unsupieee
 elif enabled gcc; then
     check_optflags -fno-tree-vectorize
     check_cflags -Werror=implicit-function-declaration
@@ -4006,6 +4032,9 @@ elif enabled msvc; then
 fi
 
 case $target_os in
+    osf1)
+        enabled ccc && add_ldflags '-Wl,-expect_unresolved,*'
+    ;;
     plan9)
         add_cppflags -Dmain=plan9_main
     ;;
@@ -4242,6 +4271,7 @@ ASFLAGS=$ASFLAGS
 AS_C=$AS_C
 AS_O=$AS_O
 CC_C=$CC_C
+CC_E=$CC_E
 CC_O=$CC_O
 CXX_C=$CXX_C
 CXX_O=$CXX_O
@@ -4309,7 +4339,7 @@ NOREDZONE_FLAGS=$noredzone_flags
 EOF
 
 get_version(){
-    lcname=$1
+    lcname=lib${1}
     name=$(toupper $lcname)
     file=$source_path/$lcname/version.h
     eval $(awk "/#define ${name}_VERSION_M/ { print \$2 \"=\" \$3 }" "$file")
@@ -4333,14 +4363,7 @@ fi
 
 get_version_old LIBPOSTPROC libpostproc/version.h
 
-get_version libavcodec
-get_version libavdevice
-get_version libavfilter
-get_version libavformat
-get_version libavresample
-get_version libavutil
-get_version libswresample
-get_version libswscale
+map 'get_version $v' $LIBRARY_LIST
 
 cat > $TMPH <<EOF
 /* Automatically generated by configure - do not modify! */
@@ -4473,7 +4496,7 @@ pkgconfig_generate libavfilter "FFmpeg video filtering library" "$LIBAVFILTER_VE
 pkgconfig_generate libpostproc "FFmpeg postprocessing library" "$LIBPOSTPROC_VERSION" "" "libavutil = $LIBAVUTIL_VERSION"
 pkgconfig_generate libavresample "Libav audio resampling library" "$LIBAVRESAMPLE_VERSION" "$extralibs" "libavutil = $LIBAVUTIL_VERSION"
 pkgconfig_generate libswscale "FFmpeg image rescaling library" "$LIBSWSCALE_VERSION" "$LIBM" "libavutil = $LIBAVUTIL_VERSION"
-pkgconfig_generate libswresample "FFmpeg audio rescaling library" "$LIBSWRESAMPLE_VERSION" "$LIBM" "libavutil = $LIBAVUTIL_VERSION"
+pkgconfig_generate libswresample "FFmpeg audio resampling library" "$LIBSWRESAMPLE_VERSION" "$LIBM" "libavutil = $LIBAVUTIL_VERSION"
 
 fix_ffmpeg_remote(){
     git_remote_from=$1

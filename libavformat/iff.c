@@ -37,6 +37,7 @@
 #include "internal.h"
 
 #define ID_8SVX       MKTAG('8','S','V','X')
+#define ID_16SV       MKTAG('1','6','S','V')
 #define ID_VHDR       MKTAG('V','H','D','R')
 #define ID_ATAK       MKTAG('A','T','A','K')
 #define ID_RLSE       MKTAG('R','L','S','E')
@@ -85,17 +86,12 @@ typedef enum {
     COMP_EXP
 } svx8_compression_type;
 
-typedef enum {
-    BITMAP_RAW,
-    BITMAP_BYTERUN1
-} bitmap_compression_type;
-
 typedef struct {
     uint64_t  body_pos;
     uint32_t  body_size;
     uint32_t  sent_bytes;
     svx8_compression_type   svx8_compression;
-    bitmap_compression_type bitmap_compression;  ///< delta compression method used
+    unsigned  bitmap_compression;  ///< delta compression method used
     unsigned  bpp;          ///< bits per plane to decode (differs from bits_per_coded_sample if HAM)
     unsigned  ham;          ///< 0 if non-HAM or number of hold bits (6 for bpp > 6, 4 otherwise)
     unsigned  flags;        ///< 1 for EHB, 0 is no extra half darkening
@@ -128,6 +124,7 @@ static int iff_probe(AVProbeData *p)
 
     if (  AV_RL32(d)   == ID_FORM &&
          (AV_RL32(d+8) == ID_8SVX ||
+          AV_RL32(d+8) == ID_16SV ||
           AV_RL32(d+8) == ID_PBM  ||
           AV_RL32(d+8) == ID_ACBM ||
           AV_RL32(d+8) == ID_DEEP ||
@@ -272,11 +269,6 @@ static int iff_read_header(AVFormatContext *s)
             st->codec->width                 = avio_rb16(pb);
             st->codec->height                = avio_rb16(pb);
             iff->bitmap_compression          = avio_rb16(pb);
-            if (iff->bitmap_compression > 1) {
-                av_log(s, AV_LOG_ERROR,
-                       "compression %i not supported\n", iff->bitmap_compression);
-                return AVERROR_PATCHWELCOME;
-            }
             st->sample_aspect_ratio.num      = avio_r8(pb);
             st->sample_aspect_ratio.den      = avio_r8(pb);
             st->codec->bits_per_coded_sample = 24;
@@ -311,6 +303,9 @@ static int iff_read_header(AVFormatContext *s)
     case AVMEDIA_TYPE_AUDIO:
         avpriv_set_pts_info(st, 32, 1, st->codec->sample_rate);
 
+        if (st->codec->codec_tag == ID_16SV)
+            st->codec->codec_id = AV_CODEC_ID_PCM_S16BE_PLANAR;
+        else {
         switch (iff->svx8_compression) {
         case COMP_NONE:
             st->codec->codec_id = AV_CODEC_ID_PCM_S8_PLANAR;
@@ -326,8 +321,9 @@ static int iff_read_header(AVFormatContext *s)
                    "Unknown SVX8 compression method '%d'\n", iff->svx8_compression);
             return -1;
         }
+        }
 
-        st->codec->bits_per_coded_sample = iff->svx8_compression == COMP_NONE ? 8 : 4;
+        st->codec->bits_per_coded_sample = av_get_bits_per_sample(st->codec->codec_id);
         st->codec->bit_rate = st->codec->channels * st->codec->sample_rate * st->codec->bits_per_coded_sample;
         st->codec->block_align = st->codec->channels * st->codec->bits_per_coded_sample;
         break;
@@ -356,19 +352,7 @@ static int iff_read_header(AVFormatContext *s)
         bytestream_put_byte(&buf, iff->flags);
         bytestream_put_be16(&buf, iff->transparency);
         bytestream_put_byte(&buf, iff->masking);
-
-        switch (iff->bitmap_compression) {
-        case BITMAP_RAW:
-            st->codec->codec_id = AV_CODEC_ID_IFF_ILBM;
-            break;
-        case BITMAP_BYTERUN1:
-            st->codec->codec_id = AV_CODEC_ID_IFF_BYTERUN1;
-            break;
-        default:
-            av_log(s, AV_LOG_ERROR,
-                   "Unknown bitmap compression method '%d'\n", iff->bitmap_compression);
-            return AVERROR_INVALIDDATA;
-        }
+        st->codec->codec_id = AV_CODEC_ID_IFF_ILBM;
         break;
     default:
         return -1;

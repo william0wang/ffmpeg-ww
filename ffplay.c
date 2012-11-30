@@ -90,7 +90,7 @@ const int program_birth_year = 2003;
 /* TODO: We assume that a decoded and resampled frame fits into this buffer */
 #define SAMPLE_ARRAY_SIZE (8 * 65536)
 
-static int sws_flags = SWS_BICUBIC;
+static int64_t sws_flags = SWS_BICUBIC;
 
 typedef struct MyAVPacketList {
     AVPacket pkt;
@@ -234,6 +234,7 @@ typedef struct VideoState {
     double video_current_pts;       // current displayed pts (different from video_clock if frame fifos are used)
     double video_current_pts_drift; // video_current_pts - time (av_gettime) at which we updated video_current_pts - used to have running video pts
     int64_t video_current_pos;      // current displayed file pos
+    double max_frame_duration;      // maximum duration of a frame - above this, we consider the jump a timestamp discontinuity
     VideoPicture pictq[VIDEO_PICTURE_QUEUE_SIZE];
     int pictq_size, pictq_rindex, pictq_windex;
     SDL_mutex *pictq_mutex;
@@ -1318,7 +1319,7 @@ retry:
 
             /* compute nominal last_duration */
             last_duration = vp->pts - is->frame_last_pts;
-            if (last_duration > 0 && last_duration < 10.0) {
+            if (last_duration > 0 && last_duration < is->max_frame_duration) {
                 /* if duration of the last frame was sane, update last_duration in video state */
                 is->frame_last_duration = last_duration;
             }
@@ -1581,7 +1582,7 @@ static int queue_picture(VideoState *is, AVFrame *src_frame, double pts1, int64_
         av_picture_copy(&pict, (AVPicture *)src_frame,
                         src_frame->format, vp->width, vp->height);
 #else
-        sws_flags = av_get_int(sws_opts, "sws_flags", NULL);
+        av_opt_get_int(sws_opts, "sws_flags", 0, &sws_flags);
         is->img_convert_ctx = sws_getCachedContext(is->img_convert_ctx,
             vp->width, vp->height, src_frame->format, vp->width, vp->height,
             AV_PIX_FMT_YUV420P, sws_flags, NULL, NULL, NULL);
@@ -1731,7 +1732,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     if (!buffersink_params)
         return AVERROR(ENOMEM);
 
-    snprintf(sws_flags_str, sizeof(sws_flags_str), "flags=%d", sws_flags);
+    snprintf(sws_flags_str, sizeof(sws_flags_str), "flags=%"PRId64, sws_flags);
     graph->scale_sws_opts = av_strdup(sws_flags_str);
 
     snprintf(buffersrc_args, sizeof(buffersrc_args),
@@ -2557,6 +2558,8 @@ static int read_thread(void *arg)
     if (seek_by_bytes < 0)
         seek_by_bytes = !!(ic->iformat->flags & AVFMT_TS_DISCONT);
 
+    is->max_frame_duration = (ic->iformat->flags & AVFMT_TS_DISCONT) ? 10.0 : 3600.0;
+
     /* if seeking requested, we execute it */
     if (start_time != AV_NOPTS_VALUE) {
         int64_t timestamp;
@@ -2669,8 +2672,13 @@ static int read_thread(void *arg)
                     packet_queue_flush(&is->videoq);
                     packet_queue_put(&is->videoq, &flush_pkt);
                 }
+                if (is->seek_flags & AVSEEK_FLAG_BYTE) {
+                   //FIXME: use a cleaner way to signal obsolete external clock...
+                   update_external_clock_pts(is, (double)AV_NOPTS_VALUE);
+                } else {
+                   update_external_clock_pts(is, seek_target / (double)AV_TIME_BASE);
+                }
             }
-            update_external_clock_pts(is, (seek_target + ic->start_time) / (double)AV_TIME_BASE);
             is->seek_req = 0;
             eof = 0;
         }
@@ -2984,6 +2992,8 @@ static void event_loop(VideoState *cur_stream)
                     } else {
                         pos = get_master_clock(cur_stream);
                         pos += incr;
+                        if (cur_stream->ic->start_time != AV_NOPTS_VALUE && pos < cur_stream->ic->start_time / (double)AV_TIME_BASE)
+                            pos = cur_stream->ic->start_time / (double)AV_TIME_BASE;
                         stream_seek(cur_stream, (int64_t)(pos * AV_TIME_BASE), (int64_t)(incr * AV_TIME_BASE), 0);
                     }
                 break;

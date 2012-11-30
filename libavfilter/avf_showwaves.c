@@ -153,9 +153,7 @@ inline static void push_frame(AVFilterLink *outlink)
 {
     ShowWavesContext *showwaves = outlink->src->priv;
 
-    ff_start_frame(outlink, showwaves->outpicref);
-    ff_draw_slice(outlink, 0, outlink->h, 1);
-    ff_end_frame(outlink);
+    ff_filter_frame(outlink, showwaves->outpicref);
     showwaves->req_fullfilled = 1;
     showwaves->outpicref = NULL;
     showwaves->buf_idx = 0;
@@ -179,7 +177,7 @@ static int request_frame(AVFilterLink *outlink)
 
 #define MAX_INT16 ((1<<15) -1)
 
-static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
+static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -228,6 +226,26 @@ static int filter_samples(AVFilterLink *inlink, AVFilterBufferRef *insamples)
     return 0;
 }
 
+static const AVFilterPad showwaves_inputs[] = {
+    {
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_AUDIO,
+        .filter_frame = filter_frame,
+        .min_perms    = AV_PERM_READ,
+    },
+    { NULL }
+};
+
+static const AVFilterPad showwaves_outputs[] = {
+    {
+        .name          = "default",
+        .type          = AVMEDIA_TYPE_VIDEO,
+        .config_props  = config_output,
+        .request_frame = request_frame,
+    },
+    { NULL }
+};
+
 AVFilter avfilter_avf_showwaves = {
     .name           = "showwaves",
     .description    = NULL_IF_CONFIG_SMALL("Convert input audio to a video output."),
@@ -235,26 +253,7 @@ AVFilter avfilter_avf_showwaves = {
     .uninit         = uninit,
     .query_formats  = query_formats,
     .priv_size      = sizeof(ShowWavesContext),
-
-    .inputs  = (const AVFilterPad[]) {
-        {
-            .name           = "default",
-            .type           = AVMEDIA_TYPE_AUDIO,
-            .filter_samples = filter_samples,
-            .min_perms      = AV_PERM_READ,
-        },
-        { .name = NULL }
-    },
-
-    .outputs = (const AVFilterPad[]) {
-        {
-            .name           = "default",
-            .type           = AVMEDIA_TYPE_VIDEO,
-            .config_props   = config_output,
-            .request_frame  = request_frame,
-        },
-        { .name = NULL }
-    },
-
-    .priv_class = &showwaves_class,
+    .inputs         = showwaves_inputs,
+    .outputs        = showwaves_outputs,
+    .priv_class     = &showwaves_class,
 };

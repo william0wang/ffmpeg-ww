@@ -26,8 +26,11 @@
 
 static int ast_probe(AVProbeData *p)
 {
-    if (AV_RL32(p->buf) == MKTAG('S', 'T', 'R', 'M'))
-        return AVPROBE_SCORE_MAX / 2;
+    if (AV_RL32(p->buf) == MKTAG('S','T','R','M') &&
+        AV_RB16(p->buf + 10) &&
+        AV_RB16(p->buf + 12) &&
+        AV_RB32(p->buf + 16))
+        return AVPROBE_SCORE_MAX / 3 * 2;
     return 0;
 }
 
@@ -43,6 +46,9 @@ static int ast_read_header(AVFormatContext *s)
     avio_skip(s->pb, 8);
     codec = avio_rb16(s->pb);
     switch (codec) {
+    case 0:
+        st->codec->codec_id = AV_CODEC_ID_ADPCM_AFC;
+        break;
     case 1:
         st->codec->codec_id = AV_CODEC_ID_PCM_S16BE_PLANAR;
         break;
