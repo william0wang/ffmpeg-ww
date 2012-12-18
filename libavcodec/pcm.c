@@ -338,6 +338,11 @@ static int pcm_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR(EINVAL);
     }
 
+    if (avctx->codec_id != avctx->codec->id) {
+        av_log(avctx, AV_LOG_ERROR, "codec ids mismatch\n");
+        return AVERROR(EINVAL);
+    }
+
     n = avctx->channels * sample_size;
 
     if (n && buf_size % n) {
@@ -354,7 +359,7 @@ static int pcm_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = n * samples_per_block / avctx->channels;
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

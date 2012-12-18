@@ -46,6 +46,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (AMIX,        amix,        af);
     REGISTER_FILTER (ANULL,       anull,       af);
     REGISTER_FILTER (ARESAMPLE,   aresample,   af);
+    REGISTER_FILTER (ASELECT,     aselect,     af);
     REGISTER_FILTER (ASENDCMD,    asendcmd,    af);
     REGISTER_FILTER (ASETNSAMPLES, asetnsamples, af);
     REGISTER_FILTER (ASETPTS,     asetpts,     af);
@@ -61,10 +62,10 @@ void avfilter_register_all(void)
     REGISTER_FILTER (EBUR128,     ebur128,     af);
     REGISTER_FILTER (JOIN,        join,        af);
     REGISTER_FILTER (PAN,         pan,         af);
+    REGISTER_FILTER (RESAMPLE,    resample,    af);
     REGISTER_FILTER (SILENCEDETECT, silencedetect, af);
     REGISTER_FILTER (VOLUME,      volume,      af);
     REGISTER_FILTER (VOLUMEDETECT,volumedetect,af);
-    REGISTER_FILTER (RESAMPLE,    resample,    af);
 
     REGISTER_FILTER (AEVALSRC,    aevalsrc,    asrc);
     REGISTER_FILTER (ANULLSRC,    anullsrc,    asrc);
@@ -126,6 +127,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (SHOWINFO,    showinfo,    vf);
     REGISTER_FILTER (SMARTBLUR,   smartblur,   vf);
     REGISTER_FILTER (SPLIT,       split,       vf);
+    REGISTER_FILTER (SUBTITLES,   subtitles,   vf);
     REGISTER_FILTER (SUPER2XSAI,  super2xsai,  vf);
     REGISTER_FILTER (SWAPUV,      swapuv,      vf);
     REGISTER_FILTER (THUMBNAIL,   thumbnail,   vf);

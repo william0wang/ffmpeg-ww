@@ -213,6 +213,7 @@ External library support:
   --enable-libpulse        enable Pulseaudio input via libpulse [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
   --enable-libschroedinger enable Dirac de/encoding via libschroedinger [no]
+  --enable-libsoxr         enable Include libsoxr resampling [no]
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
   --enable-libstagefright-h264  enable H.264 decoding via libstagefright [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
@@ -296,7 +297,7 @@ Optimization options (experts only):
   --disable-armv5te        disable armv5te optimizations
   --disable-armv6          disable armv6 optimizations
   --disable-armv6t2        disable armv6t2 optimizations
-  --disable-armvfp         disable ARM VFP optimizations
+  --disable-vfp            disable VFP optimizations
   --disable-neon           disable NEON optimizations
   --disable-vis            disable VIS optimizations
   --disable-inline-asm     disable use of inline assembler
@@ -582,12 +583,13 @@ is_in(){
     return 1
 }
 
-check_deps(){
+do_check_deps(){
     for cfg; do
         cfg="${cfg#!}"
         enabled ${cfg}_checking && die "Circular dependency for $cfg."
         disabled ${cfg}_checking && continue
         enable ${cfg}_checking
+        append allopts $cfg
 
         eval dep_all="\$${cfg}_deps"
         eval dep_any="\$${cfg}_deps_any"
@@ -597,7 +599,7 @@ check_deps(){
         eval dep_ifn="\$${cfg}_if_any"
 
         pushvar cfg dep_all dep_any dep_sel dep_sgs dep_ifa dep_ifn
-        check_deps $dep_all $dep_any $dep_sel $dep_sgs $dep_ifa $dep_ifn
+        do_check_deps $dep_all $dep_any $dep_sel $dep_sgs $dep_ifa $dep_ifn
         popvar cfg dep_all dep_any dep_sel dep_sgs dep_ifa dep_ifn
 
         [ -n "$dep_ifa" ] && { enabled_all $dep_ifa && enable_weak $cfg; }
@@ -607,13 +609,23 @@ check_deps(){
         disabled_any $dep_sel && disable $cfg
 
         if enabled $cfg; then
-            eval dep_extralibs="\$${cfg}_extralibs"
-            test -n "$dep_extralibs" && add_extralibs $dep_extralibs
             enable_deep $dep_sel
             enable_deep_weak $dep_sgs
         fi
 
         disable ${cfg}_checking
+    done
+}
+
+check_deps(){
+    unset allopts
+
+    do_check_deps "$@"
+
+    for cfg in $allopts; do
+        enabled $cfg || continue
+        eval dep_extralibs="\$${cfg}_extralibs"
+        test -n "$dep_extralibs" && add_extralibs $dep_extralibs
     done
 }
 
@@ -740,9 +752,9 @@ as_o(){
 
 check_as(){
     log check_as "$@"
-    cat > $TMPC
-    log_file $TMPC
-    check_cmd $as $CPPFLAGS $ASFLAGS "$@" $AS_C $(as_o $TMPO) $TMPC
+    cat > $TMPS
+    log_file $TMPS
+    check_cmd $as $CPPFLAGS $ASFLAGS "$@" $AS_C $(as_o $TMPO) $TMPS
 }
 
 check_inline_asm(){
@@ -751,9 +763,15 @@ check_inline_asm(){
     code="$2"
     shift 2
     disable $name
-    check_as "$@" <<EOF && enable $name
+    check_cc "$@" <<EOF && enable $name
 void foo(void){ __asm__ volatile($code); }
 EOF
+}
+
+check_insn(){
+    log check_insn "$@"
+    check_inline_asm ${1}_inline "\"$2\""
+    echo "$2" | check_as && enable ${1}_external || disable ${1}_external
 }
 
 check_yasm(){
@@ -1156,6 +1174,7 @@ CONFIG_LIST="
     libpulse
     librtmp
     libschroedinger
+    libsoxr
     libspeex
     libstagefright_h264
     libtheora
@@ -1231,6 +1250,15 @@ ARCH_LIST='
     x86_64
 '
 
+ARCH_EXT_LIST_ARM='
+    armv5te
+    armv6
+    armv6t2
+    neon
+    vfp
+    vfpv3
+'
+
 ARCH_EXT_LIST_X86='
     amd3dnow
     amd3dnowext
@@ -1247,15 +1275,10 @@ ARCH_EXT_LIST_X86='
 '
 
 ARCH_EXT_LIST="
+    $ARCH_EXT_LIST_ARM
     $ARCH_EXT_LIST_X86
     altivec
-    armv5te
-    armv6
-    armv6t2
-    armvfp
-    neon
     ppc4xx
-    vfpv3
     vis
     mipsfpu
     mips32r2
@@ -1324,6 +1347,7 @@ HAVE_LIST="
     clock_gettime
     closesocket
     cmov
+    CommandLineToArgvW
     cpunop
     CryptGenRandom
     dcbzl
@@ -1389,9 +1413,11 @@ HAVE_LIST="
     posix_memalign
     pthread_cancel
     rdtsc
+    rsync_contimeout
     sched_getaffinity
     sdl
     sdl_video_size
+    SetConsoleTextAttribute
     setmode
     setrlimit
     Sleep
@@ -1539,9 +1565,11 @@ CMDLINE_APPEND="
 armv5te_deps="arm"
 armv6_deps="arm"
 armv6t2_deps="arm"
-armvfp_deps="arm"
 neon_deps="arm"
-vfpv3_deps="armvfp"
+vfp_deps="arm"
+vfpv3_deps="vfp"
+
+map 'eval ${v}_inline_deps=inline_asm' $ARCH_EXT_LIST_ARM
 
 mipsfpu_deps="mips"
 mips32r2_deps="mips"
@@ -1581,8 +1609,8 @@ done
 
 aligned_stack_if_any="ppc x86"
 fast_64bit_if_any="alpha ia64 mips64 parisc64 ppc64 sparc64 x86_64"
-fast_clz_if_any="alpha armv5te avr32 mips ppc x86"
-fast_unaligned_if_any="armv6 ppc x86"
+fast_clz_if_any="alpha avr32 mips ppc x86"
+fast_unaligned_if_any="ppc x86"
 
 inline_asm_deps="!tms470"
 need_memalign="altivec neon sse"
@@ -1838,6 +1866,7 @@ eac3_demuxer_select="ac3_parser"
 f4v_muxer_select="mov_muxer"
 flac_demuxer_select="flac_parser"
 ipod_muxer_select="mov_muxer"
+ismv_muxer_select="mov_muxer"
 libnut_demuxer_deps="libnut"
 libnut_muxer_deps="libnut"
 matroska_audio_muxer_select="matroska_muxer"
@@ -1863,6 +1892,7 @@ spdif_muxer_select="aac_parser"
 tak_demuxer_select="tak_parser"
 tg2_muxer_select="mov_muxer"
 tgp_muxer_select="mov_muxer"
+vobsub_demuxer_select="mpegps_demuxer"
 w64_demuxer_deps="wav_demuxer"
 
 # indevs / outdevs
@@ -1900,10 +1930,8 @@ ffrtmpcrypt_protocol_deps_any="gcrypt nettle openssl"
 ffrtmpcrypt_protocol_select="tcp_protocol"
 ffrtmphttp_protocol_deps="!librtmp_protocol"
 ffrtmphttp_protocol_select="http_protocol"
-gopher_protocol_deps="network"
-httpproxy_protocol_deps="network"
+gopher_protocol_select="network"
 httpproxy_protocol_select="tcp_protocol"
-http_protocol_deps="network"
 http_protocol_select="tcp_protocol"
 https_protocol_select="tls_protocol"
 librtmp_protocol_deps="librtmp"
@@ -1912,7 +1940,7 @@ librtmps_protocol_deps="librtmp"
 librtmpt_protocol_deps="librtmp"
 librtmpte_protocol_deps="librtmp"
 mmsh_protocol_select="http_protocol"
-mmst_protocol_deps="network"
+mmst_protocol_select="network"
 rtmp_protocol_deps="!librtmp_protocol"
 rtmp_protocol_select="tcp_protocol"
 rtmpe_protocol_select="ffrtmpcrypt_protocol"
@@ -1922,11 +1950,12 @@ rtmpt_protocol_select="ffrtmphttp_protocol"
 rtmpte_protocol_select="ffrtmpcrypt_protocol ffrtmphttp_protocol"
 rtmpts_protocol_select="ffrtmphttp_protocol https_protocol"
 rtp_protocol_select="udp_protocol"
-sctp_protocol_deps="network struct_sctp_event_subscribe"
-tcp_protocol_deps="network"
+sctp_protocol_deps="struct_sctp_event_subscribe"
+sctp_protocol_select="network"
+tcp_protocol_select="network"
 tls_protocol_deps_any="openssl gnutls"
 tls_protocol_select="tcp_protocol"
-udp_protocol_deps="network"
+udp_protocol_select="network"
 
 # filters
 aconvert_filter_deps="swresample"
@@ -1963,6 +1992,7 @@ removelogo_filter_deps="avcodec avformat swscale"
 scale_filter_deps="swscale"
 smartblur_filter_deps="gpl swscale"
 showspectrum_filter_deps="avcodec rdft"
+subtitles_filter_deps="avformat avcodec libass"
 super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
 yadif_filter_deps="gpl"
@@ -2051,7 +2081,6 @@ enable stripping
 enable asm
 enable debug
 enable doc
-enable network
 enable optimizations
 enable runtime_cpudetect
 enable safe_bitstream_reader
@@ -2200,70 +2229,70 @@ do_random(){
 for opt do
     optval="${opt#*=}"
     case "$opt" in
-    --extra-ldflags=*) add_ldflags $optval
-    ;;
-    --extra-libs=*) add_extralibs $optval
-    ;;
-    --disable-devices) disable $INDEV_LIST $OUTDEV_LIST
-    ;;
-    --enable-debug=*) debuglevel="$optval"
-    ;;
-    --disable-programs)
-    disable $PROGRAM_LIST
-    ;;
-    --disable-everything)
-    map 'eval unset \${$(toupper ${v%s})_LIST}' $COMPONENT_LIST
-    ;;
-    --enable-random|--disable-random)
-    action=${opt%%-random}
-    do_random ${action#--} $COMPONENT_LIST
-    ;;
-    --enable-random=*|--disable-random=*)
-    action=${opt%%-random=*}
-    do_random ${action#--} $optval
-    ;;
-    --enable-*=*|--disable-*=*)
-    eval $(echo "${opt%%=*}" | sed 's/--/action=/;s/-/ thing=/')
-    is_in "${thing}s" $COMPONENT_LIST || die_unknown "$opt"
-    eval list=\$$(toupper $thing)_LIST
-    name=$(echo "${optval}" | sed "s/,/_${thing}|/g")_${thing}
-    list=$(filter "$name" $list)
-    [ "$list" = "" ] && warn "Option $opt did not match anything"
-    $action $list
-    ;;
-    --enable-?*|--disable-?*)
-    eval $(echo "$opt" | sed 's/--/action=/;s/-/ option=/;s/-/_/g')
-    if is_in $option $COMPONENT_LIST; then
-        test $action = disable && action=unset
-        eval $action \$$(toupper ${option%s})_LIST
-    elif is_in $option $CMDLINE_SELECT; then
-        $action $option
-    else
-        die_unknown $opt
-    fi
-    ;;
-    --list-*)
-        NAME="${opt#--list-}"
-        is_in $NAME $COMPONENT_LIST || die_unknown $opt
-        NAME=${NAME%s}
-        eval show_list $NAME \$$(toupper $NAME)_LIST
-    ;;
-    --help|-h) show_help
-    ;;
-    --fatal-warnings) enable fatal_warnings
-    ;;
-    *)
-    optname="${opt%%=*}"
-    optname="${optname#--}"
-    optname=$(echo "$optname" | sed 's/-/_/g')
-    if is_in $optname $CMDLINE_SET; then
-        eval $optname='$optval'
-    elif is_in $optname $CMDLINE_APPEND; then
-        append $optname "$optval"
-    else
-         die_unknown $opt
-    fi
-    ;;
+        --extra-ldflags=*) add_ldflags $optval
+        ;;
+        --extra-libs=*) add_extralibs $optval
+        ;;
+        --disable-devices) disable $INDEV_LIST $OUTDEV_LIST
+        ;;
+        --enable-debug=*) debuglevel="$optval"
+        ;;
+        --disable-programs)
+            disable $PROGRAM_LIST
+        ;;
+        --disable-everything)
+            map 'eval unset \${$(toupper ${v%s})_LIST}' $COMPONENT_LIST
+        ;;
+        --enable-random|--disable-random)
+            action=${opt%%-random}
+            do_random ${action#--} $COMPONENT_LIST
+        ;;
+        --enable-random=*|--disable-random=*)
+            action=${opt%%-random=*}
+            do_random ${action#--} $optval
+        ;;
+        --enable-*=*|--disable-*=*)
+            eval $(echo "${opt%%=*}" | sed 's/--/action=/;s/-/ thing=/')
+            is_in "${thing}s" $COMPONENT_LIST || die_unknown "$opt"
+            eval list=\$$(toupper $thing)_LIST
+            name=$(echo "${optval}" | sed "s/,/_${thing}|/g")_${thing}
+            list=$(filter "$name" $list)
+            [ "$list" = "" ] && warn "Option $opt did not match anything"
+            $action $list
+        ;;
+        --enable-?*|--disable-?*)
+            eval $(echo "$opt" | sed 's/--/action=/;s/-/ option=/;s/-/_/g')
+            if is_in $option $COMPONENT_LIST; then
+                test $action = disable && action=unset
+                eval $action \$$(toupper ${option%s})_LIST
+            elif is_in $option $CMDLINE_SELECT; then
+                $action $option
+            else
+                die_unknown $opt
+            fi
+        ;;
+        --list-*)
+            NAME="${opt#--list-}"
+            is_in $NAME $COMPONENT_LIST || die_unknown $opt
+            NAME=${NAME%s}
+            eval show_list $NAME \$$(toupper $NAME)_LIST
+        ;;
+        --help|-h) show_help
+        ;;
+        --fatal-warnings) enable fatal_warnings
+        ;;
+        *)
+            optname="${opt%%=*}"
+            optname="${optname#--}"
+            optname=$(echo "$optname" | sed 's/-/_/g')
+            if is_in $optname $CMDLINE_SET; then
+                eval $optname='$optval'
+            elif is_in $optname $CMDLINE_APPEND; then
+                append $optname "$optval"
+            else
+                die_unknown $opt
+            fi
+        ;;
     esac
 done
 
@@ -2797,10 +2826,7 @@ is_in $arch $ARCH_LIST || warn "unknown architecture $arch"
 enable $arch
 
 # Add processor-specific flags
-if test "$cpu" = generic; then
-    : do nothing
-
-elif enabled aarch64; then
+if enabled aarch64; then
 
     case $cpu in
         armv*)
@@ -2817,6 +2843,37 @@ elif enabled alpha; then
 
 elif enabled arm; then
 
+    check_arm_arch() {
+        check_cpp_condition stddef.h \
+            "defined __ARM_ARCH_${1}__ || defined __TARGET_ARCH_${2:-$1}" \
+            $cpuflags
+    }
+
+    probe_arm_arch() {
+        if   check_arm_arch 4;        then echo armv4;
+        elif check_arm_arch 4T;       then echo armv4t;
+        elif check_arm_arch 5;        then echo armv5;
+        elif check_arm_arch 5E;       then echo armv5e;
+        elif check_arm_arch 5T;       then echo armv5t;
+        elif check_arm_arch 5TE;      then echo armv5te;
+        elif check_arm_arch 5TEJ;     then echo armv5te;
+        elif check_arm_arch 6;        then echo armv6;
+        elif check_arm_arch 6J;       then echo armv6j;
+        elif check_arm_arch 6K;       then echo armv6k;
+        elif check_arm_arch 6Z;       then echo armv6z;
+        elif check_arm_arch 6ZK;      then echo armv6zk;
+        elif check_arm_arch 6T2;      then echo armv6t2;
+        elif check_arm_arch 7;        then echo armv7;
+        elif check_arm_arch 7A  7_A;  then echo armv7-a;
+        elif check_arm_arch 7R  7_R;  then echo armv7-r;
+        elif check_arm_arch 7M  7_M;  then echo armv7-m;
+        elif check_arm_arch 7EM 7E_M; then echo armv7-m;
+        elif check_arm_arch 8A  8_A;  then echo armv8-a;
+        fi
+    }
+
+    [ "$cpu" = generic ] && cpu=$(probe_arm_arch)
+
     case $cpu in
         armv*)
             cpuflags="-march=$cpu"
@@ -2831,8 +2888,14 @@ elif enabled arm; then
                 arm11*)                                  subarch=armv6   ;;
                 arm[79]*e*|arm9[24]6*|arm96*|arm102[26]) subarch=armv5te ;;
                 armv4*|arm7*|arm9[24]*)                  subarch=armv4   ;;
+                *)                             subarch=$(probe_arm_arch) ;;
             esac
         ;;
+    esac
+
+    case "$subarch" in
+        armv5t*)    enable fast_clz                ;;
+        armv[6-8]*) enable fast_clz fast_unaligned ;;
     esac
 
 elif enabled avr32; then
@@ -2975,8 +3038,10 @@ elif enabled x86; then
 
 fi
 
-add_cflags $cpuflags
-add_asflags $cpuflags
+if [ "$cpu" != generic ]; then
+    add_cflags  $cpuflags
+    add_asflags $cpuflags
+fi
 
 # compiler sanity check
 check_exec <<EOF
@@ -3026,6 +3091,7 @@ case "$arch" in
     ;;
     ppc)
         check_64bit ppc ppc64 'sizeof(void *) > 4'
+        spic=$shared
     ;;
     sparc)
         check_64bit sparc sparc64 'sizeof(void *) > 4'
@@ -3132,17 +3198,17 @@ case $target_os in
         SLIBNAME_WITH_MAJOR='$(SLIBPREF)$(FULLNAME)-$(LIBMAJOR)$(SLIBSUF)'
         dlltool="${cross_prefix}dlltool"
         if check_cmd lib.exe -list; then
-            SLIB_EXTRA_CMD='-lib.exe /machine:$(LIBTARGET) /def:$$(@:$(SLIBSUF)=.def) /out:$(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib)'
+            SLIB_EXTRA_CMD=-'sed -e "s/ @[^ ]*//" $$(@:$(SLIBSUF)=.orig.def) > $$(@:$(SLIBSUF)=.def); lib.exe /machine:$(LIBTARGET) /def:$$(@:$(SLIBSUF)=.def) /out:$(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib)'
             if enabled x86_64; then
                 LIBTARGET=x64
             fi
         elif check_cmd $dlltool --version; then
-            SLIB_EXTRA_CMD=-'$(DLLTOOL) -m $(LIBTARGET) -d $$(@:$(SLIBSUF)=.def) -l $(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib) -D $(SLIBNAME_WITH_MAJOR)'
+            SLIB_EXTRA_CMD=-'sed -e "s/ @[^ ]*//" $$(@:$(SLIBSUF)=.orig.def) > $$(@:$(SLIBSUF)=.def); $(DLLTOOL) -m $(LIBTARGET) -d $$(@:$(SLIBSUF)=.def) -l $(SUBDIR)$(SLIBNAME:$(SLIBSUF)=.lib) -D $(SLIBNAME_WITH_MAJOR)'
         fi
         SLIB_INSTALL_NAME='$(SLIBNAME_WITH_MAJOR)'
         SLIB_INSTALL_LINKS=
         SLIB_INSTALL_EXTRA_LIB='lib$(SLIBNAME:$(SLIBSUF)=.dll.a) $(SLIBNAME_WITH_MAJOR:$(SLIBSUF)=.def)'
-        SHFLAGS='-shared -Wl,--output-def,$$(@:$(SLIBSUF)=.def) -Wl,--out-implib,$(SUBDIR)lib$(SLIBNAME:$(SLIBSUF)=.dll.a) -Wl,--enable-runtime-pseudo-reloc -Wl,--enable-auto-image-base'
+        SHFLAGS='-shared -Wl,--output-def,$$(@:$(SLIBSUF)=.orig.def) -Wl,--out-implib,$(SUBDIR)lib$(SLIBNAME:$(SLIBSUF)=.dll.a) -Wl,--enable-runtime-pseudo-reloc -Wl,--enable-auto-image-base'
         objformat="win32"
         ranlib=:
         enable dos_paths
@@ -3415,6 +3481,10 @@ if enabled alpha; then
 
 elif enabled arm; then
 
+    check_cpp_condition stddef.h "defined __thumb__" && check_cc <<EOF && enable_weak thumb
+float func(float a, float b){ return a+b; }
+EOF
+
     enabled thumb && check_cflags -mthumb || check_cflags -marm
     nogas=die
 
@@ -3431,12 +3501,16 @@ EOF
         warn "Compiler does not indicate floating-point ABI, guessing $fpabi."
     fi
 
-    enabled armv5te && check_inline_asm armv5te '"qadd r0, r0, r0"'
-    enabled armv6   && check_inline_asm armv6   '"sadd16 r0, r0, r0"'
-    enabled armv6t2 && check_inline_asm armv6t2 '"movt r0, #0"'
-    enabled armvfp  && check_inline_asm armvfp  '"fadds s0, s0, s0"'
-    enabled neon    && check_inline_asm neon    '"vadd.i16 q0, q0, q0"'
-    enabled vfpv3   && check_inline_asm vfpv3   '"vmov.f32 s0, #1.0"'
+    enabled armv5te && check_insn armv5te 'qadd r0, r0, r0'
+    enabled armv6   && check_insn armv6   'sadd16 r0, r0, r0'
+    enabled armv6t2 && check_insn armv6t2 'movt r0, #0'
+    enabled neon    && check_insn neon    'vadd.i16 q0, q0, q0'
+    enabled vfp     && check_insn vfp     'fadds s0, s0, s0'
+    enabled vfpv3   && check_insn vfpv3   'vmov.f32 s0, #1.0'
+
+    [ $target_os = linux ] ||
+        map 'enabled_any ${v}_external ${v}_inline || disable $v' \
+            $ARCH_EXT_LIST_ARM
 
     check_inline_asm asm_mod_q '"add r0, %Q0, %R0" :: "r"((long long)0)'
     check_inline_asm asm_mod_y '"vmul.i32 d0, d0, %y0" :: "x"(0)'
@@ -3560,8 +3634,13 @@ fi
 
 if enabled asm; then
     as=${gas:=$as}
-    check_inline_asm gnu_as '".macro m n\n\\n:.int 0\n.endm\nm x"' ||
+    check_as <<EOF && enable gnu_as || \
         $nogas "GNU assembler not found, install gas-preprocessor"
+.macro m n
+\n: .int 0
+.endm
+m x
+EOF
 fi
 
 check_ldflags -Wl,--as-needed
@@ -3572,7 +3651,7 @@ elif check_func dlopen -ldl; then
     ldl=-ldl
 fi
 
-if enabled network; then
+if ! disabled network; then
     check_type "sys/types.h sys/socket.h" socklen_t
     check_type netdb.h "struct addrinfo"
     check_type netinet/in.h "struct group_source_req" -D_BSD_SOURCE
@@ -3646,6 +3725,7 @@ check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h GetSystemTimeAsFileTime
 check_func_headers windows.h MapViewOfFile
+check_func_headers windows.h SetConsoleTextAttribute
 check_func_headers windows.h Sleep
 check_func_headers windows.h VirtualAlloc
 check_func_headers glob.h glob
@@ -3683,7 +3763,7 @@ if ! disabled vda && ! enabled ppc; then
 fi
 
 if ! disabled w32threads && ! enabled pthreads; then
-    check_func _beginthreadex && enable w32threads
+    check_func_headers "windows.h process.h" _beginthreadex && enable w32threads
 fi
 
 # check for some common methods of building with pthread support
@@ -3761,6 +3841,7 @@ enabled libopus    && require_pkg_config opus opus_multistream.h opus_multistrea
 enabled libpulse && require_pkg_config libpulse-simple pulse/simple.h pa_simple_new
 enabled librtmp    && require_pkg_config librtmp librtmp/rtmp.h RTMP_Socket
 enabled libschroedinger && require_pkg_config schroedinger-1.0 schroedinger/schro.h schro_init
+enabled libsoxr    && require  libsoxr soxr.h soxr_create -lsoxr
 enabled libspeex   && require  libspeex speex/speex.h speex_decoder_init -lspeex
 enabled libstagefright_h264  && require_cpp libstagefright_h264 "binder/ProcessState.h media/stagefright/MetaData.h
     media/stagefright/MediaBufferGroup.h media/stagefright/MediaDebug.h media/stagefright/MediaDefs.h
@@ -3829,6 +3910,7 @@ texi2html --help 2> /dev/null | grep -q 'init-file' && enable texi2html || disab
 makeinfo --version > /dev/null 2>&1 && enable makeinfo  || disable makeinfo
 perl --version > /dev/null 2>&1 && enable perl || disable perl
 pod2man --help > /dev/null 2>&1 && enable pod2man || disable pod2man
+rsync --help 2> /dev/null | grep -q 'contimeout' && enable rsync_contimeout || disable rsync_contimeout
 
 check_header linux/fb.h
 check_header linux/videodev.h
@@ -4119,8 +4201,9 @@ if enabled arm; then
     echo "ARMv5TE enabled           ${armv5te-no}"
     echo "ARMv6 enabled             ${armv6-no}"
     echo "ARMv6T2 enabled           ${armv6t2-no}"
-    echo "ARM VFP enabled           ${armvfp-no}"
+    echo "VFP enabled               ${vfp-no}"
     echo "NEON enabled              ${neon-no}"
+    echo "THUMB enabled             ${thumb-no}"
 fi
 if enabled mips; then
     echo "MIPS FPU enabled          ${mipsfpu-no}"
@@ -4176,6 +4259,7 @@ echo "libopus enabled           ${libopus-no}"
 echo "libpulse enabled          ${libpulse-no}"
 echo "librtmp enabled           ${librtmp-no}"
 echo "libschroedinger enabled   ${libschroedinger-no}"
+echo "libsoxr enabled           ${libsoxr-no}"
 echo "libspeex enabled          ${libspeex-no}"
 echo "libstagefright-h264 enabled    ${libstagefright_h264-no}"
 echo "libtheora enabled         ${libtheora-no}"
@@ -4480,6 +4564,7 @@ EOF
 libavfilter_pc_deps="libavutil = $LIBAVUTIL_VERSION"
 enabled libavfilter_deps_avcodec    && prepend libavfilter_pc_deps "libavcodec = $LIBAVCODEC_VERSION,"
 enabled libavfilter_deps_avformat   && prepend libavfilter_pc_deps "libavformat = $LIBAVFORMAT_VERSION,"
+enabled libavfilter_deps_avresample && prepend libavfilter_pc_deps "libavresample = $LIBAVRESAMPLE_VERSION,"
 enabled libavfilter_deps_swscale    && prepend libavfilter_pc_deps "libswscale = $LIBSWSCALE_VERSION,"
 enabled libavfilter_deps_swresample && prepend libavfilter_pc_deps "libswresample = $LIBSWRESAMPLE_VERSION,"
 enabled libavfilter_deps_postproc   && prepend libavfilter_pc_deps "libpostproc = $LIBPOSTPROC_VERSION,"

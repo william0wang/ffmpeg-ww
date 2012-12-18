@@ -25,6 +25,7 @@
  * temporal field interlace filter, ported from MPlayer/libmpcodecs
  */
 
+#include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avassert.h"
 #include "avfilter.h"
@@ -38,20 +39,11 @@ enum TInterlaceMode {
     MODE_INTERLEAVE_TOP,
     MODE_INTERLEAVE_BOTTOM,
     MODE_INTERLACEX2,
-};
-
-static const char *tinterlace_mode_str[] = {
-    "merge",
-    "drop_even",
-    "drop_odd",
-    "pad",
-    "interleave_top",
-    "interleave_bottom",
-    "interlacex2",
-    NULL
+    MODE_NB,
 };
 
 typedef struct {
+    const AVClass *class;
     enum TInterlaceMode mode;   ///< interlace mode selected
     int frame;                  ///< number of the output frame
     int vsub;                   ///< chroma vertical subsampling
@@ -60,6 +52,24 @@ typedef struct {
     uint8_t *black_data[4];     ///< buffer used to fill padded lines
     int black_linesize[4];
 } TInterlaceContext;
+
+#define OFFSET(x) offsetof(TInterlaceContext, x)
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+
+static const AVOption tinterlace_options[] = {
+    {"mode",              "select interlace mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=MODE_MERGE}, 0, MODE_NB-1, FLAGS, "mode"},
+    {"merge",             "merge fields",                                 0, AV_OPT_TYPE_CONST, {.i64=MODE_MERGE},             INT_MIN, INT_MAX, FLAGS, "mode"},
+    {"drop_even",         "drop even fields",                             0, AV_OPT_TYPE_CONST, {.i64=MODE_DROP_EVEN},         INT_MIN, INT_MAX, FLAGS, "mode"},
+    {"drop_odd",          "drop odd fields",                              0, AV_OPT_TYPE_CONST, {.i64=MODE_DROP_ODD},          INT_MIN, INT_MAX, FLAGS, "mode"},
+    {"pad",               "pad alternate lines with black",               0, AV_OPT_TYPE_CONST, {.i64=MODE_PAD},               INT_MIN, INT_MAX, FLAGS, "mode"},
+    {"interleave_top",    "interleave top and bottom fields",             0, AV_OPT_TYPE_CONST, {.i64=MODE_INTERLEAVE_TOP},    INT_MIN, INT_MAX, FLAGS, "mode"},
+    {"interleave_bottom", "interleave bottom and top fields",             0, AV_OPT_TYPE_CONST, {.i64=MODE_INTERLEAVE_BOTTOM}, INT_MIN, INT_MAX, FLAGS, "mode"},
+    {"interlacex2",       "interlace fields from two consecutive frames", 0, AV_OPT_TYPE_CONST, {.i64=MODE_INTERLACEX2},       INT_MIN, INT_MAX, FLAGS, "mode"},
+
+    {NULL}
+};
+
+AVFILTER_DEFINE_CLASS(tinterlace);
 
 #define FULL_SCALE_YUVJ_FORMATS \
     AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P, AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ440P
@@ -84,45 +94,22 @@ static int query_formats(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     TInterlaceContext *tinterlace = ctx->priv;
-    int i;
-    char c;
+    static const char *shorthand[] = { "mode", NULL };
 
-    tinterlace->mode = MODE_MERGE;
+    tinterlace->class = &tinterlace_class;
+    av_opt_set_defaults(tinterlace);
 
-    if (args) {
-        if (sscanf(args, "%d%c", (int *)&tinterlace->mode, &c) == 1) {
-            if (tinterlace->mode > 6) {
-                av_log(ctx, AV_LOG_ERROR,
-                       "Invalid mode '%s', use an integer between 0 and 6\n", args);
-                return AVERROR(EINVAL);
-            }
-
-            av_log(ctx, AV_LOG_WARNING,
-                   "Using numeric constant is deprecated, use symbolic values\n");
-        } else {
-            for (i = 0; tinterlace_mode_str[i]; i++) {
-                if (!strcmp(tinterlace_mode_str[i], args)) {
-                    tinterlace->mode = i;
-                    break;
-                }
-            }
-            if (!tinterlace_mode_str[i]) {
-                av_log(ctx, AV_LOG_ERROR, "Invalid argument '%s'\n", args);
-                return AVERROR(EINVAL);
-            }
-        }
-    }
-
-    return 0;
+    return av_opt_set_from_string(tinterlace, args, shorthand, "=", ":");
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
     TInterlaceContext *tinterlace = ctx->priv;
 
-    if (tinterlace->cur ) avfilter_unref_bufferp(&tinterlace->cur );
-    if (tinterlace->next) avfilter_unref_bufferp(&tinterlace->next);
+    avfilter_unref_bufferp(&tinterlace->cur );
+    avfilter_unref_bufferp(&tinterlace->next);
 
+    av_opt_free(tinterlace);
     av_freep(&tinterlace->black_data[0]);
 }
 
@@ -155,8 +142,8 @@ static int config_out_props(AVFilterLink *outlink)
                    tinterlace->black_linesize[i] * h);
         }
     }
-    av_log(ctx, AV_LOG_VERBOSE, "mode:%s h:%d -> h:%d\n",
-           tinterlace_mode_str[tinterlace->mode], inlink->h, outlink->h);
+    av_log(ctx, AV_LOG_VERBOSE, "mode:%d h:%d -> h:%d\n",
+           tinterlace->mode, inlink->h, outlink->h);
 
     return 0;
 }
@@ -202,28 +189,20 @@ void copy_picture_field(uint8_t *dst[4], int dst_linesize[4],
     }
 }
 
-static int start_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
-{
-    AVFilterContext *ctx = inlink->dst;
-    TInterlaceContext *tinterlace = ctx->priv;
-
-    avfilter_unref_buffer(tinterlace->cur);
-    tinterlace->cur  = tinterlace->next;
-    tinterlace->next = picref;
-    inlink->cur_buf = NULL;
-    return 0;
-}
-
-static int end_frame(AVFilterLink *inlink)
+static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *picref)
 {
     AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
     TInterlaceContext *tinterlace = ctx->priv;
-    AVFilterBufferRef *cur  = tinterlace->cur;
-    AVFilterBufferRef *next = tinterlace->next;
-    AVFilterBufferRef *out  = NULL;
-    int field, tff;
+    AVFilterBufferRef *cur, *next, *out;
+    int field, tff, ret;
 
+    avfilter_unref_buffer(tinterlace->cur);
+    tinterlace->cur  = tinterlace->next;
+    tinterlace->next = picref;
+
+    cur = tinterlace->cur;
+    next = tinterlace->next;
     /* we need at least two frames */
     if (!tinterlace->cur)
         return 0;
@@ -232,6 +211,8 @@ static int end_frame(AVFilterLink *inlink)
     case MODE_MERGE: /* move the odd frame into the upper field of the new image, even into
              * the lower field, generating a double-height video at half framerate */
         out = ff_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
+        if (!out)
+            return AVERROR(ENOMEM);
         avfilter_copy_buffer_ref_props(out, cur);
         out->video->h = outlink->h;
         out->video->interlaced = 1;
@@ -281,6 +262,8 @@ static int end_frame(AVFilterLink *inlink)
     case MODE_INTERLEAVE_BOTTOM: /* bottom field first */
         tff = tinterlace->mode == MODE_INTERLEAVE_TOP;
         out = ff_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
+        if (!out)
+            return AVERROR(ENOMEM);
         avfilter_copy_buffer_ref_props(out, cur);
         out->video->interlaced = 1;
         out->video->top_field_first = tff;
@@ -300,15 +283,18 @@ static int end_frame(AVFilterLink *inlink)
     case MODE_INTERLACEX2: /* re-interlace preserving image height, double frame rate */
         /* output current frame first */
         out = avfilter_ref_buffer(cur, ~AV_PERM_WRITE);
+        if (!out)
+            return AVERROR(ENOMEM);
         out->video->interlaced = 1;
 
-        ff_start_frame(outlink, out);
-        ff_draw_slice(outlink, 0, outlink->h, 1);
-        ff_end_frame(outlink);
+        if ((ret = ff_filter_frame(outlink, out)) < 0)
+            return ret;
 
         /* output mix of current and next frame */
         tff = next->video->top_field_first;
         out = ff_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
+        if (!out)
+            return AVERROR(ENOMEM);
         avfilter_copy_buffer_ref_props(out, next);
         out->video->interlaced = 1;
 
@@ -323,15 +309,14 @@ static int end_frame(AVFilterLink *inlink)
                            inlink->format, inlink->w, inlink->h,
                            tff ? FIELD_UPPER : FIELD_LOWER, 1, tff ? FIELD_UPPER : FIELD_LOWER);
         break;
+    default:
+        av_assert0(0);
     }
 
-    ff_start_frame(outlink, out);
-    ff_draw_slice(outlink, 0, outlink->h, 1);
-    ff_end_frame(outlink);
-
+    ret = ff_filter_frame(outlink, out);
     tinterlace->frame++;
 
-    return 0;
+    return ret;
 }
 
 static int request_frame(AVFilterLink *outlink)
@@ -349,15 +334,11 @@ static int request_frame(AVFilterLink *outlink)
     return 0;
 }
 
-static int null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir) { return 0; }
-
 static const AVFilterPad tinterlace_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .start_frame  = start_frame,
-        .draw_slice   = null_draw_slice,
-        .end_frame    = end_frame,
+        .filter_frame = filter_frame,
     },
     { NULL }
 };
@@ -381,4 +362,5 @@ AVFilter avfilter_vf_tinterlace = {
     .query_formats = query_formats,
     .inputs        = tinterlace_inputs,
     .outputs       = tinterlace_outputs,
+    .priv_class    = &tinterlace_class,
 };

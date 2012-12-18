@@ -240,8 +240,8 @@ And finally inserted in a filtergraph like:
 drawtext=text=\'Caesar: tu quoque\, Brute\, fili mi\'
 @end example
 
-See the @ref{quoting_and_escaping, Quoting and escaping} section for
-more information about the escaping and quoting rules adopted by
+See the ``Quoting and escaping'' section in the ffmpeg-utils manual
+for more information about the escaping and quoting rules adopted by
 FFmpeg.
 
 @c man end FILTERGRAPH DESCRIPTION
@@ -411,11 +411,71 @@ Pass the audio source unchanged to the output.
 
 @section aresample
 
-Resample the input audio to the specified sample rate.
+Resample the input audio to the specified parameters. If none are specified
+then the filter will automatically convert between its input
+and output.
 
-The filter accepts exactly one parameter, the output sample rate. If not
-specified then the filter will automatically convert between its input
-and output sample rates.
+This filter is also able to stretch/squeeze the audio data to make it match
+the timestamps or to inject silence / cut out audio to make it match the
+timestamps, do a combination of both or do neither.
+
+The filter accepts the following named parameters:
+@table @option
+
+@item min_comp
+Minimum difference between timestamps and audio data (in seconds) to trigger
+stretching/squeezing/filling or trimming of the data to make it match the
+timestamps. The default is that stretching/squeezing/filling and
+trimming is disabled (min_comp = infinite).
+
+@item min_hard_comp
+Minimum difference between timestamps and audio data (in seconds) to trigger
+adding/dropping samples to make it match the timestamps.
+This option effectively is a threshold to select between hard (trim/fill) and
+soft (squeeze/stretch) compensation. Note that all compensation is by default
+disabled through min_comp.
+The default is 0.1 seconds.
+
+@item max_soft_comp
+Maximum stretch/squeeze factor.
+Default value 0.
+
+@item tsf, internal_sample_fmt
+Internal sampling format.
+Default is automatic selection
+
+@item clev, center_mix_level
+center mix level, for rematrixing
+Default is 3.0dB
+
+@item slev, surround_mix_level
+surround mix level, for rematrixing
+Default is 3.0dB
+
+@item rmvol, rematrix_volume
+rematrix volume
+Default is 1.0
+
+@item lfe_mix_level
+Low frequency effects mix level.
+Default is 0
+
+@item matrix_encoding
+matrixed stereo encoding
+@table @option
+@item none
+No matrixed stereo encoding
+
+@item dolby
+Dolby matrixed stereo encoding
+
+@item dplii
+Dolby Pro Logic II matrixed stereo encoding
+@end table
+
+Default value is @code{none}.
+
+@end table
 
 For example, to resample the input audio to 44100Hz:
 @example
@@ -701,96 +761,6 @@ tolerance in @file{silence.mp3}:
 ffmpeg -f lavfi -i amovie=silence.mp3,silencedetect=noise=0.0001 -f null -
 @end example
 
-@section volume
-
-Adjust the input audio volume.
-
-The filter accepts exactly one parameter @var{vol}, which expresses
-how the audio volume will be increased or decreased.
-
-Output values are clipped to the maximum value.
-
-If @var{vol} is expressed as a decimal number, the output audio
-volume is given by the relation:
-@example
-@var{output_volume} = @var{vol} * @var{input_volume}
-@end example
-
-If @var{vol} is expressed as a decimal number followed by the string
-"dB", the value represents the requested change in decibels of the
-input audio power, and the output audio volume is given by the
-relation:
-@example
-@var{output_volume} = 10^(@var{vol}/20) * @var{input_volume}
-@end example
-
-Otherwise @var{vol} is considered an expression and its evaluated
-value is used for computing the output audio volume according to the
-first relation.
-
-Default value for @var{vol} is 1.0.
-
-@subsection Examples
-
-@itemize
-@item
-Half the input audio volume:
-@example
-volume=0.5
-@end example
-
-The above example is equivalent to:
-@example
-volume=1/2
-@end example
-
-@item
-Decrease input audio power by 12 decibels:
-@example
-volume=-12dB
-@end example
-@end itemize
-
-@section volumedetect
-
-Detect the volume of the input video.
-
-The filter has no parameters. The input is not modified. Statistics about
-the volume will be printed in the log when the input stream end is reached.
-
-In particular it will show the mean volume (root mean square), maximum
-volume (on a per-sample basis), and the beginning of an histogram of the
-registered volume values (from the maximum value to a cumulated 1/1000 of
-the samples).
-
-All volumes are in decibels relative to the maximum PCM value.
-
-Here is an excerpt of the output:
-@example
-[Parsed_volumedetect_0 @ 0xa23120] mean_volume: -27 dB
-[Parsed_volumedetect_0 @ 0xa23120] max_volume: -4 dB
-[Parsed_volumedetect_0 @ 0xa23120] histogram_4db: 6
-[Parsed_volumedetect_0 @ 0xa23120] histogram_5db: 62
-[Parsed_volumedetect_0 @ 0xa23120] histogram_6db: 286
-[Parsed_volumedetect_0 @ 0xa23120] histogram_7db: 1042
-[Parsed_volumedetect_0 @ 0xa23120] histogram_8db: 2551
-[Parsed_volumedetect_0 @ 0xa23120] histogram_9db: 4609
-[Parsed_volumedetect_0 @ 0xa23120] histogram_10db: 8409
-@end example
-
-It means that:
-@itemize
-@item
-The mean square energy is approximately -27 dB, or 10^-2.7.
-@item
-The largest sample is at -4 dB, or more precisely between -4 dB and -5 dB.
-@item
-There are 6 samples at -4 dB, 62 at -5 dB, 286 at -6 dB, etc.
-@end itemize
-
-In other words, raising the volume by +4 dB does not cause any clipping,
-raising it by +5 dB causes clipping for 6 samples, etc.
-
 @section asyncts
 Synchronize audio data with timestamps by squeezing/stretching it and/or
 dropping samples/adding silence when needed.
@@ -812,11 +782,12 @@ Maximum compensation in samples per second. Relevant only with compensate=1.
 Default value 500.
 
 @item first_pts
-Assume the first pts should be this value.
+Assume the first pts should be this value. The time base is 1 / sample rate.
 This allows for padding/trimming at the start of stream. By default, no
 assumption is made about the first frame's expected pts, so no padding or
 trimming is done. For example, this could be set to 0 to pad the beginning with
-silence if an audio stream starts after the video stream.
+silence if an audio stream starts after the video stream or to trim any samples
+with a negative pts due to encoder delay.
 
 @end table
 
@@ -918,6 +889,111 @@ out
 @section resample
 Convert the audio sample format, sample rate and channel layout. This filter is
 not meant to be used directly.
+
+@section volume
+
+Adjust the input audio volume.
+
+The filter accepts the following named parameters. If the key of the
+first options is omitted, the arguments are interpreted according to
+the following syntax:
+@example
+volume=@var{volume}:@var{precision}
+@end example
+
+@table @option
+
+@item volume
+Expresses how the audio volume will be increased or decreased.
+
+Output values are clipped to the maximum value.
+
+The output audio volume is given by the relation:
+@example
+@var{output_volume} = @var{volume} * @var{input_volume}
+@end example
+
+Default value for @var{volume} is 1.0.
+
+@item precision
+Set the mathematical precision.
+
+This determines which input sample formats will be allowed, which affects the
+precision of the volume scaling.
+
+@table @option
+@item fixed
+8-bit fixed-point; limits input sample format to U8, S16, and S32.
+@item float
+32-bit floating-point; limits input sample format to FLT. (default)
+@item double
+64-bit floating-point; limits input sample format to DBL.
+@end table
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Halve the input audio volume:
+@example
+volume=volume=0.5
+volume=volume=1/2
+volume=volume=-6.0206dB
+@end example
+
+In all the above example the named key for @option{volume} can be
+omitted, for example like in:
+@example
+volume=0.5
+@end example
+
+@item
+Increase input audio power by 6 decibels using fixed-point precision:
+@example
+volume=volume=6dB:precision=fixed
+@end example
+@end itemize
+
+@section volumedetect
+
+Detect the volume of the input video.
+
+The filter has no parameters. The input is not modified. Statistics about
+the volume will be printed in the log when the input stream end is reached.
+
+In particular it will show the mean volume (root mean square), maximum
+volume (on a per-sample basis), and the beginning of an histogram of the
+registered volume values (from the maximum value to a cumulated 1/1000 of
+the samples).
+
+All volumes are in decibels relative to the maximum PCM value.
+
+Here is an excerpt of the output:
+@example
+[Parsed_volumedetect_0 @ 0xa23120] mean_volume: -27 dB
+[Parsed_volumedetect_0 @ 0xa23120] max_volume: -4 dB
+[Parsed_volumedetect_0 @ 0xa23120] histogram_4db: 6
+[Parsed_volumedetect_0 @ 0xa23120] histogram_5db: 62
+[Parsed_volumedetect_0 @ 0xa23120] histogram_6db: 286
+[Parsed_volumedetect_0 @ 0xa23120] histogram_7db: 1042
+[Parsed_volumedetect_0 @ 0xa23120] histogram_8db: 2551
+[Parsed_volumedetect_0 @ 0xa23120] histogram_9db: 4609
+[Parsed_volumedetect_0 @ 0xa23120] histogram_10db: 8409
+@end example
+
+It means that:
+@itemize
+@item
+The mean square energy is approximately -27 dB, or 10^-2.7.
+@item
+The largest sample is at -4 dB, or more precisely between -4 dB and -5 dB.
+@item
+There are 6 samples at -4 dB, 62 at -5 dB, 286 at -6 dB, etc.
+@end itemize
+
+In other words, raising the volume by +4 dB does not cause any clipping,
+raising it by +5 dB causes clipping for 6 samples, etc.
 
 @c man end AUDIO FILTERS
 
@@ -1274,38 +1350,9 @@ overlay to a video stream, consider the @var{overlay} filter instead.
 
 @section ass
 
-Draw ASS (Advanced Substation Alpha) subtitles on top of input video
-using the libass library.
-
-To enable compilation of this filter you need to configure FFmpeg with
-@code{--enable-libass}.
-
-This filter accepts the following named options, expressed as a
-sequence of @var{key}=@var{value} pairs, separated by ":".
-
-@table @option
-@item filename, f
-Set the filename of the ASS file to read. It must be specified.
-
-@item original_size
-Specify the size of the original video, the video for which the ASS file
-was composed. Due to a misdesign in ASS aspect ratio arithmetic, this is
-necessary to correctly scale the fonts if the aspect ratio has been changed.
-@end table
-
-If the first key is not specified, it is assumed that the first value
-specifies the @option{filename}.
-
-For example, to render the file @file{sub.ass} on top of the input
-video, use the command:
-@example
-ass=sub.ass
-@end example
-
-which is equivalent to:
-@example
-ass=filename=sub.ass
-@end example
+Same as the @ref{subtitles} filter, except that it doesn't require libavcodec
+and libavformat to work. On the other hand, it is limited to ASS (Advanced
+Substation Alpha) subtitles files.
 
 @section bbox
 
@@ -1471,11 +1518,40 @@ testing purposes.
 
 @section crop
 
-Crop the input video to @var{out_w}:@var{out_h}:@var{x}:@var{y}:@var{keep_aspect}
+Crop the input video.
 
-The @var{keep_aspect} parameter is optional, if specified and set to a
-non-zero value will force the output display aspect ratio to be the
-same of the input, by changing the output sample aspect ratio.
+This filter accepts a list of @var{key}=@var{value} pairs as argument,
+separated by ':'. If the key of the first options is omitted, the
+arguments are interpreted according to the syntax
+@var{out_w}:@var{out_h}:@var{x}:@var{y}:@var{keep_aspect}.
+
+A description of the accepted options follows:
+@table @option
+@item w, out_w
+Set the crop area width. It defaults to @code{iw}.
+This expression is evaluated only once during the filter
+configuration.
+
+@item h, out_h
+Set the crop area width. It defaults to @code{ih}.
+This expression is evaluated only once during the filter
+configuration.
+
+@item x
+Set the expression for the x top-left coordinate of the cropped area.
+It defaults to @code{(in_w-out_w)/2}.
+This expression is evaluated per-frame.
+
+@item y
+Set the expression for the y top-left coordinate of the cropped area.
+It defaults to @code{(in_h-out_h)/2}.
+This expression is evaluated per-frame.
+
+@item keep_aspect
+If set to 1 will force the output display aspect ratio
+to be the same of the input, by changing the output sample aspect
+ratio. It defaults to 0.
+@end table
 
 The @var{out_w}, @var{out_h}, @var{x}, @var{y} parameters are
 expressions containing the following constants:
@@ -1521,13 +1597,6 @@ timestamp expressed in seconds, NAN if the input timestamp is unknown
 
 @end table
 
-The @var{out_w} and @var{out_h} parameters specify the expressions for
-the width and height of the output (cropped) video. They are
-evaluated just at the configuration of the filter.
-
-The default value of @var{out_w} is "in_w", and the default value of
-@var{out_h} is "in_h".
-
 The expression for @var{out_w} may depend on the value of @var{out_h},
 and the expression for @var{out_h} may depend on @var{out_w}, but they
 cannot depend on @var{x} and @var{y}, as @var{x} and @var{y} are
@@ -1538,48 +1607,85 @@ position of the top-left corner of the output (non-cropped) area. They
 are evaluated for each frame. If the evaluated value is not valid, it
 is approximated to the nearest valid value.
 
-The default value of @var{x} is "(in_w-out_w)/2", and the default
-value for @var{y} is "(in_h-out_h)/2", which set the cropped area at
-the center of the input image.
-
 The expression for @var{x} may depend on @var{y}, and the expression
 for @var{y} may depend on @var{x}.
 
-Follow some examples:
+@subsection Examples
+@itemize
+@item
+Crop area with size 100x100 at position (12,34).
 @example
-# crop the central input area with size 100x100
-crop=100:100
-
-# crop the central input area with size 2/3 of the input video
-"crop=2/3*in_w:2/3*in_h"
-
-# crop the input video central square
-crop=in_h
-
-# delimit the rectangle with the top-left corner placed at position
-# 100:100 and the right-bottom corner corresponding to the right-bottom
-# corner of the input image.
-crop=in_w-100:in_h-100:100:100
-
-# crop 10 pixels from the left and right borders, and 20 pixels from
-# the top and bottom borders
-"crop=in_w-2*10:in_h-2*20"
-
-# keep only the bottom right quarter of the input image
-"crop=in_w/2:in_h/2:in_w/2:in_h/2"
-
-# crop height for getting Greek harmony
-"crop=in_w:1/PHI*in_w"
-
-# trembling effect
-"crop=in_w/2:in_h/2:(in_w-out_w)/2+((in_w-out_w)/2)*sin(n/10):(in_h-out_h)/2 +((in_h-out_h)/2)*sin(n/7)"
-
-# erratic camera effect depending on timestamp
-"crop=in_w/2:in_h/2:(in_w-out_w)/2+((in_w-out_w)/2)*sin(t*10):(in_h-out_h)/2 +((in_h-out_h)/2)*sin(t*13)"
-
-# set x depending on the value of y
-"crop=in_w/2:in_h/2:y:10+10*sin(n/10)"
+crop=100:100:12:34
 @end example
+
+Using named options, the example above becomes:
+@example
+crop=w=100:h=100:x=12:y=34
+@end example
+
+@item
+Crop the central input area with size 100x100:
+@example
+crop=100:100
+@end example
+
+@item
+Crop the central input area with size 2/3 of the input video:
+@example
+crop=2/3*in_w:2/3*in_h
+@end example
+
+@item
+Crop the input video central square:
+@example
+crop=in_h
+@end example
+
+@item
+Delimit the rectangle with the top-left corner placed at position
+100:100 and the right-bottom corner corresponding to the right-bottom
+corner of the input image:
+@example
+crop=in_w-100:in_h-100:100:100
+@end example
+
+@item
+Crop 10 pixels from the left and right borders, and 20 pixels from
+the top and bottom borders
+@example
+crop=in_w-2*10:in_h-2*20
+@end example
+
+@item
+Keep only the bottom right quarter of the input image:
+@example
+crop=in_w/2:in_h/2:in_w/2:in_h/2
+@end example
+
+@item
+Crop height for getting Greek harmony:
+@example
+crop=in_w:1/PHI*in_w
+@end example
+
+@item
+Appply trembling effect:
+@example
+crop=in_w/2:in_h/2:(in_w-out_w)/2+((in_w-out_w)/2)*sin(n/10):(in_h-out_h)/2 +((in_h-out_h)/2)*sin(n/7)
+@end example
+
+@item
+Apply erratic camera effect depending on timestamp:
+@example
+crop=in_w/2:in_h/2:(in_w-out_w)/2+((in_w-out_w)/2)*sin(t*10):(in_h-out_h)/2 +((in_h-out_h)/2)*sin(t*13)"
+@end example
+
+@item
+Set x depending on the value of y:
+@example
+crop=in_w/2:in_h/2:y:10+10*sin(n/10)
+@end example
+@end itemize
 
 @section cropdetect
 
@@ -1963,6 +2069,10 @@ This parameter is mandatory if no text string is specified with the
 parameter @var{text}.
 
 If both @var{text} and @var{textfile} are specified, an error is thrown.
+
+@item reload
+If set to 1, the @var{textfile} will be reloaded before each frame.
+Be sure to update it atomically, or it may be read partially, or even fail.
 
 @item x, y
 The expressions which specify the offsets where text will be drawn
@@ -2358,12 +2468,32 @@ This filter accepts the following named parameters:
 @table @option
 
 @item fps
-Desired output framerate.
+Desired output framerate. The default is @code{25}.
 
 @item round
-Rounding method. The default is @code{near}.
+Rounding method.
+
+Possible values are:
+@table @option
+@item zero
+zero round towards 0
+@item inf
+round away from 0
+@item down
+round towards -infinity
+@item up
+round towards +infinity
+@item near
+round to nearest
+@end table
+The default is @code{near}.
 
 @end table
+
+Alternatively, the options can be specified as a flat string:
+@var{fps}[:@var{round}].
+
+See also the @ref{setpts} filter.
 
 @section framestep
 
@@ -2473,6 +2603,9 @@ ratio between the corresponding luma plane number of pixels and the current
 plane ones. E.g. for YUV4:2:0 the values are @code{1,1} for the luma plane, and
 @code{0.5,0.5} for chroma planes.
 
+@item T
+Time of the current frame, expressed in seconds.
+
 @item p(x, y)
 Return the value of the pixel at location (@var{x},@var{y}) of the current
 plane.
@@ -2500,6 +2633,13 @@ Some examples follow:
 Flip the image horizontally:
 @example
 geq=p(W-X\,Y)
+@end example
+
+@item
+Generate a bidimensional sine wave, with angle @code{PI/3} and a
+wavelength of 100 pixels:
+@example
+geq=128 + 100*sin(2*(PI/100)*(cos(PI/3)*(X-50*T) + sin(PI/3)*Y)):128:128
 @end example
 
 @item
@@ -2826,7 +2966,6 @@ the named filter.
 
 The list of the currently supported filters follows:
 @table @var
-@item denoise3d
 @item detc
 @item dint
 @item divtc
@@ -3427,128 +3566,6 @@ scale='min(500\, iw*3/2):-1'
 @end example
 @end itemize
 
-@section select
-Select frames to pass in output.
-
-It accepts in input an expression, which is evaluated for each input
-frame. If the expression is evaluated to a non-zero value, the frame
-is selected and passed to the output, otherwise it is discarded.
-
-The expression can contain the following constants:
-
-@table @option
-@item n
-the sequential number of the filtered frame, starting from 0
-
-@item selected_n
-the sequential number of the selected frame, starting from 0
-
-@item prev_selected_n
-the sequential number of the last selected frame, NAN if undefined
-
-@item TB
-timebase of the input timestamps
-
-@item pts
-the PTS (Presentation TimeStamp) of the filtered video frame,
-expressed in @var{TB} units, NAN if undefined
-
-@item t
-the PTS (Presentation TimeStamp) of the filtered video frame,
-expressed in seconds, NAN if undefined
-
-@item prev_pts
-the PTS of the previously filtered video frame, NAN if undefined
-
-@item prev_selected_pts
-the PTS of the last previously filtered video frame, NAN if undefined
-
-@item prev_selected_t
-the PTS of the last previously selected video frame, NAN if undefined
-
-@item start_pts
-the PTS of the first video frame in the video, NAN if undefined
-
-@item start_t
-the time of the first video frame in the video, NAN if undefined
-
-@item pict_type
-the type of the filtered frame, can assume one of the following
-values:
-@table @option
-@item I
-@item P
-@item B
-@item S
-@item SI
-@item SP
-@item BI
-@end table
-
-@item interlace_type
-the frame interlace type, can assume one of the following values:
-@table @option
-@item PROGRESSIVE
-the frame is progressive (not interlaced)
-@item TOPFIRST
-the frame is top-field-first
-@item BOTTOMFIRST
-the frame is bottom-field-first
-@end table
-
-@item key
-1 if the filtered frame is a key-frame, 0 otherwise
-
-@item pos
-the position in the file of the filtered frame, -1 if the information
-is not available (e.g. for synthetic video)
-
-@item scene
-value between 0 and 1 to indicate a new scene; a low value reflects a low
-probability for the current frame to introduce a new scene, while a higher
-value means the current frame is more likely to be one (see the example below)
-
-@end table
-
-The default value of the select expression is "1".
-
-Some examples follow:
-
-@example
-# select all frames in input
-select
-
-# the above is the same as:
-select=1
-
-# skip all frames:
-select=0
-
-# select only I-frames
-select='eq(pict_type\,I)'
-
-# select one frame every 100
-select='not(mod(n\,100))'
-
-# select only frames contained in the 10-20 time interval
-select='gte(t\,10)*lte(t\,20)'
-
-# select only I frames contained in the 10-20 time interval
-select='gte(t\,10)*lte(t\,20)*eq(pict_type\,I)'
-
-# select frames with a minimum distance of 10 seconds
-select='isnan(prev_selected_t)+gte(t-prev_selected_t\,10)'
-@end example
-
-Complete example to create a mosaic of the first scenes:
-
-@example
-ffmpeg -i video.avi -vf select='gt(scene\,0.4)',scale=160:120,tile -frames:v 1 preview.png
-@end example
-
-Comparing @var{scene} against a value between 0.3 and 0.5 is generally a sane
-choice.
-
 @section setdar, setsar
 
 The @code{setdar} filter sets the Display Aspect Ratio for the filter
@@ -3632,7 +3649,10 @@ output frames. It does not change the input frame, but only sets the
 corresponding property, which affects how the frame is treated by
 following filters (e.g. @code{fieldorder} or @code{yadif}).
 
-It accepts a string parameter, which can assume the following values:
+This filter accepts a single option @option{mode}, which can be
+specified either by setting @code{mode=VALUE} or setting the value
+alone. Available values are:
+
 @table @samp
 @item auto
 Keep the same field property.
@@ -3734,6 +3754,43 @@ the range [-30,30] that is used as a coefficient to determine whether
 a pixel should be blurred or not. A value of 0 will filter all the
 image, a value included in [0,30] will filter flat areas and a value
 included in [-30,0] will filter edges.
+
+@anchor{subtitles}
+@section subtitles
+
+Draw subtitles on top of input video using the libass library.
+
+To enable compilation of this filter you need to configure FFmpeg with
+@code{--enable-libass}. This filter also requires a build with libavcodec and
+libavformat to convert the passed subtitles file to ASS (Advanced Substation
+Alpha) subtitles format.
+
+This filter accepts the following named options, expressed as a
+sequence of @var{key}=@var{value} pairs, separated by ":".
+
+@table @option
+@item filename, f
+Set the filename of the subtitle file to read. It must be specified.
+
+@item original_size
+Specify the size of the original video, the video for which the ASS file
+was composed. Due to a misdesign in ASS aspect ratio arithmetic, this is
+necessary to correctly scale the fonts if the aspect ratio has been changed.
+@end table
+
+If the first key is not specified, it is assumed that the first value
+specifies the @option{filename}.
+
+For example, to render the file @file{sub.srt} on top of the input
+video, use the command:
+@example
+subtitles=sub.srt
+@end example
+
+which is equivalent to:
+@example
+subtitles=filename=sub.srt
+@end example
 
 @section split
 
@@ -3843,8 +3900,9 @@ Perform various types of temporal field interlacing.
 Frames are counted starting from 1, so the first input frame is
 considered odd.
 
-This filter accepts a single parameter specifying the mode. Available
-modes are:
+This filter accepts a single option @option{mode} specifying the mode,
+which can be specified either by specyfing @code{mode=VALUE} either
+specifying the value alone. Available values are:
 
 @table @samp
 @item merge, 0
@@ -3888,7 +3946,10 @@ Default mode is @code{merge}.
 
 Transpose rows with columns in the input video and optionally flip it.
 
-This filter accepts the following named parameters:
+The filter accepts parameters as a list of @var{key}=@var{value}
+pairs, separated by ':'. If the key of the first options is omitted,
+the arguments are interpreted according to the syntax
+@var{dir}:@var{passthrough}.
 
 @table @option
 @item dir
@@ -3946,6 +4007,17 @@ Preserve landscape geometry (when @var{width} >= @var{height}).
 
 Default value is @code{none}.
 @end table
+
+For example to rotate by 90 degrees clockwise and preserve portrait
+layout:
+@example
+transpose=dir=1:passthrough=portrait
+@end example
+
+The command above can also be specified as:
+@example
+transpose=1:portrait
+@end example
 
 @section unsharp
 
@@ -4636,6 +4708,171 @@ tools.
 
 Below is a description of the currently available multimedia filters.
 
+@section aselect, select
+Select frames to pass in output.
+
+These filters accept a single option @option{expr} or @option{e}
+specifying the select expression, which can be specified either by
+specyfing @code{expr=VALUE} or specifying the expression
+alone.
+
+The select expression is evaluated for each input frame. If the
+evaluation result is a non-zero value, the frame is selected and
+passed to the output, otherwise it is discarded.
+
+The expression can contain the following constants:
+
+@table @option
+@item n
+the sequential number of the filtered frame, starting from 0
+
+@item selected_n
+the sequential number of the selected frame, starting from 0
+
+@item prev_selected_n
+the sequential number of the last selected frame, NAN if undefined
+
+@item TB
+timebase of the input timestamps
+
+@item pts
+the PTS (Presentation TimeStamp) of the filtered video frame,
+expressed in @var{TB} units, NAN if undefined
+
+@item t
+the PTS (Presentation TimeStamp) of the filtered video frame,
+expressed in seconds, NAN if undefined
+
+@item prev_pts
+the PTS of the previously filtered video frame, NAN if undefined
+
+@item prev_selected_pts
+the PTS of the last previously filtered video frame, NAN if undefined
+
+@item prev_selected_t
+the PTS of the last previously selected video frame, NAN if undefined
+
+@item start_pts
+the PTS of the first video frame in the video, NAN if undefined
+
+@item start_t
+the time of the first video frame in the video, NAN if undefined
+
+@item pict_type @emph{(video only)}
+the type of the filtered frame, can assume one of the following
+values:
+@table @option
+@item I
+@item P
+@item B
+@item S
+@item SI
+@item SP
+@item BI
+@end table
+
+@item interlace_type @emph{(video only)}
+the frame interlace type, can assume one of the following values:
+@table @option
+@item PROGRESSIVE
+the frame is progressive (not interlaced)
+@item TOPFIRST
+the frame is top-field-first
+@item BOTTOMFIRST
+the frame is bottom-field-first
+@end table
+
+@item consumed_sample_n @emph{(audio only)}
+the number of selected samples before the current frame
+
+@item samples_n @emph{(audio only)}
+the number of samples in the current frame
+
+@item sample_rate @emph{(audio only)}
+the input sample rate
+
+@item key
+1 if the filtered frame is a key-frame, 0 otherwise
+
+@item pos
+the position in the file of the filtered frame, -1 if the information
+is not available (e.g. for synthetic video)
+
+@item scene @emph{(video only)}
+value between 0 and 1 to indicate a new scene; a low value reflects a low
+probability for the current frame to introduce a new scene, while a higher
+value means the current frame is more likely to be one (see the example below)
+
+@end table
+
+The default value of the select expression is "1".
+
+@subsection Examples
+
+@itemize
+@item
+Select all frames in input:
+@example
+select
+@end example
+
+The example above is the same as:
+@example
+select=1
+@end example
+
+@item
+Skip all frames:
+@example
+select=0
+@end example
+
+@item
+Select only I-frames:
+@example
+select='eq(pict_type\,I)'
+@end example
+
+@item
+Select one frame every 100:
+@example
+select='not(mod(n\,100))'
+@end example
+
+@item
+Select only frames contained in the 10-20 time interval:
+@example
+select='gte(t\,10)*lte(t\,20)'
+@end example
+
+@item
+Select only I frames contained in the 10-20 time interval:
+@example
+select='gte(t\,10)*lte(t\,20)*eq(pict_type\,I)'
+@end example
+
+@item
+Select frames with a minimum distance of 10 seconds:
+@example
+select='isnan(prev_selected_t)+gte(t-prev_selected_t\,10)'
+@end example
+
+@item
+Use aselect to select only audio frames with samples number > 100:
+@example
+aselect='gt(samples_n\,100)'
+@end example
+
+@item
+Create a mosaic of the first scenes:
+@example
+ffmpeg -i video.avi -vf select='gt(scene\,0.4)',scale=160:120,tile -frames:v 1 preview.png
+@end example
+
+Comparing @var{scene} against a value between 0.3 and 0.5 is generally a sane
+choice.
+@end itemize
+
 @section asendcmd, sendcmd
 
 Send commands to filters in the filtergraph.
@@ -4767,6 +5004,7 @@ sendcmd=f=test.cmd,drawtext=fontfile=FreeSerif.ttf:text='',hue
 @end example
 @end itemize
 
+@anchor{setpts}
 @section asetpts, setpts
 
 Change the PTS (presentation timestamp) of the input frames.
@@ -5133,12 +5371,12 @@ starting from this seek point, the parameter is evaluated with
 postfix. Default value is "0".
 
 @item streams, s
-Specifies the streams to read. Several streams can be specified, separated
-by "+". The source will then have as many outputs, in the same order. The
-syntax is explained in the @ref{Stream specifiers} chapter. Two special
-names, "dv" and "da" specify respectively the default (best suited) video
-and audio stream. Default is "dv", or "da" if the filter is called as
-"amovie".
+Specifies the streams to read. Several streams can be specified,
+separated by "+". The source will then have as many outputs, in the
+same order. The syntax is explained in the ``Stream specifiers''
+section in the ffmpeg manual. Two special names, "dv" and "da" specify
+respectively the default (best suited) video and audio stream. Default
+is "dv", or "da" if the filter is called as "amovie".
 
 @item stream_index, si
 Specifies the index of the video stream to read. If the value is -1,

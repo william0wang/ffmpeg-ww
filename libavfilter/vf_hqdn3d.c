@@ -327,7 +327,7 @@ static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *in)
     AVFilterLink *outlink = inlink->dst->outputs[0];
 
     AVFilterBufferRef *out;
-    int direct, c;
+    int direct = 0, c;
 
     if (in->perms & AV_PERM_WRITE) {
         direct = 1;
@@ -338,10 +338,7 @@ static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *in)
             avfilter_unref_bufferp(&in);
             return AVERROR(ENOMEM);
         }
-
         avfilter_copy_buffer_ref_props(out, in);
-        out->video->w = outlink->w;
-        out->video->h = outlink->h;
     }
 
     for (c = 0; c < 3; c++) {

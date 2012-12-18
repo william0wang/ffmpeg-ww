@@ -34,6 +34,7 @@
 #include "tiff.h"
 #include "tiff_data.h"
 #include "faxcompr.h"
+#include "internal.h"
 #include "mathops.h"
 #include "libavutil/attributes.h"
 #include "libavutil/intreadwrite.h"
@@ -404,18 +405,31 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
 
 #if CONFIG_ZLIB
     if (s->compr == TIFF_DEFLATE || s->compr == TIFF_ADOBE_DEFLATE) {
-        uint8_t *zbuf;
+        uint8_t *src2 = NULL, *zbuf;
         unsigned long outlen;
-        int ret;
+        int i, ret;
         outlen = width * lines;
         zbuf = av_malloc(outlen);
         if (!zbuf)
             return AVERROR(ENOMEM);
+        if (s->fill_order) {
+            src2 = av_malloc((unsigned)size + FF_INPUT_BUFFER_PADDING_SIZE);
+            if (!src2) {
+                av_log(s->avctx, AV_LOG_ERROR, "Error allocating temporary buffer\n");
+                av_free(zbuf);
+                return AVERROR(ENOMEM);
+            }
+            for (i = 0; i < size; i++)
+                src2[i] = ff_reverse[src[i]];
+            memset(src2 + size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+            src = src2;
+        }
         ret = tiff_uncompress(zbuf, &outlen, src, size);
         if (ret != Z_OK) {
             av_log(s->avctx, AV_LOG_ERROR,
                    "Uncompressing failed (%lu of %lu) with error %d\n", outlen,
                    (unsigned long)width * lines, ret);
+            av_free(src2);
             av_free(zbuf);
             return -1;
         }
@@ -429,6 +443,7 @@ static int tiff_unpack_strip(TiffContext *s, uint8_t *dst, int stride,
             dst += stride;
             src += width;
         }
+        av_free(src2);
         av_free(zbuf);
         return 0;
     }
@@ -597,7 +612,7 @@ static int init_image(TiffContext *s)
     }
     if (s->picture.data[0])
         s->avctx->release_buffer(s->avctx, &s->picture);
-    if ((ret = s->avctx->get_buffer(s->avctx, &s->picture)) < 0) {
+    if ((ret = ff_get_buffer(s->avctx, &s->picture)) < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -983,7 +998,7 @@ static int tiff_decode_tag(TiffContext *s)
 }
 
 static int decode_frame(AVCodecContext *avctx,
-                        void *data, int *data_size, AVPacket *avpkt)
+                        void *data, int *got_frame, AVPacket *avpkt)
 {
     TiffContext *const s = avctx->priv_data;
     AVFrame *picture = data;
@@ -1150,7 +1165,7 @@ static int decode_frame(AVCodecContext *avctx,
         }
     }
     *picture   = s->picture;
-    *data_size = sizeof(AVPicture);
+    *got_frame = 1;
 
     return avpkt->size;
 }

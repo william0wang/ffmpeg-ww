@@ -727,7 +727,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPacket *avpkt)
+static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf  = avpkt->data;
     int buf_size        = avpkt->size;
@@ -764,7 +764,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
     }
 
     p->reference = 3; //for error concealment
-    if ((ret = avctx->get_buffer(avctx, p)) < 0) {
+    if ((ret = ff_get_buffer(avctx, p)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -843,7 +843,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
     f->picture_number++;
 
     *picture   = *p;
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
 
     FFSWAP(AVFrame, f->picture, f->last_picture);
 

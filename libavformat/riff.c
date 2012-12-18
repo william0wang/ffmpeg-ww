@@ -42,6 +42,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_H264,         MKTAG('S', 'M', 'V', '2') },
     { AV_CODEC_ID_H264,         MKTAG('V', 'S', 'S', 'H') },
     { AV_CODEC_ID_H264,         MKTAG('Q', '2', '6', '4') }, /* QNAP surveillance system */
+    { AV_CODEC_ID_H264,         MKTAG('V', '2', '6', '4') },
     { AV_CODEC_ID_H263,         MKTAG('H', '2', '6', '3') },
     { AV_CODEC_ID_H263,         MKTAG('X', '2', '6', '3') },
     { AV_CODEC_ID_H263,         MKTAG('T', '2', '6', '3') },
@@ -461,11 +462,11 @@ int ff_put_wav_header(AVIOContext *pb, AVCodecContext *enc)
     }
     avio_wl16(pb, enc->channels);
     avio_wl32(pb, enc->sample_rate);
-    if (enc->codec_id == CODEC_ID_ATRAC3 ||
-        enc->codec_id == CODEC_ID_G723_1 ||
-        enc->codec_id == CODEC_ID_GSM_MS ||
-        enc->codec_id == CODEC_ID_MP2    ||
-        enc->codec_id == CODEC_ID_MP3) {
+    if (enc->codec_id == AV_CODEC_ID_ATRAC3 ||
+        enc->codec_id == AV_CODEC_ID_G723_1 ||
+        enc->codec_id == AV_CODEC_ID_GSM_MS ||
+        enc->codec_id == AV_CODEC_ID_MP2    ||
+        enc->codec_id == AV_CODEC_ID_MP3) {
         bps = 0;
     } else {
         if (!(bps = av_get_bits_per_sample(enc->codec_id))) {

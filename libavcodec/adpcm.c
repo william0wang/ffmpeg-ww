@@ -23,6 +23,7 @@
 #include "bytestream.h"
 #include "adpcm.h"
 #include "adpcm_data.h"
+#include "internal.h"
 
 /**
  * @file
@@ -639,7 +640,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     c->frame.nb_samples = nb_samples;
-    if ((ret = avctx->get_buffer(avctx, &c->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &c->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -800,7 +801,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
                 return AVERROR_INVALIDDATA;
             }
         }
-        for (n = nb_samples >> (1 - st); n > 0; n--) {
+        for (n = (nb_samples - 1) >> (1 - st); n > 0; n--) {
             int v = bytestream2_get_byteu(&gb);
             *samples++ = adpcm_ima_expand_nibble(&c->status[0 ], v >> 4  , 3);
             *samples++ = adpcm_ima_expand_nibble(&c->status[st], v & 0x0F, 3);
@@ -1331,8 +1332,8 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
 
         /* Initialize the previous sample.  */
         for (i = 0; i < avctx->channels; i++) {
-                c->status[i].sample1 = sign_extend(bytestream2_get_be16u(&gb), 16);
-                c->status[i].sample2 = sign_extend(bytestream2_get_be16u(&gb), 16);
+            c->status[i].sample1 = sign_extend(bytestream2_get_be16u(&gb), 16);
+            c->status[i].sample2 = sign_extend(bytestream2_get_be16u(&gb), 16);
         }
 
         for (ch = 0; ch < avctx->channels; ch++) {

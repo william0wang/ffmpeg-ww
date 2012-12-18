@@ -22,6 +22,7 @@
 #include "avcodec.h"
 #include "bytestream.h"
 #include "bmp.h"
+#include "internal.h"
 #include "msrledec.h"
 
 static av_cold int bmp_decode_init(AVCodecContext *avctx){
@@ -34,7 +35,7 @@ static av_cold int bmp_decode_init(AVCodecContext *avctx){
 }
 
 static int bmp_decode_frame(AVCodecContext *avctx,
-                            void *data, int *data_size,
+                            void *data, int *got_frame,
                             AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -208,7 +209,7 @@ static int bmp_decode_frame(AVCodecContext *avctx,
         avctx->release_buffer(avctx, p);
 
     p->reference = 0;
-    if(avctx->get_buffer(avctx, p) < 0){
+    if(ff_get_buffer(avctx, p) < 0){
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
@@ -333,7 +334,7 @@ static int bmp_decode_frame(AVCodecContext *avctx,
     }
 
     *picture = s->picture;
-    *data_size = sizeof(AVPicture);
+    *got_frame = 1;
 
     return buf_size;
 }

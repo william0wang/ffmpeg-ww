@@ -26,6 +26,7 @@
 #include "libavutil/channel_layout.h"
 #include "libavutil/common.h"
 #include "avcodec.h"
+#include "internal.h"
 
 typedef struct {
     AVFrame frame;
@@ -51,6 +52,7 @@ static av_cold int libspeex_decode_init(AVCodecContext *avctx)
             av_log(avctx, AV_LOG_WARNING, "Invalid Speex header\n");
     }
     if (header) {
+        avctx->sample_rate = header->rate;
         avctx->channels    = header->nb_channels;
         spx_mode           = header->mode;
         speex_header_free(header);
@@ -73,8 +75,9 @@ static av_cold int libspeex_decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "Unknown Speex mode %d", spx_mode);
         return AVERROR_INVALIDDATA;
     }
-    avctx->sample_rate = 8000 << spx_mode;
     s->frame_size      =  160 << spx_mode;
+    if (!avctx->sample_rate)
+        avctx->sample_rate = 8000 << spx_mode;
 
     if (avctx->channels < 1 || avctx->channels > 2) {
         /* libspeex can handle mono or stereo if initialized as stereo */
@@ -118,7 +121,7 @@ static int libspeex_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = s->frame_size;
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

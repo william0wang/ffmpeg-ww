@@ -29,12 +29,12 @@
 #include "avformat.h"
 #include "internal.h"
 
-#include "libavutil/avassert.h"
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
 #include "libavutil/avstring.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/mathematics.h"
+#include "libavutil/timestamp.h"
 
 typedef enum {
     LIST_TYPE_UNDEFINED = -1,
@@ -72,8 +72,12 @@ typedef struct {
     int64_t time_delta;
     int  individual_header_trailer; /**< Set by a private option. */
     int  write_header_trailer; /**< Set by a private option. */
+
+    int reset_timestamps;  ///< reset timestamps at the begin of each segment
     int has_video;
     double start_time, end_time;
+    int64_t start_pts, start_dts;
+    int is_first_pkt;      ///< tells if it is the first packet in the segment
 } SegmentContext;
 
 static void print_csv_escaped_str(AVIOContext *ctx, const char *str)
@@ -127,6 +131,21 @@ static int segment_mux_init(AVFormatContext *s)
     return 0;
 }
 
+static int set_segment_filename(AVFormatContext *s)
+{
+    SegmentContext *seg = s->priv_data;
+    AVFormatContext *oc = seg->avf;
+
+    if (seg->segment_idx_wrap)
+        seg->segment_idx %= seg->segment_idx_wrap;
+    if (av_get_frame_filename(oc->filename, sizeof(oc->filename),
+                              s->filename, seg->segment_idx) < 0) {
+        av_log(oc, AV_LOG_ERROR, "Invalid segment filename template '%s'\n", s->filename);
+        return AVERROR(EINVAL);
+    }
+    return 0;
+}
+
 static int segment_start(AVFormatContext *s, int write_header)
 {
     SegmentContext *seg = s->priv_data;
@@ -142,14 +161,8 @@ static int segment_start(AVFormatContext *s, int write_header)
     }
 
     seg->segment_idx++;
-    if (seg->segment_idx_wrap)
-        seg->segment_idx %= seg->segment_idx_wrap;
-
-    if (av_get_frame_filename(oc->filename, sizeof(oc->filename),
-                              s->filename, seg->segment_idx) < 0) {
-        av_log(oc, AV_LOG_ERROR, "Invalid segment filename template '%s'\n", s->filename);
-        return AVERROR(EINVAL);
-    }
+    if ((err = set_segment_filename(s)) < 0)
+        return err;
     seg->segment_count++;
 
     if ((err = avio_open2(&oc->pb, oc->filename, AVIO_FLAG_WRITE,
@@ -164,6 +177,7 @@ static int segment_start(AVFormatContext *s, int write_header)
             return err;
     }
 
+    seg->is_first_pkt = 1;
     return 0;
 }
 
@@ -274,13 +288,18 @@ static int parse_times(void *log_ctx, int64_t **times, int *nb_times,
     for (i = 0; i < *nb_times; i++) {
         int64_t t;
         char *tstr = av_strtok(p, ",", &saveptr);
-        av_assert0(tstr);
         p = NULL;
+
+        if (!tstr || !tstr[0]) {
+            av_log(log_ctx, AV_LOG_ERROR, "Empty time specification in times list %s\n",
+                   times_str);
+            FAIL(AVERROR(EINVAL));
+        }
 
         ret = av_parse_time(&t, tstr, 1);
         if (ret < 0) {
             av_log(log_ctx, AV_LOG_ERROR,
-                   "Invalid time duration specification in %s\n", p);
+                   "Invalid time duration specification '%s' in times list %s\n", tstr, times_str);
             FAIL(AVERROR(EINVAL));
         }
         (*times)[i] = t;
@@ -405,11 +424,8 @@ static int seg_write_header(AVFormatContext *s)
         goto fail;
     oc = seg->avf;
 
-    if (av_get_frame_filename(oc->filename, sizeof(oc->filename),
-                              s->filename, seg->segment_idx) < 0) {
-        ret = AVERROR(EINVAL);
+    if ((ret = set_segment_filename(s)) < 0)
         goto fail;
-    }
     seg->segment_count++;
 
     if (seg->write_header_trailer) {
@@ -425,6 +441,7 @@ static int seg_write_header(AVFormatContext *s)
         avio_close(oc->pb);
         goto fail;
     }
+    seg->is_first_pkt = 1;
 
     if (oc->avoid_negative_ts > 0 && s->avoid_negative_ts < 0)
         s->avoid_negative_ts = 1;
@@ -463,13 +480,10 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     /* if the segment has video, start a new segment *only* with a key video frame */
     if ((st->codec->codec_type == AVMEDIA_TYPE_VIDEO || !seg->has_video) &&
+        pkt->pts != AV_NOPTS_VALUE &&
         av_compare_ts(pkt->pts, st->time_base,
                       end_pts-seg->time_delta, AV_TIME_BASE_Q) >= 0 &&
         pkt->flags & AV_PKT_FLAG_KEY) {
-
-        av_log(s, AV_LOG_DEBUG, "Next segment starts with packet stream:%d pts:%"PRId64" pts_time:%f\n",
-               pkt->stream_index, pkt->pts, pkt->pts * av_q2d(st->time_base));
-
         ret = segment_end(s, seg->individual_header_trailer);
 
         if (!ret)
@@ -481,9 +495,34 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
         oc = seg->avf;
 
         seg->start_time = (double)pkt->pts * av_q2d(st->time_base);
+        seg->start_pts = av_rescale_q(pkt->pts, st->time_base, AV_TIME_BASE_Q);
+        seg->start_dts = pkt->dts != AV_NOPTS_VALUE ?
+            av_rescale_q(pkt->dts, st->time_base, AV_TIME_BASE_Q) : seg->start_pts;
     } else if (pkt->pts != AV_NOPTS_VALUE) {
         seg->end_time = FFMAX(seg->end_time,
                               (double)(pkt->pts + pkt->duration) * av_q2d(st->time_base));
+    }
+
+    if (seg->is_first_pkt) {
+        av_log(s, AV_LOG_DEBUG, "segment:'%s' starts with packet stream:%d pts:%s pts_time:%s\n",
+               seg->avf->filename, pkt->stream_index,
+               av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, &st->time_base));
+        seg->is_first_pkt = 0;
+    }
+
+    if (seg->reset_timestamps) {
+        av_log(s, AV_LOG_DEBUG, "start_pts:%s pts:%s start_dts:%s dts:%s",
+               av_ts2timestr(seg->start_pts, &AV_TIME_BASE_Q), av_ts2timestr(pkt->pts, &st->time_base),
+               av_ts2timestr(seg->start_dts, &AV_TIME_BASE_Q), av_ts2timestr(pkt->dts, &st->time_base));
+
+        /* compute new timestamps */
+        if (pkt->pts != AV_NOPTS_VALUE)
+            pkt->pts -= av_rescale_q(seg->start_pts, AV_TIME_BASE_Q, st->time_base);
+        if (pkt->dts != AV_NOPTS_VALUE)
+            pkt->dts -= av_rescale_q(seg->start_dts, AV_TIME_BASE_Q, st->time_base);
+
+        av_log(s, AV_LOG_DEBUG, " -> pts:%s dts:%s\n",
+               av_ts2timestr(pkt->pts, &st->time_base), av_ts2timestr(pkt->dts, &st->time_base));
     }
 
     ret = ff_write_chained(oc, pkt->stream_index, pkt, s);
@@ -534,18 +573,23 @@ static const AVOption options[] = {
     { "live",              "enable live-friendly list generation (useful for HLS)", 0, AV_OPT_TYPE_CONST, {.i64 = SEGMENT_LIST_FLAG_LIVE }, INT_MIN, INT_MAX,    E, "list_flags"},
 
     { "segment_list_size", "set the maximum number of playlist entries", OFFSET(list_size), AV_OPT_TYPE_INT,  {.i64 = 0},     0, INT_MAX, E },
+
     { "segment_list_type", "set the segment list type",                  OFFSET(list_type), AV_OPT_TYPE_INT,  {.i64 = LIST_TYPE_UNDEFINED}, -1, LIST_TYPE_NB-1, E, "list_type" },
-    { "flat", "flat format",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_FLAT }, INT_MIN, INT_MAX, 0, "list_type" },
-    { "csv",  "csv format",      0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_CSV  }, INT_MIN, INT_MAX, 0, "list_type" },
-    { "ext",  "extended format", 0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_EXT  }, INT_MIN, INT_MAX, 0, "list_type" },
-    { "m3u8", "M3U8 format",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, 0, "list_type" },
-    { "hls", "Apple HTTP Live Streaming compatible",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, 0, "list_type" },
+    { "flat", "flat format",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_FLAT }, INT_MIN, INT_MAX, E, "list_type" },
+    { "csv",  "csv format",      0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_CSV  }, INT_MIN, INT_MAX, E, "list_type" },
+    { "ext",  "extended format", 0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_EXT  }, INT_MIN, INT_MAX, E, "list_type" },
+    { "m3u8", "M3U8 format",     0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, E, "list_type" },
+    { "hls", "Apple HTTP Live Streaming compatible", 0, AV_OPT_TYPE_CONST, {.i64=LIST_TYPE_M3U8 }, INT_MIN, INT_MAX, E, "list_type" },
+
     { "segment_time",      "set segment duration",                       OFFSET(time_str),AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
     { "segment_time_delta","set approximation value used for the segment times", OFFSET(time_delta_str), AV_OPT_TYPE_STRING, {.str = "0"}, 0, 0, E },
     { "segment_times",     "set segment split time points",              OFFSET(times_str),AV_OPT_TYPE_STRING,{.str = NULL},  0, 0,       E },
     { "segment_wrap",      "set number after which the index wraps",     OFFSET(segment_idx_wrap), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, E },
+    { "segment_start_number", "set the sequence number of the first segment", OFFSET(segment_idx), AV_OPT_TYPE_INT, {.i64 = 0}, 0, INT_MAX, E },
+
     { "individual_header_trailer", "write header/trailer to each segment", OFFSET(individual_header_trailer), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, E },
     { "write_header_trailer", "write a header to the first segment and a trailer to the last one", OFFSET(write_header_trailer), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, E },
+    { "reset_timestamps", "reset timestamps at the begin of each segment", OFFSET(reset_timestamps), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, E },
     { NULL },
 };
 

@@ -209,17 +209,29 @@ static void sub2video_update(InputStream *ist, AVSubtitle *sub)
     AVFilterBufferRef *ref = ist->sub2video.ref;
     int8_t *dst;
     int     dst_linesize;
-    int i;
-    int64_t pts = av_rescale_q(sub->pts, AV_TIME_BASE_Q, ist->st->time_base);
+    int num_rects, i;
+    int64_t pts, end_pts;
 
     if (!ref)
         return;
+    if (sub) {
+        pts       = av_rescale_q(sub->pts + sub->start_display_time * 1000,
+                                 AV_TIME_BASE_Q, ist->st->time_base);
+        end_pts   = av_rescale_q(sub->pts + sub->end_display_time   * 1000,
+                                 AV_TIME_BASE_Q, ist->st->time_base);
+        num_rects = sub->num_rects;
+    } else {
+        pts       = ist->sub2video.end_pts;
+        end_pts   = INT64_MAX;
+        num_rects = 0;
+    }
     dst          = ref->data    [0];
     dst_linesize = ref->linesize[0];
     memset(dst, 0, h * dst_linesize);
-    for (i = 0; i < sub->num_rects; i++)
+    for (i = 0; i < num_rects; i++)
         sub2video_copy_rect(dst, dst_linesize, w, h, sub->rects[i]);
     sub2video_push_ref(ist, pts);
+    ist->sub2video.end_pts = end_pts;
 }
 
 static void sub2video_heartbeat(InputStream *ist, int64_t pts)
@@ -242,6 +254,8 @@ static void sub2video_heartbeat(InputStream *ist, int64_t pts)
         /* do not send the heartbeat frame if the subtitle is already ahead */
         if (pts2 <= ist2->sub2video.last_pts)
             continue;
+        if (pts2 >= ist2->sub2video.end_pts)
+            sub2video_update(ist2, NULL);
         for (j = 0, nb_reqs = 0; j < ist2->nb_filters; j++)
             nb_reqs += av_buffersrc_get_nb_failed_requests(ist2->filters[j]->filter);
         if (nb_reqs)
@@ -789,7 +803,7 @@ static void do_video_out(AVFormatContext *s,
 
     format_video_sync = video_sync_method;
     if (format_video_sync == VSYNC_AUTO)
-        format_video_sync = (s->oformat->flags & AVFMT_VARIABLE_FPS) ? ((s->oformat->flags & AVFMT_NOTIMESTAMPS) ? VSYNC_PASSTHROUGH : VSYNC_VFR) : 1;
+        format_video_sync = (s->oformat->flags & AVFMT_VARIABLE_FPS) ? ((s->oformat->flags & AVFMT_NOTIMESTAMPS) ? VSYNC_PASSTHROUGH : VSYNC_VFR) : VSYNC_CFR;
 
     switch (format_video_sync) {
     case VSYNC_CFR:
@@ -958,14 +972,14 @@ static void do_video_stats(OutputStream *ost, int frame_size)
 
     enc = ost->st->codec;
     if (enc->codec_type == AVMEDIA_TYPE_VIDEO) {
-        frame_number = ost->frame_number;
+        frame_number = ost->st->nb_frames;
         fprintf(vstats_file, "frame= %5d q= %2.1f ", frame_number, enc->coded_frame->quality / (float)FF_QP2LAMBDA);
         if (enc->flags&CODEC_FLAG_PSNR)
             fprintf(vstats_file, "PSNR= %6.2f ", psnr(enc->coded_frame->error[0] / (enc->width * enc->height * 255.0 * 255.0)));
 
         fprintf(vstats_file,"f_size= %6d ", frame_size);
         /* compute pts value */
-        ti1 = ost->sync_opts * av_q2d(enc->time_base);
+        ti1 = ost->st->pts.val * av_q2d(enc->time_base);
         if (ti1 < 0.01)
             ti1 = 0.01;
 
@@ -1304,6 +1318,9 @@ static void flush_encoders(void)
                 if (pkt.duration > 0)
                     pkt.duration = av_rescale_q(pkt.duration, enc->time_base, ost->st->time_base);
                 write_frame(os, &pkt, ost);
+                if (ost->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && vstats_filename) {
+                    do_video_stats(ost, pkt.size);
+                }
             }
 
             if (stop_encoding)

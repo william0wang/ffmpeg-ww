@@ -187,9 +187,9 @@ static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *in)
     GradFunContext *gf = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
     AVFilterBufferRef *out;
-    int p, direct;
+    int p, direct = 0;
 
-    if ((in->perms & AV_PERM_WRITE) && !(in->perms & AV_PERM_PRESERVE)) {
+    if (in->perms & AV_PERM_WRITE) {
         direct = 1;
         out = in;
     } else {
@@ -198,10 +198,7 @@ static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *in)
             avfilter_unref_bufferp(&in);
             return AVERROR(ENOMEM);
         }
-
         avfilter_copy_buffer_ref_props(out, in);
-        out->video->w = outlink->w;
-        out->video->h = outlink->h;
     }
 
     for (p = 0; p < 4 && in->data[p]; p++) {

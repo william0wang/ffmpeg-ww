@@ -22,6 +22,17 @@
 #ifndef AVFILTER_AVFILTER_H
 #define AVFILTER_AVFILTER_H
 
+/**
+ * @file
+ * @ingroup lavfi
+ * external API header
+ */
+
+/**
+ * @defgroup lavfi Libavfilter
+ * @{
+ */
+
 #include <stddef.h>
 
 #include "libavutil/avutil.h"
@@ -596,7 +607,7 @@ struct AVFilterLink {
      * The buffer reference to the frame which is sent to output by
      * the source filter.
      *
-     * If no start_frame callback is defined on a link,
+     * If no start_frame callback is defined on the link destination pad,
      * ff_start_frame() will automatically request a new buffer on the
      * first output link of the destination filter. The reference to
      * the buffer so obtained is stored in the out_buf field on the
@@ -839,5 +850,9 @@ void avfilter_free(AVFilterContext *filter);
  */
 int avfilter_insert_filter(AVFilterLink *link, AVFilterContext *filt,
                            unsigned filt_srcpad_idx, unsigned filt_dstpad_idx);
+
+/**
+ * @}
+ */
 
 #endif /* AVFILTER_AVFILTER_H */

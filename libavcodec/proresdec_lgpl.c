@@ -34,6 +34,7 @@
 
 #include "libavutil/intmath.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "proresdata.h"
 #include "proresdsp.h"
 #include "get_bits.h"
@@ -598,7 +599,7 @@ static int decode_picture(ProresContext *ctx, int pic_num,
 
 #define MOVE_DATA_PTR(nbytes) buf += (nbytes); buf_size -= (nbytes)
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     ProresContext *ctx = avctx->priv_data;
@@ -626,7 +627,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         avctx->release_buffer(avctx, picture);
 
     picture->reference = 0;
-    if (avctx->get_buffer(avctx, picture) < 0)
+    if (ff_get_buffer(avctx, picture) < 0)
         return -1;
 
     for (pic_num = 0; ctx->picture.interlaced_frame - pic_num + 1; pic_num++) {
@@ -640,7 +641,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         MOVE_DATA_PTR(pic_data_size);
     }
 
-    *data_size       = sizeof(AVPicture);
+    *got_frame       = 1;
     *(AVFrame*) data = *avctx->coded_frame;
 
     return avpkt->size;

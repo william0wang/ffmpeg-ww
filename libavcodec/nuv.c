@@ -143,7 +143,7 @@ static int codec_reinit(AVCodecContext *avctx, int width, int height,
     return 0;
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -262,7 +262,8 @@ retry:
             av_log(avctx, AV_LOG_ERROR, "uncompressed frame too short\n");
             height = buf_size / c->width / 3 * 2;
         }
-        copy_frame(&c->pic, buf, c->width, height);
+        if(height > 0)
+            copy_frame(&c->pic, buf, c->width, height);
         break;
     }
     case NUV_RTJPEG_IN_LZO:
@@ -283,7 +284,7 @@ retry:
     }
 
     *picture   = c->pic;
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
     return orig_size;
 }
 

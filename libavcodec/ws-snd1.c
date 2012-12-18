@@ -25,6 +25,7 @@
 #include "libavutil/common.h"
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
+#include "internal.h"
 
 /**
  * @file
@@ -84,12 +85,12 @@ static int ws_snd_decode_frame(AVCodecContext *avctx, void *data,
 
     if (in_size > buf_size) {
         av_log(avctx, AV_LOG_ERROR, "Frame data is larger than input buffer\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
 
     /* get output buffer */
     s->frame.nb_samples = out_size;
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }

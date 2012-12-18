@@ -31,6 +31,7 @@
 #include "dsputil.h"
 #include "aandcttab.h"
 #include "eaidct.h"
+#include "internal.h"
 #include "mpeg12.h"
 #include "mpegvideo.h"
 
@@ -96,7 +97,7 @@ static void tqi_calculate_qtable(MpegEncContext *s, int quant)
 }
 
 static int tqi_decode_frame(AVCodecContext *avctx,
-                            void *data, int *data_size,
+                            void *data, int *got_frame,
                             AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -116,7 +117,7 @@ static int tqi_decode_frame(AVCodecContext *avctx,
     if (s->avctx->width!=s->width || s->avctx->height!=s->height)
         avcodec_set_dimensions(s->avctx, s->width, s->height);
 
-    if(avctx->get_buffer(avctx, &t->frame) < 0) {
+    if(ff_get_buffer(avctx, &t->frame) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
@@ -138,7 +139,7 @@ static int tqi_decode_frame(AVCodecContext *avctx,
     }
     end:
 
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
     *(AVFrame*)data = t->frame;
     return buf_size;
 }

@@ -33,6 +33,7 @@
 
 #include "libavutil/channel_layout.h"
 #include "avcodec.h"
+#include "internal.h"
 #include "mathops.h"
 
 #define BITSTREAM_READER_LE
@@ -96,7 +97,7 @@ enum SmkBlockTypes {
  */
 static int smacker_decode_tree(GetBitContext *gb, HuffContext *hc, uint32_t prefix, int length)
 {
-    if(length > 32) {
+    if(length > 32 || length > 3*SMKTREE_BITS) {
         av_log(NULL, AV_LOG_ERROR, "length too long\n");
         return AVERROR_INVALIDDATA;
     }
@@ -205,7 +206,9 @@ static int smacker_decode_header_tree(SmackVContext *smk, GetBitContext *gb, int
     tmp2.values = av_mallocz(256 * sizeof(int));
 
     if(get_bits1(gb)) {
-        smacker_decode_tree(gb, &tmp1, 0, 0);
+        res = smacker_decode_tree(gb, &tmp1, 0, 0);
+        if (res < 0)
+            return res;
         skip_bits1(gb);
         if(tmp1.current > 1) {
             res = init_vlc(&vlc[0], SMKTREE_BITS, tmp1.length,
@@ -221,7 +224,9 @@ static int smacker_decode_header_tree(SmackVContext *smk, GetBitContext *gb, int
         av_log(smk->avctx, AV_LOG_ERROR, "Skipping low bytes tree\n");
     }
     if(get_bits1(gb)){
-        smacker_decode_tree(gb, &tmp2, 0, 0);
+        res = smacker_decode_tree(gb, &tmp2, 0, 0);
+        if (res < 0)
+            return res;
         skip_bits1(gb);
         if(tmp2.current > 1) {
             res = init_vlc(&vlc[1], SMKTREE_BITS, tmp2.length,
@@ -360,7 +365,8 @@ static av_always_inline int smk_get_code(GetBitContext *gb, int *recode, int *la
     return v;
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPacket *avpkt)
+static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
+                        AVPacket *avpkt)
 {
     SmackVContext * const smk = avctx->priv_data;
     uint8_t *out;
@@ -507,7 +513,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
 
     }
 
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
     *(AVFrame*)data = smk->pic;
 
     /* always report that the buffer was completely consumed */
@@ -639,7 +645,7 @@ static int smka_decode_frame(AVCodecContext *avctx, void *data,
 
     /* get output buffer */
     s->frame.nb_samples = unp_size / (avctx->channels * (bits + 1));
-    if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+    if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return ret;
     }
@@ -655,7 +661,9 @@ static int smka_decode_frame(AVCodecContext *avctx, void *data,
         h[i].lengths = av_mallocz(256 * sizeof(int));
         h[i].values = av_mallocz(256 * sizeof(int));
         skip_bits1(&gb);
-        smacker_decode_tree(&gb, &h[i], 0, 0);
+        res = smacker_decode_tree(&gb, &h[i], 0, 0);
+        if (res < 0)
+            return res;
         skip_bits1(&gb);
         if(h[i].current > 1) {
             res = init_vlc(&vlc[i], SMKTREE_BITS, h[i].length,

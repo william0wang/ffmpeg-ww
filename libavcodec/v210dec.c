@@ -22,6 +22,7 @@
  */
 
 #include "avcodec.h"
+#include "internal.h"
 #include "v210dec.h"
 #include "libavutil/bswap.h"
 #include "libavutil/internal.h"
@@ -71,7 +72,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     V210DecContext *s = avctx->priv_data;
@@ -111,7 +112,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         avctx->release_buffer(avctx, pic);
 
     pic->reference = 0;
-    if (avctx->get_buffer(avctx, pic) < 0)
+    if (ff_get_buffer(avctx, pic) < 0)
         return -1;
 
     y = (uint16_t*)pic->data[0];
@@ -153,7 +154,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         v += pic->linesize[2] / 2 - avctx->width / 2;
     }
 
-    *data_size = sizeof(AVFrame);
+    *got_frame      = 1;
     *(AVFrame*)data = *avctx->coded_frame;
 
     return avpkt->size;

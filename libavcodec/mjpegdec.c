@@ -35,6 +35,7 @@
 #include "libavutil/opt.h"
 #include "avcodec.h"
 #include "dsputil.h"
+#include "internal.h"
 #include "mjpeg.h"
 #include "mjpegdec.h"
 #include "jpeglsdec.h"
@@ -387,6 +388,14 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         s->chroma_height = s->height / 2;
         break;
     case 0x11000000:
+    case 0x13000000:
+    case 0x14000000:
+    case 0x31000000:
+    case 0x33000000:
+    case 0x34000000:
+    case 0x41000000:
+    case 0x43000000:
+    case 0x44000000:
         if(s->bits <= 8)
             s->avctx->pix_fmt = AV_PIX_FMT_GRAY8;
         else
@@ -435,7 +444,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     if (s->picture_ptr->data[0])
         s->avctx->release_buffer(s->avctx, s->picture_ptr);
 
-    if (s->avctx->get_buffer(s->avctx, s->picture_ptr) < 0) {
+    if (ff_get_buffer(s->avctx, s->picture_ptr) < 0) {
         av_log(s->avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
@@ -1548,6 +1557,8 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
         }
         *unescaped_buf_ptr  = s->buffer;
         *unescaped_buf_size = dst - s->buffer;
+        memset(s->buffer + *unescaped_buf_size, 0,
+               FF_INPUT_BUFFER_PADDING_SIZE);
 
         av_log(s->avctx, AV_LOG_DEBUG, "escaping removed %td bytes\n",
                (buf_end - *buf_ptr) - (dst - s->buffer));
@@ -1589,6 +1600,8 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
 
         *unescaped_buf_ptr  = dst;
         *unescaped_buf_size = (bit_count + 7) >> 3;
+        memset(s->buffer + *unescaped_buf_size, 0,
+               FF_INPUT_BUFFER_PADDING_SIZE);
     } else {
         *unescaped_buf_ptr  = *buf_ptr;
         *unescaped_buf_size = buf_end - *buf_ptr;
@@ -1597,7 +1610,7 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
     return start_code;
 }
 
-int ff_mjpeg_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+int ff_mjpeg_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                           AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -1711,7 +1724,7 @@ eoi_parser:
                         break;
                 }
                     *picture   = *s->picture_ptr;
-                    *data_size = sizeof(AVFrame);
+                    *got_frame = 1;
                     s->got_picture = 0;
 
                     if (!s->lossless) {

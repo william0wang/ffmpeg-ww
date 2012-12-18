@@ -65,7 +65,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (APE, ape);
     REGISTER_MUXDEMUX (ASF, asf);
     REGISTER_MUXDEMUX (ASS, ass);
-    REGISTER_DEMUXER  (AST, ast);
+    REGISTER_MUXDEMUX (AST, ast);
     REGISTER_MUXER    (ASF_STREAM, asf_stream);
     REGISTER_MUXDEMUX (AU, au);
     REGISTER_MUXDEMUX (AVI, avi);
@@ -85,6 +85,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (CAVSVIDEO, cavsvideo);
     REGISTER_DEMUXER  (CDG, cdg);
     REGISTER_DEMUXER  (CDXL, cdxl);
+    REGISTER_DEMUXER  (CONCAT, concat);
     REGISTER_MUXER    (CRC, crc);
     REGISTER_MUXDEMUX (DAUD, daud);
     REGISTER_DEMUXER  (DFA, dfa);
@@ -98,6 +99,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (EA, ea);
     REGISTER_DEMUXER  (EA_CDATA, ea_cdata);
     REGISTER_MUXDEMUX (EAC3, eac3);
+    REGISTER_DEMUXER  (EPAF, epaf);
     REGISTER_MUXER    (F4V, f4v);
     REGISTER_MUXDEMUX (FFM, ffm);
     REGISTER_MUXDEMUX (FFMETADATA, ffmetadata);
@@ -111,7 +113,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (G722, g722);
     REGISTER_MUXDEMUX (G723_1, g723_1);
     REGISTER_DEMUXER  (G729, g729);
-    REGISTER_MUXER    (GIF, gif);
+    REGISTER_MUXDEMUX (GIF, gif);
     REGISTER_DEMUXER  (GSM, gsm);
     REGISTER_MUXDEMUX (GXF, gxf);
     REGISTER_MUXDEMUX (H261, h261);
@@ -128,6 +130,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (INGENIENT, ingenient);
     REGISTER_DEMUXER  (IPMOVIE, ipmovie);
     REGISTER_MUXER    (IPOD, ipod);
+    REGISTER_MUXDEMUX (IRCAM, ircam);
     REGISTER_MUXER    (ISMV, ismv);
     REGISTER_DEMUXER  (ISS, iss);
     REGISTER_DEMUXER  (IV8, iv8);
@@ -169,6 +172,7 @@ void av_register_all(void)
     REGISTER_MUXER    (MPJPEG, mpjpeg);
     REGISTER_DEMUXER  (MSNWC_TCP, msnwc_tcp);
     REGISTER_DEMUXER  (MTV, mtv);
+    REGISTER_DEMUXER  (MV, mv);
     REGISTER_DEMUXER  (MVI, mvi);
     REGISTER_MUXDEMUX (MXF, mxf);
     REGISTER_MUXER    (MXF_D10, mxf_d10);
@@ -204,6 +208,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (PMP, pmp);
     REGISTER_MUXER    (PSP, psp);
     REGISTER_DEMUXER  (PVA, pva);
+    REGISTER_DEMUXER  (PVF, pvf);
     REGISTER_DEMUXER  (QCP, qcp);
     REGISTER_DEMUXER  (R3D, r3d);
     REGISTER_MUXDEMUX (RAWVIDEO, rawvideo);
@@ -240,6 +245,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (SUBVIEWER, subviewer);
     REGISTER_MUXDEMUX (SWF, swf);
     REGISTER_DEMUXER  (TAK, tak);
+    REGISTER_DEMUXER  (TEDCAPTIONS, tedcaptions);
     REGISTER_MUXER    (TG2, tg2);
     REGISTER_MUXER    (TGP, tgp);
     REGISTER_DEMUXER  (THP, thp);
@@ -254,6 +260,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (VC1T, vc1t);
     REGISTER_DEMUXER  (VIVO, vivo);
     REGISTER_DEMUXER  (VMD, vmd);
+    REGISTER_DEMUXER  (VOBSUB, vobsub);
     REGISTER_MUXDEMUX (VOC, voc);
     REGISTER_DEMUXER  (VQF, vqf);
     REGISTER_DEMUXER  (W64, w64);

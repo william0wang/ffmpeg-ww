@@ -28,7 +28,7 @@
 
 typedef struct {
     int64_t atrpos, atsqpos, awapos;
-    int64_t data_size;
+    int64_t data_end;
 } MMFContext;
 
 static const int mmf_rates[] = { 4000, 8000, 11025, 22050, 44100 };
@@ -71,7 +71,7 @@ static int mmf_write_header(AVFormatContext *s)
     rate = mmf_rate_code(s->streams[0]->codec->sample_rate);
     if(rate < 0) {
         av_log(s, AV_LOG_ERROR, "Unsupported sample rate %d, supported are 4000, 8000, 11025, 22050 and 44100\n", s->streams[0]->codec->sample_rate);
-        return -1;
+        return AVERROR(EINVAL);
     }
 
     ffio_wfourcc(pb, "MMMD");
@@ -193,7 +193,7 @@ static int mmf_read_header(AVFormatContext *s)
 
     tag = avio_rl32(pb);
     if (tag != MKTAG('M', 'M', 'M', 'D'))
-        return -1;
+        return AVERROR_INVALIDDATA;
     avio_skip(pb, 4); /* file_size */
 
     /* Skip some unused chunks that may or may not be present */
@@ -208,11 +208,11 @@ static int mmf_read_header(AVFormatContext *s)
     /* Tag = "ATRx", where "x" = track number */
     if ((tag & 0xffffff) == MKTAG('M', 'T', 'R', 0)) {
         av_log(s, AV_LOG_ERROR, "MIDI like format found, unsupported\n");
-        return -1;
+        return AVERROR_PATCHWELCOME;
     }
     if ((tag & 0xffffff) != MKTAG('A', 'T', 'R', 0)) {
         av_log(s, AV_LOG_ERROR, "Unsupported SMAF chunk %08x\n", tag);
-        return -1;
+        return AVERROR_PATCHWELCOME;
     }
 
     avio_r8(pb); /* format type */
@@ -221,7 +221,7 @@ static int mmf_read_header(AVFormatContext *s)
     rate = mmf_rate(params & 0x0f);
     if(rate  < 0) {
         av_log(s, AV_LOG_ERROR, "Invalid sample rate\n");
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
     avio_r8(pb); /* wave base bit */
     avio_r8(pb); /* time base d */
@@ -239,9 +239,9 @@ static int mmf_read_header(AVFormatContext *s)
     /* Make sure it's followed by an Awa chunk, aka wave data */
     if ((tag & 0xffffff) != MKTAG('A', 'w', 'a', 0)) {
         av_log(s, AV_LOG_ERROR, "Unexpected SMAF chunk %08x\n", tag);
-        return -1;
+        return AVERROR_INVALIDDATA;
     }
-    mmf->data_size = size;
+    mmf->data_end = avio_tell(pb) + size;
 
     st = avformat_new_stream(s, NULL);
     if (!st)
@@ -266,19 +266,19 @@ static int mmf_read_packet(AVFormatContext *s,
                            AVPacket *pkt)
 {
     MMFContext *mmf = s->priv_data;
-    int ret, size;
+    int64_t left, size;
+    int ret;
 
-    if (url_feof(s->pb) || !mmf->data_size)
+    left = mmf->data_end - avio_tell(s->pb);
+    size = FFMIN(left, MAX_SIZE);
+    if (url_feof(s->pb) || size <= 0)
         return AVERROR_EOF;
-
-    size = FFMIN(MAX_SIZE, mmf->data_size);
 
     ret = av_get_packet(s->pb, pkt, size);
     if (ret < 0)
         return ret;
 
     pkt->stream_index = 0;
-    mmf->data_size -= ret;
 
     return ret;
 }
@@ -291,7 +291,7 @@ AVInputFormat ff_mmf_demuxer = {
     .read_probe     = mmf_probe,
     .read_header    = mmf_read_header,
     .read_packet    = mmf_read_packet,
-    .read_seek      = ff_pcm_read_seek,
+    .flags          = AVFMT_GENERIC_INDEX,
 };
 #endif
 #if CONFIG_MMF_MUXER

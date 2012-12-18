@@ -26,6 +26,7 @@
 
 #include "avcodec.h"
 #include "get_bits.h"
+#include "internal.h"
 #include "mathops.h"
 
 
@@ -58,7 +59,7 @@ static inline int wnv1_get_code(WNV1Context *w, int base_value)
 }
 
 static int decode_frame(AVCodecContext *avctx,
-                        void *data, int *data_size,
+                        void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -66,7 +67,7 @@ static int decode_frame(AVCodecContext *avctx,
     WNV1Context * const l = avctx->priv_data;
     AVFrame * const p = &l->pic;
     unsigned char *Y,*U,*V;
-    int i, j;
+    int i, j, ret;
     int prev_y = 0, prev_u = 0, prev_v = 0;
     uint8_t *rbuf;
 
@@ -78,17 +79,17 @@ static int decode_frame(AVCodecContext *avctx,
     rbuf = av_malloc(buf_size + FF_INPUT_BUFFER_PADDING_SIZE);
     if(!rbuf){
         av_log(avctx, AV_LOG_ERROR, "Cannot allocate temporary buffer\n");
-        return -1;
+        return AVERROR(ENOMEM);
     }
 
     if(p->data[0])
         avctx->release_buffer(avctx, p);
 
     p->reference = 0;
-    if(avctx->get_buffer(avctx, p) < 0){
+    if ((ret = ff_get_buffer(avctx, p)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         av_free(rbuf);
-        return -1;
+        return ret;
     }
     p->key_frame = 1;
 
@@ -128,7 +129,7 @@ static int decode_frame(AVCodecContext *avctx,
     }
 
 
-    *data_size = sizeof(AVFrame);
+    *got_frame      = 1;
     *(AVFrame*)data = l->pic;
     av_free(rbuf);
 

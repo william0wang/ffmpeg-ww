@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "avcodec.h"
+#include "internal.h"
 #include "libavutil/internal.h"
 #include "libavutil/xga_font_data.h"
 
@@ -39,7 +40,7 @@ typedef struct TMVContext {
 } TMVContext;
 
 static int tmv_decode_frame(AVCodecContext *avctx, void *data,
-                            int *data_size, AVPacket *avpkt)
+                            int *got_frame, AVPacket *avpkt)
 {
     TMVContext *tmv    = avctx->priv_data;
     const uint8_t *src = avpkt->data;
@@ -51,7 +52,7 @@ static int tmv_decode_frame(AVCodecContext *avctx, void *data,
     if (tmv->pic.data[0])
         avctx->release_buffer(avctx, &tmv->pic);
 
-    if (avctx->get_buffer(avctx, &tmv->pic) < 0) {
+    if (ff_get_buffer(avctx, &tmv->pic) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
@@ -59,7 +60,7 @@ static int tmv_decode_frame(AVCodecContext *avctx, void *data,
     if (avpkt->size < 2*char_rows*char_cols) {
         av_log(avctx, AV_LOG_ERROR,
                "Input buffer too small, truncated sample?\n");
-        *data_size = 0;
+        *got_frame = 0;
         return -1;
     }
 
@@ -81,7 +82,7 @@ static int tmv_decode_frame(AVCodecContext *avctx, void *data,
         dst += tmv->pic.linesize[0] * 8;
     }
 
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
     *(AVFrame *)data = tmv->pic;
     return avpkt->size;
 }

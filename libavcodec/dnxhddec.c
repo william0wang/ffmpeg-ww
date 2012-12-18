@@ -30,13 +30,14 @@
 #include "get_bits.h"
 #include "dnxhddata.h"
 #include "dsputil.h"
+#include "internal.h"
 #include "thread.h"
 
 typedef struct DNXHDContext {
     AVCodecContext *avctx;
     AVFrame picture;
     GetBitContext gb;
-    int cid;                            ///< compression id
+    int64_t cid;                        ///< compression id
     unsigned int width, height;
     unsigned int mb_width, mb_height;
     uint32_t mb_scan_index[68];         /* max for 1080p */
@@ -70,10 +71,11 @@ static av_cold int dnxhd_decode_init(AVCodecContext *avctx)
     avcodec_get_frame_defaults(&ctx->picture);
     ctx->picture.type = AV_PICTURE_TYPE_I;
     ctx->picture.key_frame = 1;
+    ctx->cid = -1;
     return 0;
 }
 
-static int dnxhd_init_vlc(DNXHDContext *ctx, int cid)
+static int dnxhd_init_vlc(DNXHDContext *ctx, uint32_t cid)
 {
     if (cid != ctx->cid) {
         int index;
@@ -357,7 +359,7 @@ static int dnxhd_decode_macroblocks(DNXHDContext *ctx, const uint8_t *buf, int b
     return 0;
 }
 
-static int dnxhd_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+static int dnxhd_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                               AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -403,7 +405,7 @@ static int dnxhd_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     *picture = ctx->picture;
-    *data_size = sizeof(AVPicture);
+    *got_frame = 1;
     return buf_size;
 }
 

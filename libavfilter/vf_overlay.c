@@ -284,11 +284,6 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-static AVFilterBufferRef *get_video_buffer(AVFilterLink *link, int perms, int w, int h)
-{
-    return ff_get_video_buffer(link->dst->outputs[0], perms, w, h);
-}
-
 // divide by 255 and round to nearest
 // apply a fast variant: (X+127)/255 = ((X+127)*257+257)>>16 = ((X+128)*257)>>16
 #define FAST_DIV255(x) ((((x) + 128) * 257) >> 16)
@@ -480,7 +475,7 @@ static int try_start_frame(AVFilterContext *ctx, AVFilterBufferRef *mainpic)
     AVFilterBufferRef *next_overpic, *outpicref;
     int ret;
 
-    /* Discard obsolete overlay frames: if there is a next frame with pts is
+    /* Discard obsolete overlay frames: if there is a next overlay frame with pts
      * before the main frame, we can drop the current overlay. */
     while (1) {
         next_overpic = ff_bufqueue_peek(&over->queue_over, 0);
@@ -491,12 +486,14 @@ static int try_start_frame(AVFilterContext *ctx, AVFilterBufferRef *mainpic)
         avfilter_unref_buffer(over->overpicref);
         over->overpicref = next_overpic;
     }
+
     /* If there is no next frame and no EOF and the overlay frame is before
      * the main frame, we can not know yet if it will be superseded. */
     if (!over->queue_over.available && !over->overlay_eof &&
         (!over->overpicref || av_compare_ts(over->overpicref->pts, ctx->inputs[OVERLAY]->time_base,
                                             mainpic->pts         , ctx->inputs[MAIN]->time_base) < 0))
         return AVERROR(EAGAIN);
+
     /* At this point, we know that the current overlay frame extends to the
      * time of the main frame. */
     outlink->out_buf = outpicref = avfilter_ref_buffer(mainpic, ~0);
@@ -661,7 +658,7 @@ static const AVFilterPad avfilter_vf_overlay_inputs[] = {
     {
         .name         = "main",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .get_video_buffer= get_video_buffer,
+        .get_video_buffer = ff_null_get_video_buffer,
         .config_props = config_input_main,
         .start_frame  = start_frame_main,
         .draw_slice   = draw_slice_main,

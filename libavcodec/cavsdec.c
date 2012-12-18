@@ -30,6 +30,7 @@
 #include "get_bits.h"
 #include "golomb.h"
 #include "cavs.h"
+#include "internal.h"
 
 static const uint8_t mv_scan[4] = {
     MV_FWD_X0,MV_FWD_X1,
@@ -924,6 +925,7 @@ static inline int check_for_slice(AVSContext *h) {
 static int decode_pic(AVSContext *h) {
     MpegEncContext *s = &h->s;
     int skip_count = -1;
+    int ret;
     enum cavs_mb mb_type;
 
     if (!s->context_initialized) {
@@ -962,7 +964,8 @@ static int decode_pic(AVSContext *h) {
     if(h->picture.f.data[0])
         s->avctx->release_buffer(s->avctx, &h->picture.f);
 
-    s->avctx->get_buffer(s->avctx, &h->picture.f);
+    if ((ret = ff_get_buffer(s->avctx, &h->picture.f)) < 0)
+        return ret;
     ff_cavs_init_pic(h);
     h->picture.poc = get_bits(&s->gb,8)*2;
 
@@ -1111,7 +1114,7 @@ static void cavs_flush(AVCodecContext * avctx) {
     h->got_keyframe = 0;
 }
 
-static int cavs_decode_frame(AVCodecContext * avctx,void *data, int *data_size,
+static int cavs_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                              AVPacket *avpkt) {
     const uint8_t *buf = avpkt->data;
     int buf_size = avpkt->size;
@@ -1127,7 +1130,7 @@ static int cavs_decode_frame(AVCodecContext * avctx,void *data, int *data_size,
 
     if (buf_size == 0) {
         if (!s->low_delay && h->DPB[0].f.data[0]) {
-            *data_size = sizeof(AVPicture);
+            *got_frame = 1;
             *picture = h->DPB[0].f;
             memset(&h->DPB[0], 0, sizeof(h->DPB[0]));
         }
@@ -1155,7 +1158,7 @@ static int cavs_decode_frame(AVCodecContext * avctx,void *data, int *data_size,
                 h->got_keyframe = 1;
             }
         case PIC_PB_START_CODE:
-            *data_size = 0;
+            *got_frame = 0;
             if(!h->got_keyframe)
                 break;
             if(!h->top_qp)
@@ -1164,12 +1167,12 @@ static int cavs_decode_frame(AVCodecContext * avctx,void *data, int *data_size,
             h->stc = stc;
             if(decode_pic(h))
                 break;
-            *data_size = sizeof(AVPicture);
+            *got_frame = 1;
             if(h->pic_type != AV_PICTURE_TYPE_B) {
                 if(h->DPB[1].f.data[0]) {
                     *picture = h->DPB[1].f;
                 } else {
-                    *data_size = 0;
+                    *got_frame = 0;
                 }
             } else
                 *picture = h->picture.f;

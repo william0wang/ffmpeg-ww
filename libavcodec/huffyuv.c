@@ -386,17 +386,23 @@ static int read_old_huffman_tables(HYuvContext *s)
     return 0;
 }
 
-static av_cold void alloc_temp(HYuvContext *s)
+static av_cold int alloc_temp(HYuvContext *s)
 {
     int i;
 
     if (s->bitstream_bpp<24) {
         for (i=0; i<3; i++) {
             s->temp[i]= av_malloc(s->width + 16);
+            if (!s->temp[i])
+                return AVERROR(ENOMEM);
         }
     } else {
         s->temp[0]= av_mallocz(4*s->width + 16);
+        if (!s->temp[0])
+            return AVERROR(ENOMEM);
     }
+
+    return 0;
 }
 
 static av_cold int common_init(AVCodecContext *avctx)
@@ -412,6 +418,16 @@ static av_cold int common_init(AVCodecContext *avctx)
     s->height = avctx->height;
     av_assert1(s->width > 0 && s->height > 0);
 
+    return 0;
+}
+
+static av_cold int common_end(HYuvContext *s)
+{
+    int i;
+
+    for(i = 0; i < 3; i++) {
+        av_freep(&s->temp[i]);
+    }
     return 0;
 }
 
@@ -456,7 +472,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
         if ( read_huffman_tables(s, ((uint8_t*)avctx->extradata) + 4,
                                  avctx->extradata_size - 4) < 0)
-            return -1;
+            return AVERROR_INVALIDDATA;
     }else{
         switch (avctx->bits_per_coded_sample & 7) {
         case 1:
@@ -484,7 +500,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
         s->context = 0;
 
         if (read_old_huffman_tables(s) < 0)
-            return -1;
+            return AVERROR_INVALIDDATA;
     }
 
     switch (s->bitstream_bpp) {
@@ -518,7 +534,10 @@ static av_cold int decode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "width must be a multiple of 4 this colorspace and predictor\n");
         return AVERROR_INVALIDDATA;
     }
-    alloc_temp(s);
+    if (alloc_temp(s)) {
+        common_end(s);
+        return AVERROR(ENOMEM);
+    }
 
     return 0;
 }
@@ -529,7 +548,10 @@ static av_cold int decode_init_thread_copy(AVCodecContext *avctx)
     int i;
 
     avctx->coded_frame= &s->picture;
-    alloc_temp(s);
+    if (alloc_temp(s)) {
+        common_end(s);
+        return AVERROR(ENOMEM);
+    }
 
     for (i = 0; i < 6; i++)
         s->vlc[i].table = NULL;
@@ -537,10 +559,10 @@ static av_cold int decode_init_thread_copy(AVCodecContext *avctx)
     if (s->version == 2) {
         if (read_huffman_tables(s, ((uint8_t*)avctx->extradata) + 4,
                                 avctx->extradata_size) < 0)
-            return -1;
+            return AVERROR_INVALIDDATA;
     } else {
         if (read_old_huffman_tables(s) < 0)
-            return -1;
+            return AVERROR_INVALIDDATA;
     }
 
     return 0;
@@ -581,6 +603,10 @@ static av_cold int encode_init(AVCodecContext *avctx)
 
     avctx->extradata = av_mallocz(1024*30); // 256*3+4 == 772
     avctx->stats_out = av_mallocz(1024*30); // 21*256*3(%llu ) + 3(\n) + 1(0) = 16132
+    if (!avctx->extradata || !avctx->stats_out) {
+        av_freep(&avctx->stats_out);
+        return AVERROR(ENOMEM);
+    }
     s->version = 2;
 
     avctx->coded_frame = &s->picture;
@@ -602,7 +628,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "format not supported\n");
-        return -1;
+        return AVERROR(EINVAL);
     }
     avctx->bits_per_coded_sample = s->bitstream_bpp;
     s->decorrelate = s->bitstream_bpp >= 24;
@@ -614,7 +640,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
             av_log(avctx, AV_LOG_ERROR,
                    "context=1 is not compatible with "
                    "2 pass huffyuv encoding\n");
-            return -1;
+            return AVERROR(EINVAL);
         }
     }else s->context= 0;
 
@@ -623,13 +649,13 @@ static av_cold int encode_init(AVCodecContext *avctx)
             av_log(avctx, AV_LOG_ERROR,
                    "Error: YV12 is not supported by huffyuv; use "
                    "vcodec=ffvhuff or format=422p\n");
-            return -1;
+            return AVERROR(EINVAL);
         }
         if (avctx->context_model) {
             av_log(avctx, AV_LOG_ERROR,
                    "Error: per-frame huffman tables are not supported "
                    "by huffyuv; use vcodec=ffvhuff\n");
-            return -1;
+            return AVERROR(EINVAL);
         }
         if (s->interlaced != ( s->height > 288 ))
             av_log(avctx, AV_LOG_INFO,
@@ -639,7 +665,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
     if (s->bitstream_bpp >= 24 && s->predictor == MEDIAN) {
         av_log(avctx, AV_LOG_ERROR,
                "Error: RGB is incompatible with median predictor\n");
-        return -1;
+        return AVERROR(EINVAL);
     }
 
     ((uint8_t*)avctx->extradata)[0] = s->predictor | (s->decorrelate << 6);
@@ -703,7 +729,10 @@ static av_cold int encode_init(AVCodecContext *avctx)
                 s->stats[i][j]= 0;
     }
 
-    alloc_temp(s);
+    if (alloc_temp(s)) {
+        common_end(s);
+        return AVERROR(ENOMEM);
+    }
 
     s->picture_number=0;
 
@@ -977,7 +1006,7 @@ static void draw_slice(HYuvContext *s, int y)
     s->last_slice_end = y + h;
 }
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -988,17 +1017,16 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     const int height = s->height;
     int fake_ystride, fake_ustride, fake_vstride;
     AVFrame * const p = &s->picture;
-    int table_size = 0;
+    int table_size = 0, ret;
 
     AVFrame *picture = data;
 
-    av_fast_malloc(&s->bitstream_buffer,
+    av_fast_padded_malloc(&s->bitstream_buffer,
                    &s->bitstream_buffer_size,
-                   buf_size + FF_INPUT_BUFFER_PADDING_SIZE);
+                   buf_size);
     if (!s->bitstream_buffer)
         return AVERROR(ENOMEM);
 
-    memset(s->bitstream_buffer + buf_size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     s->dsp.bswap_buf((uint32_t*)s->bitstream_buffer,
                      (const uint32_t*)buf, buf_size / 4);
 
@@ -1006,19 +1034,19 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         ff_thread_release_buffer(avctx, p);
 
     p->reference = 0;
-    if (ff_thread_get_buffer(avctx, p) < 0) {
+    if ((ret = ff_thread_get_buffer(avctx, p)) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
+        return ret;
     }
 
     if (s->context) {
         table_size = read_huffman_tables(s, s->bitstream_buffer, buf_size);
         if (table_size < 0)
-            return -1;
+            return AVERROR_INVALIDDATA;
     }
 
     if ((unsigned)(buf_size-table_size) >= INT_MAX / 8)
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     init_get_bits(&s->gb, s->bitstream_buffer+table_size,
                   (buf_size-table_size) * 8);
@@ -1042,7 +1070,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
             av_log(avctx, AV_LOG_ERROR,
                    "YUY2 output is not implemented yet\n");
-            return -1;
+            return AVERROR_PATCHWELCOME;
         } else {
 
             leftv = p->data[2][0] = get_bits(&s->gb, 8);
@@ -1224,27 +1252,17 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }else{
             av_log(avctx, AV_LOG_ERROR,
                    "BGR24 output is not implemented yet\n");
-            return -1;
+            return AVERROR_PATCHWELCOME;
         }
     }
     emms_c();
 
     *picture = *p;
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
 
     return (get_bits_count(&s->gb) + 31) / 32 * 4 + table_size;
 }
 #endif /* CONFIG_HUFFYUV_DECODER || CONFIG_FFVHUFF_DECODER */
-
-static int common_end(HYuvContext *s)
-{
-    int i;
-
-    for(i = 0; i < 3; i++) {
-        av_freep(&s->temp[i]);
-    }
-    return 0;
-}
 
 #if CONFIG_HUFFYUV_DECODER || CONFIG_FFVHUFF_DECODER
 static av_cold int decode_end(AVCodecContext *avctx)

@@ -216,6 +216,9 @@ int avresample_build_matrix(uint64_t in_layout, uint64_t out_layout,
 /**
  * Get the current channel mixing matrix.
  *
+ * If no custom matrix has been previously set or the AVAudioResampleContext is
+ * not open, an error is returned.
+ *
  * @param avr     audio resample context
  * @param matrix  mixing coefficients; matrix[i + stride * o] is the weight of
  *                input channel i in output channel o.
@@ -231,7 +234,8 @@ int avresample_get_matrix(AVAudioResampleContext *avr, double *matrix,
  * Allows for setting a custom mixing matrix, overriding the default matrix
  * generated internally during avresample_open(). This function can be called
  * anytime on an allocated context, either before or after calling
- * avresample_open(). avresample_convert() always uses the current matrix.
+ * avresample_open(), as long as the channel layouts have been set.
+ * avresample_convert() always uses the current matrix.
  * Calling avresample_close() on the context will clear the current matrix.
  *
  * @see avresample_close()
@@ -248,11 +252,10 @@ int avresample_set_matrix(AVAudioResampleContext *avr, const double *matrix,
 /**
  * Set compensation for resampling.
  *
- * This can be called anytime after avresample_open(). If resampling was not
- * being done previously, the AVAudioResampleContext is closed and reopened
- * with resampling enabled. In this case, any samples remaining in the output
- * FIFO and the current channel mixing matrix will be restored after reopening
- * the context.
+ * This can be called anytime after avresample_open(). If resampling is not
+ * automatically enabled because of a sample rate conversion, the
+ * "force_resampling" option must have been set to 1 when opening the context
+ * in order to use resampling compensation.
  *
  * @param avr                    audio resample context
  * @param sample_delta           compensation delta, in samples

@@ -38,6 +38,7 @@
 #include "libavutil/internal.h"
 #include "libavutil/intreadwrite.h"
 #include "avcodec.h"
+#include "internal.h"
 
 
 static const enum AVPixelFormat pixfmt_rgb24[] = {
@@ -63,7 +64,7 @@ typedef struct EightBpsContext {
  *
  */
 static int decode_frame(AVCodecContext *avctx, void *data,
-                        int *data_size, AVPacket *avpkt)
+                        int *got_frame, AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
@@ -82,7 +83,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
 
     c->pic.reference    = 0;
     c->pic.buffer_hints = FF_BUFFER_HINTS_VALID;
-    if (avctx->get_buffer(avctx, &c->pic) < 0){
+    if (ff_get_buffer(avctx, &c->pic) < 0){
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
@@ -143,7 +144,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
         memcpy (c->pic.data[1], c->pal, AVPALETTE_SIZE);
     }
 
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
     *(AVFrame*)data = c->pic;
 
     /* always report that the buffer was completely consumed */

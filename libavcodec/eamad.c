@@ -33,6 +33,7 @@
 #include "dsputil.h"
 #include "aandcttab.h"
 #include "eaidct.h"
+#include "internal.h"
 #include "mpeg12.h"
 #include "mpeg12data.h"
 #include "libavutil/imgutils.h"
@@ -226,7 +227,7 @@ static void calc_quant_matrix(MadContext *s, int qscale)
 }
 
 static int decode_frame(AVCodecContext *avctx,
-                        void *data, int *data_size,
+                        void *data, int *got_frame,
                         AVPacket *avpkt)
 {
     const uint8_t *buf = avpkt->data;
@@ -239,7 +240,7 @@ static int decode_frame(AVCodecContext *avctx,
 
     if (buf_size < 26) {
         av_log(avctx, AV_LOG_ERROR, "Input buffer too small\n");
-        *data_size = 0;
+        *got_frame = 0;
         return AVERROR_INVALIDDATA;
     }
 
@@ -269,13 +270,14 @@ static int decode_frame(AVCodecContext *avctx,
 
     s->frame.reference = 3;
     if (!s->frame.data[0]) {
-        if ((ret = avctx->get_buffer(avctx, &s->frame)) < 0) {
+        if ((ret = ff_get_buffer(avctx, &s->frame)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return ret;
         }
     }
 
-    av_fast_malloc(&s->bitstream_buf, &s->bitstream_buf_size, (buf_end-buf) + FF_INPUT_BUFFER_PADDING_SIZE);
+    av_fast_padded_malloc(&s->bitstream_buf, &s->bitstream_buf_size,
+                          buf_end - buf);
     if (!s->bitstream_buf)
         return AVERROR(ENOMEM);
     s->dsp.bswap16_buf(s->bitstream_buf, (const uint16_t*)buf, (buf_end-buf)/2);
@@ -287,7 +289,7 @@ static int decode_frame(AVCodecContext *avctx,
             if(decode_mb(s, inter) < 0)
                 return AVERROR_INVALIDDATA;
 
-    *data_size = sizeof(AVFrame);
+    *got_frame = 1;
     *(AVFrame*)data = s->frame;
 
     if (chunk_type != MADe_TAG)
