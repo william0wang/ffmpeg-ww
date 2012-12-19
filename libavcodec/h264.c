@@ -971,7 +971,8 @@ fail:
     return -1; // free_tables will clean up for us
 }
 
-static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size);
+static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size,
+                            int parse_extradata);
 
 static av_cold void common_init(H264Context *h)
 {
@@ -1000,7 +1001,7 @@ static av_cold void common_init(H264Context *h)
     memset(h->pps.scaling_matrix8, 16, 2 * 64 * sizeof(uint8_t));
 }
 
-static int ff_h264_decode_extradata_internal(H264Context *h, const uint8_t *buf, int size)
+int ff_h264_decode_extradata(H264Context *h, const uint8_t *buf, int size)
 {
     AVCodecContext *avctx = h->s.avctx;
 
@@ -1027,7 +1028,7 @@ static int ff_h264_decode_extradata_internal(H264Context *h, const uint8_t *buf,
             nalsize = AV_RB16(p) + 2;
             if(nalsize > size - (p-buf))
                 return -1;
-            if (decode_nal_units(h, p, nalsize) < 0) {
+            if (decode_nal_units(h, p, nalsize, 1) < 0) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Decoding sps %d from avcC failed\n", i);
                 return -1;
@@ -1040,7 +1041,7 @@ static int ff_h264_decode_extradata_internal(H264Context *h, const uint8_t *buf,
             nalsize = AV_RB16(p) + 2;
             if(nalsize > size - (p-buf))
                 return -1;
-            if (decode_nal_units(h, p, nalsize) < 0) {
+            if (decode_nal_units(h, p, nalsize, 1) < 0) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Decoding pps %d from avcC failed\n", i);
                 return -1;
@@ -1051,19 +1052,10 @@ static int ff_h264_decode_extradata_internal(H264Context *h, const uint8_t *buf,
         h->nal_length_size = (buf[4] & 0x03) + 1;
     } else {
         h->is_avc = 0;
-        if (decode_nal_units(h, buf, size) < 0)
+        if (decode_nal_units(h, buf, size, 1) < 0)
             return -1;
     }
     return size;
-}
-
-int ff_h264_decode_extradata(H264Context *h, const uint8_t *buf, int size)
-{
-    int ret;
-    h->decoding_extradata = 1;
-    ret = ff_h264_decode_extradata_internal(h, buf, size);
-    h->decoding_extradata = 0;
-    return ret;
 }
 
 av_cold int ff_h264_decode_init(AVCodecContext *avctx)
@@ -3778,7 +3770,8 @@ static int execute_decode_slices(H264Context *h, int context_count)
     return 0;
 }
 
-static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
+static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size,
+                            int parse_extradata)
 {
     MpegEncContext *const s     = &h->s;
     AVCodecContext *const avctx = s->avctx;
@@ -3922,9 +3915,10 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
                 continue;
 
 again:
-            err = 0;
-
-            if (h->decoding_extradata) {
+            /* Ignore per frame NAL unit type during extradata
+             * parsing. Decoding slices is not possible in codec init
+             * with frame-mt */
+            if (parse_extradata) {
                 switch (hx->nal_unit_type) {
                 case NAL_IDR_SLICE:
                 case NAL_SLICE:
@@ -3932,10 +3926,12 @@ again:
                 case NAL_DPB:
                 case NAL_DPC:
                 case NAL_AUXILIARY_SLICE:
-                    av_log(h->s.avctx, AV_LOG_WARNING, "Ignoring NAL %d in global header\n", hx->nal_unit_type);
-                    hx->nal_unit_type = NAL_FILLER_DATA;
+                    av_log(h->s.avctx, AV_LOG_WARNING, "Ignoring NAL %d in global header/extradata\n", hx->nal_unit_type);
+                    hx->nal_unit_type = NAL_FF_IGNORE;
                 }
             }
+
+            err = 0;
 
             switch (hx->nal_unit_type) {
             case NAL_IDR_SLICE:
@@ -4083,6 +4079,8 @@ again:
             case NAL_SPS_EXT:
             case NAL_AUXILIARY_SLICE:
                 break;
+            case NAL_FF_IGNORE:
+                break;
             default:
                 av_log(avctx, AV_LOG_DEBUG, "Unknown NAL code: %d (%d bits)\n",
                        hx->nal_unit_type, bit_length);
@@ -4201,7 +4199,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
     }
 not_extra:
 
-    buf_index = decode_nal_units(h, buf, buf_size);
+    buf_index = decode_nal_units(h, buf, buf_size, 0);
     if (buf_index < 0)
         return -1;
 

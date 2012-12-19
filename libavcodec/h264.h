@@ -115,7 +115,8 @@ enum {
     NAL_END_STREAM,
     NAL_FILLER_DATA,
     NAL_SPS_EXT,
-    NAL_AUXILIARY_SLICE = 19
+    NAL_AUXILIARY_SLICE = 19,
+    NAL_FF_IGNORE       = 0xff0f001,
 };
 
 /**
@@ -443,7 +444,6 @@ typedef struct H264Context {
     int nal_unit_type;
     uint8_t *rbsp_buffer[2];
     unsigned int rbsp_buffer_size[2];
-    int decoding_extradata;
 
     /**
      * Used to parse AVC variant of h264
