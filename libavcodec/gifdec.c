@@ -99,7 +99,7 @@ static void gif_fill_rect(AVFrame *picture, uint32_t color, int l, int t, int w,
 {
     const int linesize = picture->linesize[0] / sizeof(uint32_t);
     const uint32_t *py = (uint32_t *)picture->data[0] + t * linesize;
-    const uint32_t *pr, *pb = py + (t + h) * linesize;
+    const uint32_t *pr, *pb = py + h * linesize;
     uint32_t *px;
 
     for (; py < pb; py += linesize) {
@@ -118,7 +118,7 @@ static void gif_copy_img_rect(const uint32_t *src, uint32_t *dst,
     const uint32_t *src_px, *src_pr,
                    *src_py = src + y_start,
                    *dst_py = dst + y_start;
-    const uint32_t *src_pb = src_py + (t + h) * linesize;
+    const uint32_t *src_pb = src_py + t * linesize;
     uint32_t *dst_px;
 
     for (; src_py < src_pb; src_py += linesize, dst_py += linesize) {
@@ -164,7 +164,7 @@ static int gif_read_image(GifState *s)
         pal = s->local_palette;
     } else {
         if (!s->has_global_palette) {
-            av_log(s->avctx, AV_LOG_FATAL, "picture doesn't have either global or local palette.\n");
+            av_log(s->avctx, AV_LOG_ERROR, "picture doesn't have either global or local palette.\n");
             return AVERROR_INVALIDDATA;
         }
 
@@ -185,7 +185,7 @@ static int gif_read_image(GifState *s)
     /* verify that all the image is inside the screen dimensions */
     if (left + width > s->screen_width ||
         top + height > s->screen_height)
-        return AVERROR(EINVAL);
+        return AVERROR_INVALIDDATA;
 
     /* process disposal method */
     if (s->gce_prev_disposal == GCE_DISPOSAL_BACKGROUND) {
@@ -202,7 +202,7 @@ static int gif_read_image(GifState *s)
         s->gce_w = width; s->gce_h = height;
 
         if (s->gce_disposal == GCE_DISPOSAL_BACKGROUND) {
-            if (s->background_color_index == s->transparent_color_index)
+            if (s->transparent_color_index >= 0)
                 s->stored_bg_color = s->trans_color;
             else
                 s->stored_bg_color = s->bg_color;
@@ -313,7 +313,6 @@ static int gif_read_extension(GifState *s)
         if (bytestream2_get_bytes_left(&s->gb) < 5)
             return AVERROR_INVALIDDATA;
 
-        s->transparent_color_index = -1;
         gce_flags = bytestream2_get_byteu(&s->gb);
         bytestream2_skipu(&s->gb, 2);    // delay during which the frame is shown
         gce_transparent_index = bytestream2_get_byteu(&s->gb);

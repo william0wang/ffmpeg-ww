@@ -90,10 +90,10 @@ typedef struct {
     AVFilterBufferRef *ref;    ///< Previous frame
     int rx;                    ///< Maximum horizontal shift
     int ry;                    ///< Maximum vertical shift
-    enum FillMethod edge;      ///< Edge fill method
+    int edge;                  ///< Edge fill method
     int blocksize;             ///< Size of blocks to compare
     int contrast;              ///< Contrast threshold
-    enum SearchMethod search;  ///< Motion search method
+    int search;                ///< Motion search method
     AVCodecContext *avctx;
     DSPContext c;              ///< Context providing optimized SAD methods
     Transform last;            ///< Transform from last frame
@@ -353,8 +353,8 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     if (args) {
         sscanf(args, "%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%255s",
                &deshake->cx, &deshake->cy, &deshake->cw, &deshake->ch,
-               &deshake->rx, &deshake->ry, (int *)&deshake->edge,
-               &deshake->blocksize, &deshake->contrast, (int *)&deshake->search, filename);
+               &deshake->rx, &deshake->ry, &deshake->edge,
+               &deshake->blocksize, &deshake->contrast, &deshake->search, filename);
 
         deshake->blocksize /= 2;
 
@@ -387,7 +387,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 
 static int query_formats(AVFilterContext *ctx)
 {
-    enum AVPixelFormat pix_fmts[] = {
+    static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_YUV420P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV410P,
         AV_PIX_FMT_YUV411P,  AV_PIX_FMT_YUV440P,  AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_YUVJ422P,
         AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ440P, AV_PIX_FMT_NONE
@@ -443,7 +443,6 @@ static int filter_frame(AVFilterLink *link, AVFilterBufferRef *in)
     }
     avfilter_copy_buffer_ref_props(out, in);
 
-    link->cur_buf = NULL; /* it is in 'in' now */
     if (deshake->cx < 0 || deshake->cy < 0 || deshake->cw < 0 || deshake->ch < 0) {
         // Find the most likely global motion for the current frame
         find_motion(deshake, (deshake->ref == NULL) ? in->data[0] : deshake->ref->data[0], in->data[0], link->w, link->h, in->linesize[0], &t);

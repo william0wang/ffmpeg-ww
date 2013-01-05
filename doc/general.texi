@@ -280,6 +280,7 @@ library:
     @tab SMPTE 386M, D-10/IMX Mapping.
 @item NC camera feed            @tab   @tab X
     @tab NC (AVIP NC4600) camera streams
+@item NIST SPeech HEader REsources @tab   @tab X
 @item NTT TwinVQ (VQF)          @tab   @tab X
     @tab Nippon Telegraph and Telephone Corporation TwinVQ.
 @item Nullsoft Streaming Video  @tab   @tab X
@@ -373,7 +374,7 @@ library:
 @item Sony OpenMG (OMA)         @tab X @tab X
     @tab Audio format used in Sony Sonic Stage and Sony Vegas.
 @item Sony PlayStation STR      @tab   @tab X
-@item Sony Wave64 (W64)         @tab   @tab X
+@item Sony Wave64 (W64)         @tab X @tab X
 @item SoX native format         @tab X @tab X
 @item SUN AU format             @tab X @tab X
 @item Text files                @tab   @tab X
@@ -918,19 +919,25 @@ performance on systems without hardware floating point support).
 
 @multitable @columnfractions .4 .1 .1 .1 .1
 @item Name @tab Muxing @tab Demuxing @tab Encoding @tab Decoding
-@item SSA/ASS          @tab X @tab X @tab X @tab X
+@item 3GPP Timed Text  @tab   @tab   @tab X @tab X
+@item AQTitle          @tab   @tab X @tab   @tab X
 @item DVB              @tab X @tab X @tab X @tab X
 @item DVD              @tab X @tab X @tab X @tab X
 @item JACOsub          @tab X @tab X @tab   @tab X
 @item MicroDVD         @tab X @tab X @tab   @tab X
+@item MPL2             @tab   @tab X @tab   @tab X
+@item MPsub (MPlayer)  @tab   @tab X @tab   @tab X
 @item PGS              @tab   @tab   @tab   @tab X
+@item PJS (Phoenix)    @tab   @tab X @tab   @tab X
 @item RealText         @tab   @tab X @tab   @tab X
 @item SAMI             @tab   @tab X @tab   @tab X
+@item SSA/ASS          @tab X @tab X @tab X @tab X
 @item SubRip (SRT)     @tab X @tab X @tab X @tab X
+@item SubViewer v1     @tab   @tab X @tab   @tab X
 @item SubViewer        @tab   @tab X @tab   @tab X
 @item TED Talks captions @tab @tab X @tab   @tab X
 @item VobSub (IDX+SUB) @tab   @tab X @tab   @tab X
-@item 3GPP Timed Text  @tab   @tab   @tab X @tab X
+@item VPlayer          @tab   @tab X @tab   @tab X
 @item WebVTT           @tab   @tab X @tab   @tab X
 @item XSUB             @tab   @tab   @tab X @tab X
 @end multitable

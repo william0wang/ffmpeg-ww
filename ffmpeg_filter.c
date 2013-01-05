@@ -517,8 +517,8 @@ static int sub2video_prepare(InputStream *ist)
         }
         av_log(avf, AV_LOG_INFO, "sub2video: using %dx%d canvas\n", w, h);
     }
-    ist->sub2video.w = ist->st->codec->width  = w;
-    ist->sub2video.h = ist->st->codec->height = h;
+    ist->sub2video.w = ist->st->codec->width  = ist->resample_width  = w;
+    ist->sub2video.h = ist->st->codec->height = ist->resample_height = h;
 
     /* rectangles are AV_PIX_FMT_PAL8, but we have no guarantee that the
        palettes for all rectangles are identical or compatible */
@@ -661,9 +661,9 @@ static int configure_input_audio_filter(FilterGraph *fg, InputFilter *ifilter,
     if (audio_sync_method > 0) {
         char args[256] = {0};
 
-        av_strlcatf(args, sizeof(args), "min_comp=0.001:min_hard_comp=%f", audio_drift_threshold);
-        if (audio_sync_method > 1)
-            av_strlcatf(args, sizeof(args), ":max_soft_comp=%f", audio_sync_method/(double)ist->st->codec->sample_rate);
+        av_strlcatf(args, sizeof(args), "async=%d", audio_sync_method);
+        if (audio_drift_threshold != 0.1)
+            av_strlcatf(args, sizeof(args), ":min_hard_comp=%f", audio_drift_threshold);
         AUTO_INSERT_FILTER_INPUT("-async", "aresample", args);
     }
 

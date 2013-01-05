@@ -143,7 +143,6 @@ extern const vf_info_t ff_vf_info_ow;
 extern const vf_info_t ff_vf_info_perspective;
 extern const vf_info_t ff_vf_info_phase;
 extern const vf_info_t ff_vf_info_pp7;
-extern const vf_info_t ff_vf_info_pp;
 extern const vf_info_t ff_vf_info_pullup;
 extern const vf_info_t ff_vf_info_qp;
 extern const vf_info_t ff_vf_info_sab;
@@ -178,7 +177,6 @@ static const vf_info_t* const filters[]={
     &ff_vf_info_ow,
     &ff_vf_info_perspective,
     &ff_vf_info_phase,
-    &ff_vf_info_pp,
     &ff_vf_info_pp7,
     &ff_vf_info_pullup,
     &ff_vf_info_qp,
@@ -704,7 +702,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
       else
         args = NULL;
 #endif
-    if(m->vf.info->vf_open(&m->vf, args)<=0){
+    if(m->vf.info->vf_open(&m->vf, (char*)args)<=0){
         av_log(ctx, AV_LOG_ERROR, "vf_open() of %s with arg=%s failed\n", name, args);
         return -1;
     }

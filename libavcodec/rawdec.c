@@ -237,6 +237,15 @@ static int raw_decode(AVCodecContext *avctx,
         FFALIGN(frame->linesize[0], linesize_align)*avctx->height <= buf_size)
         frame->linesize[0] = FFALIGN(frame->linesize[0], linesize_align);
 
+    if(avctx->pix_fmt == AV_PIX_FMT_NV12 && avctx->codec_tag == MKTAG('N', 'V', '1', '2') &&
+        FFALIGN(frame->linesize[0], linesize_align)*avctx->height +
+        FFALIGN(frame->linesize[1], linesize_align)*((avctx->height+1)/2) <= buf_size) {
+        int la0 = FFALIGN(frame->linesize[0], linesize_align);
+        frame->data[1] += (la0 - frame->linesize[0])*avctx->height;
+        frame->linesize[0] = la0;
+        frame->linesize[1] = FFALIGN(frame->linesize[1], linesize_align);
+    }
+
     if(context->flip)
         flip(avctx, picture);
 
@@ -245,6 +254,11 @@ static int raw_decode(AVCodecContext *avctx,
         || avctx->codec_tag == MKTAG('Y', 'V', '2', '4')
         || avctx->codec_tag == MKTAG('Y', 'V', 'U', '9'))
         FFSWAP(uint8_t *, picture->data[1], picture->data[2]);
+
+    if (avctx->codec_tag == AV_RL32("I420") && (avctx->width+1)*(avctx->height+1) * 3/2 == buf_size) {
+        picture->data[1] = picture->data[1] + (avctx->width+1)*(avctx->height+1) -avctx->width*avctx->height;
+        picture->data[2] = picture->data[2] + ((avctx->width+1)*(avctx->height+1) -avctx->width*avctx->height)*5/4;
+    }
 
     if(avctx->codec_tag == AV_RL32("yuv2") &&
        avctx->pix_fmt   == AV_PIX_FMT_YUYV422) {

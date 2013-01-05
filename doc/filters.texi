@@ -3,13 +3,6 @@
 
 Filtering in FFmpeg is enabled through the libavfilter library.
 
-Libavfilter is the filtering API of FFmpeg. It is the substitute of
-the now deprecated 'vhooks' and started as a Google Summer of Code
-project.
-
-Audio filtering integration into the main FFmpeg repository is a work in
-progress, so audio API and ABI should not be considered stable yet.
-
 In libavfilter, it is possible for filters to have multiple inputs and
 multiple outputs.
 To illustrate the sorts of things that are possible, we can
@@ -291,7 +284,7 @@ aconvert=u8:auto
 
 @section aformat
 
-Convert the input audio to one of the specified formats. The framework will
+Set output format constraints for the input audio. The framework will
 negotiate the most appropriate format to minimize conversions.
 
 The filter accepts the following named parameters:
@@ -312,7 +305,7 @@ If a parameter is omitted, all values are allowed.
 
 For example to force the output to either unsigned 8-bit or signed 16-bit stereo:
 @example
-aformat=sample_fmts\=u8\,s16:channel_layouts\=stereo
+aformat='sample_fmts=u8,s16:channel_layouts=stereo'
 @end example
 
 @section amerge
@@ -414,77 +407,32 @@ Pass the audio source unchanged to the output.
 Pad the end of a audio stream with silence, this can be used together with
 -shortest to extend audio streams to the same length as the video stream.
 
+@anchor{aresample}
 @section aresample
 
-Resample the input audio to the specified parameters. If none are specified
-then the filter will automatically convert between its input
-and output.
+Resample the input audio to the specified parameters, using the
+libswresample library. If none are specified then the filter will
+automatically convert between its input and output.
 
 This filter is also able to stretch/squeeze the audio data to make it match
 the timestamps or to inject silence / cut out audio to make it match the
 timestamps, do a combination of both or do neither.
 
-The filter accepts the following named parameters:
-@table @option
-
-@item min_comp
-Minimum difference between timestamps and audio data (in seconds) to trigger
-stretching/squeezing/filling or trimming of the data to make it match the
-timestamps. The default is that stretching/squeezing/filling and
-trimming is disabled (min_comp = infinite).
-
-@item min_hard_comp
-Minimum difference between timestamps and audio data (in seconds) to trigger
-adding/dropping samples to make it match the timestamps.
-This option effectively is a threshold to select between hard (trim/fill) and
-soft (squeeze/stretch) compensation. Note that all compensation is by default
-disabled through min_comp.
-The default is 0.1 seconds.
-
-@item max_soft_comp
-Maximum stretch/squeeze factor.
-Default value 0.
-
-@item tsf, internal_sample_fmt
-Internal sampling format.
-Default is automatic selection
-
-@item clev, center_mix_level
-center mix level, for rematrixing
-Default is 3.0dB
-
-@item slev, surround_mix_level
-surround mix level, for rematrixing
-Default is 3.0dB
-
-@item rmvol, rematrix_volume
-rematrix volume
-Default is 1.0
-
-@item lfe_mix_level
-Low frequency effects mix level.
-Default is 0
-
-@item matrix_encoding
-matrixed stereo encoding
-@table @option
-@item none
-No matrixed stereo encoding
-
-@item dolby
-Dolby matrixed stereo encoding
-
-@item dplii
-Dolby Pro Logic II matrixed stereo encoding
-@end table
-
-Default value is @code{none}.
-
-@end table
+The filter accepts the syntax
+[@var{sample_rate}:]@var{resampler_options}, where @var{sample_rate}
+expresses a sample rate and @var{resampler_options} is a list of
+@var{key}=@var{value} pairs, separated by ":". See the
+ffmpeg-resampler manual for the complete list of supported options.
 
 For example, to resample the input audio to 44100Hz:
 @example
 aresample=44100
+@end example
+
+To stretch/squeeze samples to the given timestamps, with a maximum of 1000
+samples per second compensation:
+@example
+aresample=async=1000
 @end example
 
 @section asetnsamples
@@ -769,6 +717,8 @@ ffmpeg -f lavfi -i amovie=silence.mp3,silencedetect=noise=0.0001 -f null -
 @section asyncts
 Synchronize audio data with timestamps by squeezing/stretching it and/or
 dropping samples/adding silence when needed.
+
+As an alternative, you can use @ref{aresample} to do squeezing/stretching.
 
 The filter accepts the following named parameters:
 @table @option
@@ -3176,12 +3126,19 @@ Overlay one video on top of another.
 It takes two inputs and one output, the first input is the "main"
 video on which the second input is overlayed.
 
-It accepts the parameters: @var{x}:@var{y}[:@var{options}].
+This filter accepts a list of @var{key}=@var{value} pairs as argument,
+separated by ":". If the key of the first options is omitted, the
+arguments are interpreted according to the syntax @var{x}:@var{y}.
 
-@var{x} is the x coordinate of the overlayed video on the main video,
-@var{y} is the y coordinate. @var{x} and @var{y} are expressions containing
-the following parameters:
+A description of the accepted options follows.
 
+@table @option
+@item x, y
+Set the expression for the x and y coordinates of the overlayed video
+on the main video. Default value is 0.
+
+The @var{x} and @var{y} expressions can contain the following
+parameters:
 @table @option
 @item main_w, main_h
 main input width and height
@@ -3196,12 +3153,6 @@ overlay input width and height
 same as @var{overlay_w} and @var{overlay_h}
 @end table
 
-@var{options} is an optional list of @var{key}=@var{value} pairs,
-separated by ":".
-
-The description of the accepted options follows.
-
-@table @option
 @item rgb
 If set to 1, force the filter to accept inputs in the RGB
 color space. Default value is 0.
@@ -3213,34 +3164,69 @@ to pass the two inputs through a @var{setpts=PTS-STARTPTS} filter to
 have them begin in the same zero timestamp, as it does the example for
 the @var{movie} filter.
 
-Follow some examples:
+You can chain together more overlays but you should test the
+efficiency of such approach.
+
+@subsection Examples
+
+@itemize
+@item
+Draw the overlay at 10 pixels from the bottom right corner of the main
+video:
 @example
-# draw the overlay at 10 pixels from the bottom right
-# corner of the main video.
 overlay=main_w-overlay_w-10:main_h-overlay_h-10
+@end example
 
-# insert a transparent PNG logo in the bottom left corner of the input
+Using named options the example above becomes:
+@example
+overlay=x=main_w-overlay_w-10:y=main_h-overlay_h-10
+@end example
+
+@item
+Insert a transparent PNG logo in the bottom left corner of the input,
+using the @command{ffmpeg} tool with the @code{-filter_complex} option:
+@example
 ffmpeg -i input -i logo -filter_complex 'overlay=10:main_h-overlay_h-10' output
+@end example
 
-# insert 2 different transparent PNG logos (second logo on bottom
-# right corner):
-ffmpeg -i input -i logo1 -i logo2 -filter_complex
-'overlay=10:H-h-10,overlay=W-w-10:H-h-10' output
+@item
+Insert 2 different transparent PNG logos (second logo on bottom
+right corner) using the @command{ffmpeg} tool:
+@example
+ffmpeg -i input -i logo1 -i logo2 -filter_complex 'overlay=10:H-h-10,overlay=W-w-10:H-h-10' output
+@end example
 
-# add a transparent color layer on top of the main video,
-# WxH specifies the size of the main input to the overlay filter
+@item
+Add a transparent color layer on top of the main video, WxH specifies
+the size of the main input to the overlay filter:
+@example
 color=red@@.3:WxH [over]; [in][over] overlay [out]
+@end example
 
-# play an original video and a filtered version (here with the deshake filter)
-# side by side
+@item
+Play an original video and a filtered version (here with the deshake
+filter) side by side using the @command{ffplay} tool:
+@example
 ffplay input.avi -vf 'split[a][b]; [a]pad=iw*2:ih[src]; [b]deshake[filt]; [src][filt]overlay=w'
+@end example
 
-# the previous example is the same as:
+The above command is the same as:
+@example
 ffplay input.avi -vf 'split[b], pad=iw*2[src], [b]deshake, [src]overlay=w'
 @end example
 
-You can chain together more overlays but the efficiency of such
-approach is yet to be tested.
+@item
+Chain several overlays in cascade:
+@example
+nullsrc=s=200x200 [bg];
+testsrc=s=100x100, split=4 [in0][in1][in2][in3];
+[in0] lutrgb=r=0, [bg]   overlay=0:0     [mid0];
+[in1] lutrgb=g=0, [mid0] overlay=100:0   [mid1];
+[in2] lutrgb=b=0, [mid1] overlay=0:100   [mid2];
+[in3] null,       [mid2] overlay=100:100 [out0]
+@end example
+
+@end itemize
 
 @section pad
 
@@ -3383,6 +3369,174 @@ format=monow, pixdesctest
 @end example
 
 can be used to test the monowhite pixel format descriptor definition.
+
+@section pp
+
+Enable the specified chain of postprocessing subfilters using libpostproc. This
+library should be automatically selected with a GPL build (@code{--enable-gpl}).
+Subfilters must be separated by '/' and can be disabled by prepending a '-'.
+Each subfilter and some options have a short and a long name that can be used
+interchangeably, i.e. dr/dering are the same.
+
+All subfilters share common options to determine their scope:
+
+@table @option
+@item a/autoq
+Honor the quality commands for this subfilter.
+
+@item c/chrom
+Do chrominance filtering, too (default).
+
+@item y/nochrom
+Do luminance filtering only (no chrominance).
+
+@item n/noluma
+Do chrominance filtering only (no luminance).
+@end table
+
+These options can be appended after the subfilter name, separated by a ':'.
+
+Available subfilters are:
+
+@table @option
+@item hb/hdeblock[:difference[:flatness]]
+Horizontal deblocking filter
+@table @option
+@item difference
+Difference factor where higher values mean more deblocking (default: @code{32}).
+@item flatness
+Flatness threshold where lower values mean more deblocking (default: @code{39}).
+@end table
+
+@item vb/vdeblock[:difference[:flatness]]
+Vertical deblocking filter
+@table @option
+@item difference
+Difference factor where higher values mean more deblocking (default: @code{32}).
+@item flatness
+Flatness threshold where lower values mean more deblocking (default: @code{39}).
+@end table
+
+@item ha/hadeblock[:difference[:flatness]]
+Accurate horizontal deblocking filter
+@table @option
+@item difference
+Difference factor where higher values mean more deblocking (default: @code{32}).
+@item flatness
+Flatness threshold where lower values mean more deblocking (default: @code{39}).
+@end table
+
+@item va/vadeblock[:difference[:flatness]]
+Accurate vertical deblocking filter
+@table @option
+@item difference
+Difference factor where higher values mean more deblocking (default: @code{32}).
+@item flatness
+Flatness threshold where lower values mean more deblocking (default: @code{39}).
+@end table
+@end table
+
+The horizontal and vertical deblocking filters share the difference and
+flatness values so you cannot set different horizontal and vertical
+thresholds.
+
+@table @option
+@item h1/x1hdeblock
+Experimental horizontal deblocking filter
+
+@item v1/x1vdeblock
+Experimental vertical deblocking filter
+
+@item dr/dering
+Deringing filter
+
+@item tn/tmpnoise[:threshold1[:threshold2[:threshold3]]], temporal noise reducer
+@table @option
+@item threshold1
+larger -> stronger filtering
+@item threshold2
+larger -> stronger filtering
+@item threshold3
+larger -> stronger filtering
+@end table
+
+@item al/autolevels[:f/fullyrange], automatic brightness / contrast correction
+@table @option
+@item f/fullyrange
+Stretch luminance to @code{0-255}.
+@end table
+
+@item lb/linblenddeint
+Linear blend deinterlacing filter that deinterlaces the given block by
+filtering all lines with a @code{(1 2 1)} filter.
+
+@item li/linipoldeint
+Linear interpolating deinterlacing filter that deinterlaces the given block by
+linearly interpolating every second line.
+
+@item ci/cubicipoldeint
+Cubic interpolating deinterlacing filter deinterlaces the given block by
+cubically interpolating every second line.
+
+@item md/mediandeint
+Median deinterlacing filter that deinterlaces the given block by applying a
+median filter to every second line.
+
+@item fd/ffmpegdeint
+FFmpeg deinterlacing filter that deinterlaces the given block by filtering every
+second line with a @code{(-1 4 2 4 -1)} filter.
+
+@item l5/lowpass5
+Vertically applied FIR lowpass deinterlacing filter that deinterlaces the given
+block by filtering all lines with a @code{(-1 2 6 2 -1)} filter.
+
+@item fq/forceQuant[:quantizer]
+Overrides the quantizer table from the input with the constant quantizer you
+specify.
+@table @option
+@item quantizer
+Quantizer to use
+@end table
+
+@item de/default
+Default pp filter combination (@code{hb:a,vb:a,dr:a})
+
+@item fa/fast
+Fast pp filter combination (@code{h1:a,v1:a,dr:a})
+
+@item ac
+High quality pp filter combination (@code{ha:a:128:7,va:a,dr:a})
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Apply horizontal and vertical deblocking, deringing and automatic
+brightness/contrast:
+@example
+pp=hb/vb/dr/al
+@end example
+
+@item
+Apply default filters without brightness/contrast correction:
+@example
+pp=de/-al
+@end example
+
+@item
+Apply default filters and temporal denoiser:
+@example
+pp=default/tmpnoise:1:2:3
+@end example
+
+@item
+Apply deblocking on luminance only, and switch vertical deblocking on or off
+automatically depending on available CPU time:
+@example
+pp=hb:y/vb:a
+@end example
+@end itemize
 
 @section removelogo
 
@@ -3923,9 +4077,21 @@ Perform various types of temporal field interlacing.
 Frames are counted starting from 1, so the first input frame is
 considered odd.
 
-This filter accepts a single option @option{mode} specifying the mode,
-which can be specified either by specyfing @code{mode=VALUE} either
-specifying the value alone. Available values are:
+This filter accepts options in the form of @var{key}=@var{value} pairs
+separated by ":".
+Alternatively, the @var{mode} option can be specified as a value alone,
+optionally followed by a ":" and further ":" separated @var{key}=@var{value}
+pairs.
+
+A description of the accepted options follows.
+
+@table @option
+
+@item mode
+Specify the mode of the interlacing. This option can also be specified
+as a value alone. See below for a list of values for this option.
+
+Available values are:
 
 @table @samp
 @item merge, 0
@@ -3964,6 +4130,25 @@ Numeric values are deprecated but are accepted for backward
 compatibility reasons.
 
 Default mode is @code{merge}.
+
+@item flags
+Specify flags influencing the filter process.
+
+Available value for @var{flags} is:
+
+@table @option
+@item low_pass_filter, vlfp
+Enable vertical low-pass filtering in the filter.
+Vertical low-pass filtering is required when creating an interlaced
+destination from a progressive source which contains high-frequency
+vertical detail. Filtering will reduce interlace 'twitter' and Moire
+patterning.
+
+Vertical low-pass filtering can only be enabled for @option{mode}
+@var{interleave_top} and @var{interleave_bottom}.
+
+@end table
+@end table
 
 @section transpose
 
@@ -4105,51 +4290,61 @@ ffmpeg -i in.avi -vf "vflip" out.avi
 Deinterlace the input video ("yadif" means "yet another deinterlacing
 filter").
 
-It accepts the optional parameters: @var{mode}:@var{parity}:@var{auto}.
+The filter accepts parameters as a list of @var{key}=@var{value}
+pairs, separated by ":". If the key of the first options is omitted,
+the arguments are interpreted according to syntax
+@var{mode}:@var{parity}:@var{deint}.
 
-@var{mode} specifies the interlacing mode to adopt, accepts one of the
-following values:
+The description of the accepted parameters follows.
 
 @table @option
-@item 0
+@item mode
+Specify the interlacing mode to adopt. Accept one of the following
+values:
+
+@table @option
+@item 0, send_frame
 output 1 frame for each frame
-@item 1
+@item 1, send_field
 output 1 frame for each field
-@item 2
-like 0 but skips spatial interlacing check
-@item 3
-like 1 but skips spatial interlacing check
+@item 2, send_frame_nospatial
+like @code{send_frame} but skip spatial interlacing check
+@item 3, send_field_nospatial
+like @code{send_field} but skip spatial interlacing check
 @end table
 
-Default value is 0.
+Default value is @code{send_frame}.
 
-@var{parity} specifies the picture field parity assumed for the input
-interlaced video, accepts one of the following values:
+@item parity
+Specify the picture field parity assumed for the input interlaced
+video. Accept one of the following values:
 
 @table @option
-@item 0
+@item 0, tff
 assume top field first
-@item 1
+@item 1, bff
 assume bottom field first
-@item -1
+@item -1, auto
 enable automatic detection
 @end table
 
-Default value is -1.
+Default value is @code{auto}.
 If interlacing is unknown or decoder does not export this information,
 top field first will be assumed.
 
-@var{auto} specifies if deinterlacer should trust the interlaced flag
-and only deinterlace frames marked as interlaced
+@item deint
+Specify which frames to deinterlace. Accept one of the following
+values:
 
 @table @option
-@item 0
+@item 0, all
 deinterlace all frames
-@item 1
+@item 1, interlaced
 only deinterlace frames marked as interlaced
 @end table
 
-Default value is 0.
+Default value is @code{all}.
+@end table
 
 @c man end VIDEO FILTERS
 
@@ -5364,10 +5559,10 @@ Below is a description of the currently available multimedia sources.
 
 @section amovie
 
-This is the same as @ref{src_movie} source, except it selects an audio
+This is the same as @ref{movie} source, except it selects an audio
 stream by default.
 
-@anchor{src_movie}
+@anchor{movie}
 @section movie
 
 Read audio and/or video stream(s) from a movie container.

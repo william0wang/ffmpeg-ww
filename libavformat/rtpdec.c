@@ -226,7 +226,8 @@ static int rtp_valid_packet_in_sequence(RTPStatistics *s, uint16_t seq)
     return 1;
 }
 
-int ff_rtp_check_and_send_back_rr(RTPDemuxContext *s, int count)
+int ff_rtp_check_and_send_back_rr(RTPDemuxContext *s, URLContext *fd,
+                                  AVIOContext *avio, int count)
 {
     AVIOContext *pb;
     uint8_t *buf;
@@ -242,7 +243,7 @@ int ff_rtp_check_and_send_back_rr(RTPDemuxContext *s, int count)
     uint32_t fraction;
     uint64_t ntp_time = s->last_rtcp_ntp_time; // TODO: Get local ntp time?
 
-    if (!s->rtp_ctx || (count < 1))
+    if ((!fd && !avio) || (count < 1))
         return -1;
 
     /* TODO: I think this is way too often; RFC 1889 has algorithm for this */
@@ -255,7 +256,9 @@ int ff_rtp_check_and_send_back_rr(RTPDemuxContext *s, int count)
         return -1;
     s->last_octet_count = s->octet_count;
 
-    if (avio_open_dyn_buf(&pb) < 0)
+    if (!fd)
+        pb = avio;
+    else if (avio_open_dyn_buf(&pb) < 0)
         return -1;
 
     // Receiver Report
@@ -312,11 +315,13 @@ int ff_rtp_check_and_send_back_rr(RTPDemuxContext *s, int count)
         avio_w8(pb, 0);
 
     avio_flush(pb);
+    if (!fd)
+        return 0;
     len = avio_close_dyn_buf(pb, &buf);
     if ((len > 0) && buf) {
         int av_unused result;
         av_dlog(s->ic, "sending %d bytes of RR\n", len);
-        result = ffurl_write(s->rtp_ctx, buf, len);
+        result = ffurl_write(fd, buf, len);
         av_dlog(s->ic, "result from ffurl_write: %d\n", result);
         av_free(buf);
     }
@@ -367,8 +372,7 @@ void ff_rtp_send_punch_packets(URLContext *rtp_handle)
  * rtp demux (otherwise AV_CODEC_ID_MPEG2TS packets are returned)
  */
 RTPDemuxContext *ff_rtp_parse_open(AVFormatContext *s1, AVStream *st,
-                                   URLContext *rtpc, int payload_type,
-                                   int queue_size)
+                                   int payload_type, int queue_size)
 {
     RTPDemuxContext *s;
 
@@ -413,7 +417,6 @@ RTPDemuxContext *ff_rtp_parse_open(AVFormatContext *s1, AVStream *st,
         }
     }
     // needed to send back RTCP RR in RTSP sessions
-    s->rtp_ctx = rtpc;
     gethostname(s->hostname, sizeof(s->hostname));
     return s;
 }
@@ -539,7 +542,7 @@ static int rtp_parse_packet_internal(RTPDemuxContext *s, AVPacket *pkt,
         return 0;
     } else if (s->parse_packet) {
         rv = s->parse_packet(s->ic, s->dynamic_protocol_context,
-                             s->st, pkt, &timestamp, buf, len, flags);
+                             s->st, pkt, &timestamp, buf, len, seq, flags);
     } else {
         /* At this point, the RTP header has been stripped;
          * This is ASSUMING that there is only 1 CSRC, which isn't wise. */
@@ -685,7 +688,8 @@ static int rtp_parse_one_packet(RTPDemuxContext *s, AVPacket *pkt,
              * the packet is left with pts == AV_NOPTS_VALUE */
             timestamp = RTP_NOTS_VALUE;
             rv        = s->parse_packet(s->ic, s->dynamic_protocol_context,
-                                        s->st, pkt, &timestamp, NULL, 0, flags);
+                                        s->st, pkt, &timestamp, NULL, 0, 0,
+                                        flags);
             finalize_packet(s, pkt, timestamp);
             return rv;
         } else {

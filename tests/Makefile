@@ -81,6 +81,7 @@ include $(SRC_PATH)/tests/fate/demux.mak
 include $(SRC_PATH)/tests/fate/dfa.mak
 include $(SRC_PATH)/tests/fate/dpcm.mak
 include $(SRC_PATH)/tests/fate/ea.mak
+include $(SRC_PATH)/tests/fate/ffmpeg.mak
 include $(SRC_PATH)/tests/fate/ffprobe.mak
 include $(SRC_PATH)/tests/fate/filter.mak
 include $(SRC_PATH)/tests/fate/flac.mak
@@ -91,13 +92,11 @@ include $(SRC_PATH)/tests/fate/indeo.mak
 include $(SRC_PATH)/tests/fate/libavcodec.mak
 include $(SRC_PATH)/tests/fate/libavformat.mak
 include $(SRC_PATH)/tests/fate/libavutil.mak
-include $(SRC_PATH)/tests/fate/mapchan.mak
 include $(SRC_PATH)/tests/fate/lossless-audio.mak
 include $(SRC_PATH)/tests/fate/lossless-video.mak
 include $(SRC_PATH)/tests/fate/microsoft.mak
 include $(SRC_PATH)/tests/fate/mp3.mak
 include $(SRC_PATH)/tests/fate/mpc.mak
-include $(SRC_PATH)/tests/fate/options.mak
 include $(SRC_PATH)/tests/fate/pcm.mak
 include $(SRC_PATH)/tests/fate/probe.mak
 include $(SRC_PATH)/tests/fate/prores.mak
@@ -120,6 +119,7 @@ FATE-$(CONFIG_FFMPEG) += $(FATE_FFMPEG)
 FATE-$(CONFIG_FFPROBE) += $(FATE_FFPROBE)
 
 FATE_SAMPLES_AVCONV           += $(FATE_SAMPLES_AVCONV-yes)
+FATE_SAMPLES_FFMPEG           += $(FATE_SAMPLES_FFMPEG-yes)
 FATE_EXTERN-$(CONFIG_FFMPEG)  += $(FATE_SAMPLES_AVCONV) $(FATE_SAMPLES_FFMPEG) $(FATE_SAMPLES_FFPROBE)
 FATE_EXTERN += $(FATE_EXTERN-yes)
 

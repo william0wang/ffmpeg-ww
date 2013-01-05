@@ -90,6 +90,8 @@ const int program_birth_year = 2003;
 /* TODO: We assume that a decoded and resampled frame fits into this buffer */
 #define SAMPLE_ARRAY_SIZE (8 * 65536)
 
+#define CURSOR_HIDE_DELAY 1000000
+
 static int64_t sws_flags = SWS_BICUBIC;
 
 typedef struct MyAVPacketList {
@@ -155,7 +157,7 @@ typedef struct VideoState {
     int force_refresh;
     int paused;
     int last_paused;
-    int que_attachments_req;
+    int queue_attachments_req;
     int seek_req;
     int seek_flags;
     int64_t seek_pos;
@@ -303,6 +305,8 @@ static const char *audio_codec_name;
 static const char *subtitle_codec_name;
 static const char *video_codec_name;
 static int rdftspeed = 20;
+static int64_t cursor_last_shown;
+static int cursor_hidden = 0;
 #if CONFIG_AVFILTER
 static char *vfilters = NULL;
 #endif
@@ -824,7 +828,7 @@ static void video_audio_display(VideoState *s)
 {
     int i, i_start, x, y1, y, ys, delay, n, nb_display_channels;
     int ch, channels, h, h2, bgcolor, fgcolor;
-    int16_t time_diff;
+    int64_t time_diff;
     int rdft_bits, nb_freq;
 
     for (rdft_bits = 1; (1 << rdft_bits) < 2 * s->height; rdft_bits++)
@@ -1292,6 +1296,9 @@ static void video_refresh(void *opaque)
     if (!is->paused && get_master_sync_type(is) == AV_SYNC_EXTERNAL_CLOCK && is->realtime)
         check_external_clock_speed(is);
 
+    if (!display_disable && is->show_mode != SHOW_MODE_VIDEO && is->audio_st)
+        video_display(is);
+
     if (is->video_st) {
         if (is->force_refresh)
             pictq_prev_picture(is);
@@ -1303,7 +1310,7 @@ retry:
                 is->frame_last_dropped_pts = AV_NOPTS_VALUE;
             }
             SDL_UnlockMutex(is->pictq_mutex);
-            // nothing to do, no picture to display in the que
+            // nothing to do, no picture to display in the queue
         } else {
             double last_duration, duration, delay;
             /* dequeue the picture */
@@ -1339,7 +1346,7 @@ retry:
             if (is->pictq_size > 1) {
                 VideoPicture *nextvp = &is->pictq[(is->pictq_rindex + 1) % VIDEO_PICTURE_QUEUE_SIZE];
                 duration = nextvp->pts - vp->pts;
-                if((framedrop>0 || (framedrop && get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER)) && time > is->frame_timer + duration){
+                if(!is->step && (framedrop>0 || (framedrop && get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER)) && time > is->frame_timer + duration){
                     is->frame_drops_late++;
                     pictq_next_picture(is);
                     goto retry;
@@ -1392,20 +1399,14 @@ retry:
 
 display:
             /* display picture */
-            if (!display_disable)
+            if (!display_disable && is->show_mode == SHOW_MODE_VIDEO)
                 video_display(is);
 
             pictq_next_picture(is);
+
+            if (is->step && !is->paused)
+                stream_toggle_pause(is);
         }
-    } else if (is->audio_st) {
-        /* draw the next audio frame */
-
-        /* if only audio stream, then display the audio bars (better
-           than nothing, just to test the implementation */
-
-        /* display picture */
-        if (!display_disable)
-            video_display(is);
     }
     is->force_refresh = 0;
     if (show_status) {
@@ -1476,6 +1477,24 @@ static void alloc_picture(VideoState *is)
     vp->allocated = 1;
     SDL_CondSignal(is->pictq_cond);
     SDL_UnlockMutex(is->pictq_mutex);
+}
+
+static void duplicate_right_border_pixels(SDL_Overlay *bmp) {
+    int i, width, height;
+    Uint8 *p, *maxp;
+    for (i = 0; i < 3; i++) {
+        width  = bmp->w;
+        height = bmp->h;
+        if (i > 0) {
+            width  >>= 1;
+            height >>= 1;
+        }
+        if (bmp->pitches[i] > width) {
+            maxp = bmp->pixels[i] + bmp->pitches[i] * height - 1;
+            for (p = bmp->pixels[i] + width - 1; p < maxp; p += bmp->pitches[i])
+                *(p+1) = *p;
+        }
+    }
 }
 
 static int queue_picture(VideoState *is, AVFrame *src_frame, double pts1, int64_t pos, int serial)
@@ -1593,6 +1612,8 @@ static int queue_picture(VideoState *is, AVFrame *src_frame, double pts1, int64_
         sws_scale(is->img_convert_ctx, src_frame->data, src_frame->linesize,
                   0, vp->height, pict.data, pict.linesize);
 #endif
+        /* workaround SDL PITCH_WORKAROUND */
+        duplicate_right_border_pixels(vp->bmp);
         /* update the bitmap content */
         SDL_UnlockYUVOverlay(vp->bmp);
 
@@ -1622,7 +1643,7 @@ static int get_video_frame(VideoState *is, AVFrame *frame, int64_t *pts, AVPacke
         avcodec_flush_buffers(is->video_st->codec);
 
         SDL_LockMutex(is->pictq_mutex);
-        // Make sure there are no long delay timers (ideally we should just flush the que but thats harder)
+        // Make sure there are no long delay timers (ideally we should just flush the queue but that's harder)
         for (i = 0; i < VIDEO_PICTURE_QUEUE_SIZE; i++) {
             is->pictq[i].skip = 1;
         }
@@ -1719,7 +1740,7 @@ fail:
     return ret;
 }
 
-static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const char *vfilters)
+static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const char *vfilters, AVFrame *frame)
 {
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE };
     char sws_flags_str[128];
@@ -1737,7 +1758,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
 
     snprintf(buffersrc_args, sizeof(buffersrc_args),
              "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
-             codec->width, codec->height, codec->pix_fmt,
+             frame->width, frame->height, frame->format,
              is->video_st->time_base.num, is->video_st->time_base.den,
              codec->sample_aspect_ratio.num, FFMAX(codec->sample_aspect_ratio.den, 1));
 
@@ -1821,14 +1842,14 @@ static int video_thread(void *arg)
             continue;
 
 #if CONFIG_AVFILTER
-        if (   last_w != is->video_st->codec->width
-            || last_h != is->video_st->codec->height
-            || last_format != is->video_st->codec->pix_fmt) {
+        if (   last_w != frame->width
+            || last_h != frame->height
+            || last_format != frame->format) {
             av_log(NULL, AV_LOG_INFO, "Frame changed from size:%dx%d to size:%dx%d\n",
-                   last_w, last_h, is->video_st->codec->width, is->video_st->codec->height);
+                   last_w, last_h, frame->width, frame->height);
             avfilter_graph_free(&graph);
             graph = avfilter_graph_alloc();
-            if ((ret = configure_video_filters(graph, is, vfilters)) < 0) {
+            if ((ret = configure_video_filters(graph, is, vfilters, frame)) < 0) {
                 SDL_Event event;
                 event.type = FF_QUIT_EVENT;
                 event.user.data1 = is;
@@ -1838,9 +1859,9 @@ static int video_thread(void *arg)
             }
             filt_in  = is->in_video_filter;
             filt_out = is->out_video_filter;
-            last_w = is->video_st->codec->width;
-            last_h = is->video_st->codec->height;
-            last_format = is->video_st->codec->pix_fmt;
+            last_w = frame->width;
+            last_h = frame->height;
+            last_format = frame->format;
         }
 
         frame->pts = pts_int;
@@ -1903,9 +1924,6 @@ static int video_thread(void *arg)
 
         if (ret < 0)
             goto the_end;
-
-        if (is->step)
-            stream_toggle_pause(is);
     }
  the_end:
     avcodec_flush_buffers(is->video_st->codec);
@@ -2689,9 +2707,9 @@ static int read_thread(void *arg)
             is->seek_req = 0;
             eof = 0;
         }
-        if (is->que_attachments_req) {
+        if (is->queue_attachments_req) {
             avformat_queue_attached_pictures(ic);
-            is->que_attachments_req = 0;
+            is->queue_attachments_req = 0;
         }
 
         /* if the queue are full, no need to read more */
@@ -2815,7 +2833,8 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
 
     is->continue_read_thread = SDL_CreateCond();
 
-    update_external_clock_pts(is, 0.0);
+    //FIXME: use a cleaner way to signal obsolete external clock...
+    update_external_clock_pts(is, (double)AV_NOPTS_VALUE);
     update_external_clock_speed(is, 1.0);
     is->audio_current_pts_drift = -av_gettime() / 1000000.0;
     is->video_current_pts_drift = is->audio_current_pts_drift;
@@ -2882,7 +2901,7 @@ static void stream_cycle_channel(VideoState *is, int codec_type)
     stream_component_close(is, old_index);
     stream_component_open(is, stream_index);
     if (codec_type == AVMEDIA_TYPE_VIDEO)
-        is->que_attachments_req = 1;
+        is->queue_attachments_req = 1;
 }
 
 
@@ -3017,6 +3036,11 @@ static void event_loop(VideoState *cur_stream)
                 break;
             }
         case SDL_MOUSEMOTION:
+            if (cursor_hidden) {
+                SDL_ShowCursor(1);
+                cursor_hidden = 0;
+            }
+            cursor_last_shown = av_gettime();
             if (event.type == SDL_MOUSEBUTTONDOWN) {
                 x = event.button.x;
             } else {
@@ -3063,6 +3087,10 @@ static void event_loop(VideoState *cur_stream)
             alloc_picture(event.user.data1);
             break;
         case FF_REFRESH_EVENT:
+            if (!cursor_hidden && av_gettime() - cursor_last_shown > CURSOR_HIDE_DELAY) {
+                SDL_ShowCursor(0);
+                cursor_hidden = 1;
+            }
             video_refresh(event.user.data1);
             cur_stream->refresh = 0;
             break;

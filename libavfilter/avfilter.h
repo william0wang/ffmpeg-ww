@@ -128,7 +128,7 @@ typedef struct AVFilterBufferRefAudioProps {
     uint64_t channel_layout;    ///< channel layout of audio buffer
     int nb_samples;             ///< number of audio samples per channel
     int sample_rate;            ///< audio buffer sample rate
-    int channels;               ///< number of channels
+    int channels;               ///< number of channels (do not access directly)
 } AVFilterBufferRefAudioProps;
 
 /**
@@ -232,6 +232,11 @@ void avfilter_unref_buffer(AVFilterBufferRef *ref);
  * @param ref pointer to the buffer reference
  */
 void avfilter_unref_bufferp(AVFilterBufferRef **ref);
+
+/**
+ * Get the number of channels of a buffer reference.
+ */
+int avfilter_ref_get_channels(AVFilterBufferRef *ref);
 
 #if FF_API_AVFILTERPAD_PUBLIC
 /**
@@ -699,6 +704,11 @@ struct AVFilterLink {
      * filter.
      */
     int closed;
+
+    /**
+     * Number of channels.
+     */
+    int channels;
 };
 
 /**
@@ -717,6 +727,11 @@ int avfilter_link(AVFilterContext *src, unsigned srcpad,
  * Free the link in *link, and set its pointer to NULL.
  */
 void avfilter_link_free(AVFilterLink **link);
+
+/**
+ * Get the number of channels of a link.
+ */
+int avfilter_link_get_channels(AVFilterLink *link);
 
 /**
  * Set the closed field of a link.
@@ -750,6 +765,9 @@ avfilter_get_video_buffer_ref_from_arrays(uint8_t * const data[4], const int lin
  * Create an audio buffer reference wrapped around an already
  * allocated samples buffer.
  *
+ * See avfilter_get_audio_buffer_ref_from_arrays_channels() for a version
+ * that can handle unknown channel layouts.
+ *
  * @param data           pointers to the samples plane buffers
  * @param linesize       linesize for the samples plane buffers
  * @param perms          the required access permissions
@@ -763,6 +781,27 @@ AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_arrays(uint8_t **data,
                                                              int nb_samples,
                                                              enum AVSampleFormat sample_fmt,
                                                              uint64_t channel_layout);
+/**
+ * Create an audio buffer reference wrapped around an already
+ * allocated samples buffer.
+ *
+ * @param data           pointers to the samples plane buffers
+ * @param linesize       linesize for the samples plane buffers
+ * @param perms          the required access permissions
+ * @param nb_samples     number of samples per channel
+ * @param sample_fmt     the format of each sample in the buffer to allocate
+ * @param channels       the number of channels of the buffer
+ * @param channel_layout the channel layout of the buffer,
+ *                       must be either 0 or consistent with channels
+ */
+AVFilterBufferRef *avfilter_get_audio_buffer_ref_from_arrays_channels(uint8_t **data,
+                                                                      int linesize,
+                                                                      int perms,
+                                                                      int nb_samples,
+                                                                      enum AVSampleFormat sample_fmt,
+                                                                      int channels,
+                                                                      uint64_t channel_layout);
+
 
 
 #define AVFILTER_CMD_FLAG_ONE   1 ///< Stop once a filter understood the command (for target=all for example), fast filters are favored automatically

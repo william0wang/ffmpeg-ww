@@ -36,7 +36,7 @@
 
 #define MAX_SYNC_SIZE 100000
 
-static int check_pes(uint8_t *p, uint8_t *end){
+static int check_pes(const uint8_t *p, const uint8_t *end){
     int pes1;
     int pes2=      (p[3] & 0xC0) == 0x80
                 && (p[4] & 0xC0) != 0x40
@@ -382,7 +382,7 @@ static int mpegps_read_packet(AVFormatContext *s,
     MpegDemuxContext *m = s->priv_data;
     AVStream *st;
     int len, startcode, i, es_type, ret;
-    int lpcm_header_len;
+    int lpcm_header_len = -1; //Init to supress warning
     int request_probe= 0;
     enum AVCodecID codec_id = AV_CODEC_ID_NONE;
     enum AVMediaType type;
@@ -597,7 +597,7 @@ static int vobsub_probe(AVProbeData *p)
 
 static int vobsub_read_header(AVFormatContext *s)
 {
-    int i, header_size, ret = 0, header_parsed = 0, langidx = 0;
+    int i, ret = 0, header_parsed = 0, langidx = 0;
     MpegDemuxContext *vobsub = s->priv_data;
     char *sub_name = NULL;
     size_t fname_len;
@@ -726,11 +726,10 @@ static int vobsub_read_header(AVFormatContext *s)
         goto end;
     }
     av_bprint_finalize(&header, &header_str);
-    header_size = header.len + 1;
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *sub_st = s->streams[i];
         sub_st->codec->extradata      = av_strdup(header_str);
-        sub_st->codec->extradata_size = header_size;
+        sub_st->codec->extradata_size = header.len;
     }
     av_free(header_str);
 

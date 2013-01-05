@@ -1,6 +1,6 @@
 /*
  * audio resampling with soxr
- * Copyright (c) 2012 Rob Sykes <aquegg@yahoo.co.uk>
+ * Copyright (c) 2012 Rob Sykes <robs@users.sourceforge.net>
  *
  * This file is part of FFmpeg.
  *
@@ -46,7 +46,7 @@ static struct ResampleContext *create(struct ResampleContext *c, int out_rate, i
     soxr_io_spec_t io_spec = soxr_io_spec(type, type);
 
     soxr_quality_spec_t q_spec = soxr_quality_spec((int)((precision-2)/4), (SOXR_HI_PREC_CLOCK|SOXR_ROLLOFF_NONE)*!!cheby);
-    q_spec.bits = linear? 0 : precision;
+    q_spec.precision = linear? 0 : precision;
     q_spec.bw_pc = cutoff? FFMAX(FFMIN(cutoff,.995),.8)*100 : q_spec.bw_pc;
 
     soxr_delete((soxr_t)c);

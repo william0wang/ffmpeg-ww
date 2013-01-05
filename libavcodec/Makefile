@@ -71,6 +71,7 @@ OBJS-$(CONFIG_RDFT)                    += rdft.o $(RDFT-OBJS-yes)
 OBJS-$(CONFIG_SINEWIN)                 += sinewin.o
 OBJS-$(CONFIG_VAAPI)                   += vaapi.o
 OBJS-$(CONFIG_VDPAU)                   += vdpau.o
+OBJS-$(CONFIG_VIDEODSP)                += videodsp.o
 OBJS-$(CONFIG_VP3DSP)                  += vp3dsp.o
 
 # decoders/encoders/hardware accelerators
@@ -189,8 +190,8 @@ OBJS-$(CONFIG_ESCAPE130_DECODER)       += escape130.o
 OBJS-$(CONFIG_EXR_DECODER)             += exr.o
 OBJS-$(CONFIG_FFV1_DECODER)            += ffv1dec.o ffv1.o
 OBJS-$(CONFIG_FFV1_ENCODER)            += ffv1enc.o ffv1.o
-OBJS-$(CONFIG_FFVHUFF_DECODER)         += huffyuv.o
-OBJS-$(CONFIG_FFVHUFF_ENCODER)         += huffyuv.o
+OBJS-$(CONFIG_FFVHUFF_DECODER)         += huffyuv.o huffyuvdec.o
+OBJS-$(CONFIG_FFVHUFF_ENCODER)         += huffyuv.o huffyuvenc.o
 OBJS-$(CONFIG_FFWAVESYNTH_DECODER)     += ffwavesynth.o
 OBJS-$(CONFIG_FLAC_DECODER)            += flacdec.o flacdata.o flac.o flacdsp.o
 OBJS-$(CONFIG_FLAC_ENCODER)            += flacenc.o flacdata.o flac.o flacdsp.o vorbis_data.o
@@ -203,7 +204,7 @@ OBJS-$(CONFIG_FOURXM_DECODER)          += 4xm.o
 OBJS-$(CONFIG_FRAPS_DECODER)           += fraps.o
 OBJS-$(CONFIG_FRWU_DECODER)            += frwu.o
 OBJS-$(CONFIG_G723_1_DECODER)          += g723_1.o acelp_vectors.o \
-                                          celp_filters.o
+                                          celp_filters.o celp_math.o
 OBJS-$(CONFIG_G723_1_ENCODER)          += g723_1.o acelp_vectors.o celp_math.o
 OBJS-$(CONFIG_G729_DECODER)            += g729dec.o lsp.o celp_math.o acelp_filters.o acelp_pitch_delay.o acelp_vectors.o g729postfilter.o
 OBJS-$(CONFIG_GIF_DECODER)             += gifdec.o lzw.o
@@ -226,8 +227,8 @@ OBJS-$(CONFIG_H264_DXVA2_HWACCEL)      += dxva2_h264.o
 OBJS-$(CONFIG_H264_VAAPI_HWACCEL)      += vaapi_h264.o
 OBJS-$(CONFIG_H264_VDA_HWACCEL)        += vda_h264.o
 OBJS-$(CONFIG_H264_VDA_DECODER)        += vda_h264_dec.o
-OBJS-$(CONFIG_HUFFYUV_DECODER)         += huffyuv.o
-OBJS-$(CONFIG_HUFFYUV_ENCODER)         += huffyuv.o
+OBJS-$(CONFIG_HUFFYUV_DECODER)         += huffyuv.o huffyuvdec.o
+OBJS-$(CONFIG_HUFFYUV_ENCODER)         += huffyuv.o huffyuvenc.o
 OBJS-$(CONFIG_IAC_DECODER)             += imc.o
 OBJS-$(CONFIG_IDCIN_DECODER)           += idcinvideo.o
 OBJS-$(CONFIG_IDF_DECODER)             += bintext.o cga_data.o
@@ -291,6 +292,7 @@ OBJS-$(CONFIG_MPEG2VIDEO_DECODER)      += mpeg12.o mpeg12data.o
 OBJS-$(CONFIG_MPEG2VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o          \
                                           timecode.o
 OBJS-$(CONFIG_MPEG4_VAAPI_HWACCEL)     += vaapi_mpeg4.o
+OBJS-$(CONFIG_MPL2_DECODER)            += mpl2dec.o ass.o
 OBJS-$(CONFIG_MSMPEG4V1_DECODER)       += msmpeg4.o msmpeg4data.o
 OBJS-$(CONFIG_MSMPEG4V2_DECODER)       += msmpeg4.o msmpeg4data.o h263dec.o \
                                           h263.o ituh263dec.o mpeg4videodec.o
@@ -331,6 +333,7 @@ OBJS-$(CONFIG_PGMYUV_DECODER)          += pnmdec.o pnm.o
 OBJS-$(CONFIG_PGMYUV_ENCODER)          += pnmenc.o pnm.o
 OBJS-$(CONFIG_PGSSUB_DECODER)          += pgssubdec.o
 OBJS-$(CONFIG_PICTOR_DECODER)          += pictordec.o cga_data.o
+OBJS-$(CONFIG_PJS_DECODER)             += textdec.o ass.o
 OBJS-$(CONFIG_PNG_DECODER)             += png.o pngdec.o pngdsp.o
 OBJS-$(CONFIG_PNG_ENCODER)             += png.o pngenc.o
 OBJS-$(CONFIG_PPM_DECODER)             += pnmdec.o pnm.o
@@ -399,6 +402,7 @@ OBJS-$(CONFIG_SRT_DECODER)             += srtdec.o ass.o
 OBJS-$(CONFIG_SRT_ENCODER)             += srtenc.o ass_split.o
 OBJS-$(CONFIG_SUBRIP_DECODER)          += srtdec.o ass.o
 OBJS-$(CONFIG_SUBRIP_ENCODER)          += srtenc.o ass_split.o
+OBJS-$(CONFIG_SUBVIEWER1_DECODER)      += textdec.o ass.o
 OBJS-$(CONFIG_SUBVIEWER_DECODER)       += subviewerdec.o ass.o
 OBJS-$(CONFIG_SUNRAST_DECODER)         += sunrast.o
 OBJS-$(CONFIG_SUNRAST_ENCODER)         += sunrastenc.o
@@ -463,6 +467,7 @@ OBJS-$(CONFIG_VP5_DECODER)             += vp5.o vp56.o vp56data.o vp56dsp.o \
 OBJS-$(CONFIG_VP6_DECODER)             += vp6.o vp56.o vp56data.o vp56dsp.o \
                                           vp6dsp.o vp56rac.o
 OBJS-$(CONFIG_VP8_DECODER)             += vp8.o vp8dsp.o vp56rac.o
+OBJS-$(CONFIG_VPLAYER_DECODER)         += textdec.o ass.o
 OBJS-$(CONFIG_VQA_DECODER)             += vqavideo.o
 OBJS-$(CONFIG_WAVPACK_DECODER)         += wavpack.o
 OBJS-$(CONFIG_WEBVTT_DECODER)          += webvttdec.o

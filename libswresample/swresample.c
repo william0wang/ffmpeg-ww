@@ -80,15 +80,17 @@ static const AVOption options[]={
 {"triangular"           , "select triangular dither"    , 0                      , AV_OPT_TYPE_CONST, {.i64=SWR_DITHER_TRIANGULAR }, INT_MIN, INT_MAX   , PARAM, "dither_method"},
 {"triangular_hp"        , "select triangular dither with high pass" , 0                 , AV_OPT_TYPE_CONST, {.i64=SWR_DITHER_TRIANGULAR_HIGHPASS }, INT_MIN, INT_MAX, PARAM, "dither_method"},
 
-{"filter_size"          , "set resampling filter size"  , OFFSET(filter_size)    , AV_OPT_TYPE_INT  , {.i64=16                    }, 0      , INT_MAX   , PARAM },
-{"phase_shift"          , "set resampling phase shift"  , OFFSET(phase_shift)    , AV_OPT_TYPE_INT  , {.i64=10                    }, 0      , 30        , PARAM },
+{"filter_size"          , "set swr resampling filter size", OFFSET(filter_size)  , AV_OPT_TYPE_INT  , {.i64=32                    }, 0      , INT_MAX   , PARAM },
+{"phase_shift"          , "set swr resampling phase shift", OFFSET(phase_shift)  , AV_OPT_TYPE_INT  , {.i64=10                    }, 0      , 30        , PARAM },
 {"linear_interp"        , "enable linear interpolation" , OFFSET(linear_interp)  , AV_OPT_TYPE_INT  , {.i64=0                     }, 0      , 1         , PARAM },
 {"cutoff"               , "set cutoff frequency ratio"  , OFFSET(cutoff)         , AV_OPT_TYPE_DOUBLE,{.dbl=0.                    }, 0      , 1         , PARAM },
 {"resampler"            , "set resampling Engine"       , OFFSET(engine)         , AV_OPT_TYPE_INT  , {.i64=0                     }, 0      , SWR_ENGINE_NB-1, PARAM, "resampler"},
 {"swr"                  , "select SW Resampler"         , 0                      , AV_OPT_TYPE_CONST, {.i64=SWR_ENGINE_SWR        }, INT_MIN, INT_MAX   , PARAM, "resampler"},
 {"soxr"                 , "select SoX Resampler"        , 0                      , AV_OPT_TYPE_CONST, {.i64=SWR_ENGINE_SOXR       }, INT_MIN, INT_MAX   , PARAM, "resampler"},
-{"precision"            , "set resampling precision"    , OFFSET(precision)      , AV_OPT_TYPE_DOUBLE,{.dbl=20.0                  }, 15.0   , 33.0      , PARAM },
-{"cheby"                , "enable Chebyshev passband"   , OFFSET(cheby)          , AV_OPT_TYPE_INT  , {.i64=0                     }, 0      , 1         , PARAM },
+{"precision"            , "set soxr resampling precision (in bits)"
+                                                        , OFFSET(precision)      , AV_OPT_TYPE_DOUBLE,{.dbl=20.0                  }, 15.0   , 33.0      , PARAM },
+{"cheby"                , "enable soxr Chebyshev passband & higher-precision irrational ratio approximation"
+                                                        , OFFSET(cheby)          , AV_OPT_TYPE_INT  , {.i64=0                     }, 0      , 1         , PARAM },
 {"min_comp"             , "set minimum difference between timestamps and audio data (in seconds) below which no timestamp compensation of either kind is applied"
                                                         , OFFSET(min_compensation),AV_OPT_TYPE_FLOAT ,{.dbl=FLT_MAX               }, 0      , FLT_MAX   , PARAM },
 {"min_hard_comp"        , "set minimum difference between timestamps and audio data (in seconds) to trigger padding/trimming the data."
@@ -97,18 +99,20 @@ static const AVOption options[]={
                                                         , OFFSET(soft_compensation_duration),AV_OPT_TYPE_FLOAT ,{.dbl=1                     }, 0      , INT_MAX   , PARAM },
 {"max_soft_comp"        , "set maximum factor by which data is stretched/squeezed to make it match the timestamps."
                                                         , OFFSET(max_soft_compensation),AV_OPT_TYPE_FLOAT ,{.dbl=0                     }, INT_MIN, INT_MAX   , PARAM },
+{"async"                , "simplified 1 parameter audio timestamp matching, 0(disabled), 1(filling and trimming), >1(maximum stretch/squeeze in samples per second)"
+                                                        , OFFSET(async)          , AV_OPT_TYPE_FLOAT ,{.dbl=0                     }, INT_MIN, INT_MAX   , PARAM },
 
 { "matrix_encoding"     , "set matrixed stereo encoding" , OFFSET(matrix_encoding), AV_OPT_TYPE_INT   ,{.i64 = AV_MATRIX_ENCODING_NONE}, AV_MATRIX_ENCODING_NONE,     AV_MATRIX_ENCODING_NB-1, PARAM, "matrix_encoding" },
     { "none",  "select none",               0, AV_OPT_TYPE_CONST, { .i64 = AV_MATRIX_ENCODING_NONE  }, INT_MIN, INT_MAX, PARAM, "matrix_encoding" },
     { "dolby", "select Dolby",              0, AV_OPT_TYPE_CONST, { .i64 = AV_MATRIX_ENCODING_DOLBY }, INT_MIN, INT_MAX, PARAM, "matrix_encoding" },
     { "dplii", "select Dolby Pro Logic II", 0, AV_OPT_TYPE_CONST, { .i64 = AV_MATRIX_ENCODING_DPLII }, INT_MIN, INT_MAX, PARAM, "matrix_encoding" },
 
-{ "filter_type"         , "select filter type"          , OFFSET(filter_type)    , AV_OPT_TYPE_INT  , { .i64 = SWR_FILTER_TYPE_KAISER }, SWR_FILTER_TYPE_CUBIC, SWR_FILTER_TYPE_KAISER, PARAM, "filter_type" },
+{ "filter_type"         , "select swr filter type"      , OFFSET(filter_type)    , AV_OPT_TYPE_INT  , { .i64 = SWR_FILTER_TYPE_KAISER }, SWR_FILTER_TYPE_CUBIC, SWR_FILTER_TYPE_KAISER, PARAM, "filter_type" },
     { "cubic"           , "select cubic"                , 0                      , AV_OPT_TYPE_CONST, { .i64 = SWR_FILTER_TYPE_CUBIC            }, INT_MIN, INT_MAX, PARAM, "filter_type" },
     { "blackman_nuttall", "select Blackman Nuttall Windowed Sinc", 0             , AV_OPT_TYPE_CONST, { .i64 = SWR_FILTER_TYPE_BLACKMAN_NUTTALL }, INT_MIN, INT_MAX, PARAM, "filter_type" },
     { "kaiser"          , "select Kaiser Windowed Sinc" , 0                      , AV_OPT_TYPE_CONST, { .i64 = SWR_FILTER_TYPE_KAISER           }, INT_MIN, INT_MAX, PARAM, "filter_type" },
 
-{ "kaiser_beta"         , "set Kaiser Window Beta"      , OFFSET(kaiser_beta)    , AV_OPT_TYPE_INT  , {.i64=9                     }, 2      , 16        , PARAM },
+{ "kaiser_beta"         , "set swr Kaiser Window Beta"  , OFFSET(kaiser_beta)    , AV_OPT_TYPE_INT  , {.i64=9                     }, 2      , 16        , PARAM },
 
 {0}
 };
@@ -278,6 +282,14 @@ av_cold int swr_init(struct SwrContext *s){
     set_audiodata_fmt(&s-> in, s-> in_sample_fmt);
     set_audiodata_fmt(&s->out, s->out_sample_fmt);
 
+    if (s->async) {
+        if (s->min_compensation >= FLT_MAX/2)
+            s->min_compensation = 0.001;
+        if (s->async > 1.0001) {
+            s->max_soft_compensation = s->async / (double) s->in_sample_rate;
+        }
+    }
+
     if (s->out_sample_rate!=s->in_sample_rate || (s->flags & SWR_FLAG_RESAMPLE)){
         s->resample = s->resampler->init(s->resample, s->out_sample_rate, s->in_sample_rate, s->filter_size, s->phase_shift, s->linear_interp, s->cutoff, s->int_sample_fmt, s->filter_type, s->kaiser_beta, s->precision, s->cheby);
     }else
@@ -322,7 +334,11 @@ av_cold int swr_init(struct SwrContext *s){
     }
 
     if ((!s->out_ch_layout || !s->in_ch_layout) && s->used_ch_count != s->out.ch_count && !s->rematrix_custom) {
-        av_log(s, AV_LOG_ERROR, "Rematrix is needed but there is not enough information to do it\n");
+        char l1[1024], l2[1024];
+        av_get_channel_layout_string(l1, sizeof(l1), s-> in.ch_count, s-> in_ch_layout);
+        av_get_channel_layout_string(l2, sizeof(l2), s->out.ch_count, s->out_ch_layout);
+        av_log(s, AV_LOG_ERROR, "Rematrix is needed between %s and %s "
+               "but there is not enough information to do it\n", l1, l2);
         return -1;
     }
 

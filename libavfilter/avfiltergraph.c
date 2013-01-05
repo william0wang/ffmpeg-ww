@@ -195,8 +195,11 @@ static int filter_query_formats(AVFilterContext *ctx)
                             ctx->outputs && ctx->outputs[0] ? ctx->outputs[0]->type :
                             AVMEDIA_TYPE_VIDEO;
 
-    if ((ret = ctx->filter->query_formats(ctx)) < 0)
+    if ((ret = ctx->filter->query_formats(ctx)) < 0) {
+        av_log(ctx, AV_LOG_ERROR, "Query format failed for '%s': %s\n",
+               ctx->name, av_err2str(ret));
         return ret;
+    }
 
     formats = ff_all_formats(type);
     if (!formats)
@@ -271,10 +274,12 @@ static int insert_conv_filter(AVFilterGraph *graph, AVFilterLink *link,
 static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 {
     int i, j, ret;
+#if 0
     char filt_args[128];
     AVFilterFormats *formats;
     AVFilterChannelLayouts *chlayouts;
     AVFilterFormats *samplerates;
+#endif
     int scaler_count = 0, resampler_count = 0;
 
     for (j = 0; j < 2; j++) {
@@ -473,6 +478,7 @@ static int pick_format(AVFilterLink *link, AVFilterLink *ref)
         }
         link->in_channel_layouts->nb_channel_layouts = 1;
         link->channel_layout = link->in_channel_layouts->channel_layouts[0];
+        link->channels = av_get_channel_layout_nb_channels(link->channel_layout);
     }
 
     ff_formats_unref(&link->in_formats);
@@ -789,7 +795,8 @@ static int pick_formats(AVFilterGraph *graph)
             if (filter->nb_inputs){
                 for (j = 0; j < filter->nb_inputs; j++){
                     if(filter->inputs[j]->in_formats && filter->inputs[j]->in_formats->format_count == 1) {
-                        pick_format(filter->inputs[j], NULL);
+                        if ((ret = pick_format(filter->inputs[j], NULL)) < 0)
+                            return ret;
                         change = 1;
                     }
                 }
@@ -797,7 +804,8 @@ static int pick_formats(AVFilterGraph *graph)
             if (filter->nb_outputs){
                 for (j = 0; j < filter->nb_outputs; j++){
                     if(filter->outputs[j]->in_formats && filter->outputs[j]->in_formats->format_count == 1) {
-                        pick_format(filter->outputs[j], NULL);
+                        if ((ret = pick_format(filter->outputs[j], NULL)) < 0)
+                            return ret;
                         change = 1;
                     }
                 }
@@ -805,7 +813,8 @@ static int pick_formats(AVFilterGraph *graph)
             if (filter->nb_inputs && filter->nb_outputs && filter->inputs[0]->format>=0) {
                 for (j = 0; j < filter->nb_outputs; j++) {
                     if(filter->outputs[j]->format<0) {
-                        pick_format(filter->outputs[j], filter->inputs[0]);
+                        if ((ret = pick_format(filter->outputs[j], filter->inputs[0])) < 0)
+                            return ret;
                         change = 1;
                     }
                 }
@@ -992,16 +1001,16 @@ int avfilter_graph_queue_command(AVFilterGraph *graph, const char *target, const
     for (i = 0; i < graph->filter_count; i++) {
         AVFilterContext *filter = graph->filters[i];
         if(filter && (!strcmp(target, "all") || !strcmp(target, filter->name) || !strcmp(target, filter->filter->name))){
-            AVFilterCommand **que = &filter->command_queue, *next;
-            while(*que && (*que)->time <= ts)
-                que = &(*que)->next;
-            next= *que;
-            *que= av_mallocz(sizeof(AVFilterCommand));
-            (*que)->command = av_strdup(command);
-            (*que)->arg     = av_strdup(arg);
-            (*que)->time    = ts;
-            (*que)->flags   = flags;
-            (*que)->next    = next;
+            AVFilterCommand **queue = &filter->command_queue, *next;
+            while (*queue && (*queue)->time <= ts)
+                queue = &(*queue)->next;
+            next = *queue;
+            *queue = av_mallocz(sizeof(AVFilterCommand));
+            (*queue)->command = av_strdup(command);
+            (*queue)->arg     = av_strdup(arg);
+            (*queue)->time    = ts;
+            (*queue)->flags   = flags;
+            (*queue)->next    = next;
             if(flags & AVFILTER_CMD_FLAG_ONE)
                 return 0;
         }

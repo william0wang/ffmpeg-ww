@@ -20,6 +20,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/cpu.h"
 #include "libavutil/common.h"
+#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
 #include "formats.h"
@@ -219,11 +220,6 @@ static int filter_frame(AVFilterLink *link, AVFilterBufferRef *picref)
 
     av_assert0(picref);
 
-    if (picref->video->h < 3 || picref->video->w < 3) {
-        av_log(ctx, AV_LOG_ERROR, "Video of less than 3 columns or lines is not supported\n");
-        return AVERROR(EINVAL);
-    }
-
     if (yadif->frame_pending)
         return_frame(ctx, 1);
 
@@ -236,7 +232,7 @@ static int filter_frame(AVFilterLink *link, AVFilterBufferRef *picref)
     if (!yadif->cur)
         return 0;
 
-    if (yadif->auto_enable && !yadif->cur->video->interlaced) {
+    if (yadif->deint && !yadif->cur->video->interlaced) {
         yadif->out  = avfilter_ref_buffer(yadif->cur, ~AV_PERM_WRITE);
         if (!yadif->out)
             return AVERROR(ENOMEM);
@@ -301,42 +297,41 @@ static int request_frame(AVFilterLink *link)
     return 0;
 }
 
-static int poll_frame(AVFilterLink *link)
-{
-    YADIFContext *yadif = link->src->priv;
-    int ret, val;
+#define OFFSET(x) offsetof(YADIFContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
-    if (yadif->frame_pending)
-        return 1;
+#define CONST(name, help, val, unit) { name, help, 0, AV_OPT_TYPE_CONST, {.i64=val}, INT_MIN, INT_MAX, FLAGS, unit }
 
-    val = ff_poll_frame(link->src->inputs[0]);
-    if (val <= 0)
-        return val;
+static const AVOption yadif_options[] = {
+    { "mode",   "specify the interlacing mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=YADIF_MODE_SEND_FRAME}, 0, 3, FLAGS, "mode"},
+    CONST("send_frame",           "send one frame for each frame",                                     YADIF_MODE_SEND_FRAME,           "mode"),
+    CONST("send_field",           "send one frame for each field",                                     YADIF_MODE_SEND_FIELD,           "mode"),
+    CONST("send_frame_nospatial", "send one frame for each frame, but skip spatial interlacing check", YADIF_MODE_SEND_FRAME_NOSPATIAL, "mode"),
+    CONST("send_field_nospatial", "send one frame for each field, but skip spatial interlacing check", YADIF_MODE_SEND_FIELD_NOSPATIAL, "mode"),
 
-    //FIXME change API to not requre this red tape
-    if (val >= 1 && !yadif->next) {
-        if ((ret = ff_request_frame(link->src->inputs[0])) < 0)
-            return ret;
-        val = ff_poll_frame(link->src->inputs[0]);
-        if (val <= 0)
-            return val;
-    }
-    assert(yadif->next || !val);
+    { "parity", "specify the assumed picture field parity", OFFSET(parity), AV_OPT_TYPE_INT, {.i64=YADIF_PARITY_AUTO}, -1, 1, FLAGS, "parity" },
+    CONST("tff",  "assume top field first",    YADIF_PARITY_TFF,  "parity"),
+    CONST("bff",  "assume bottom field first", YADIF_PARITY_BFF,  "parity"),
+    CONST("auto", "auto detect parity",        YADIF_PARITY_AUTO, "parity"),
 
-    if (yadif->auto_enable && yadif->next && !yadif->next->video->interlaced)
-        return val;
+    { "deint", "specify which frames to deinterlace", OFFSET(deint), AV_OPT_TYPE_INT, {.i64=YADIF_DEINT_ALL}, 0, 1, FLAGS, "deint" },
+    CONST("all",        "deinterlace all frames",                       YADIF_DEINT_ALL,         "deint"),
+    CONST("interlaced", "only deinterlace frames marked as interlaced", YADIF_DEINT_INTERLACED,  "deint"),
 
-    return val * ((yadif->mode&1)+1);
-}
+    {NULL},
+};
+
+AVFILTER_DEFINE_CLASS(yadif);
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
     YADIFContext *yadif = ctx->priv;
 
-    if (yadif->prev) avfilter_unref_bufferp(&yadif->prev);
-    if (yadif->cur ) avfilter_unref_bufferp(&yadif->cur );
-    if (yadif->next) avfilter_unref_bufferp(&yadif->next);
+    avfilter_unref_bufferp(&yadif->prev);
+    avfilter_unref_bufferp(&yadif->cur );
+    avfilter_unref_bufferp(&yadif->next);
     av_freep(&yadif->temp_line); yadif->temp_line_size = 0;
+    av_opt_free(yadif);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -374,30 +369,32 @@ static int query_formats(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     YADIFContext *yadif = ctx->priv;
+    static const char *shorthand[] = { "mode", "parity", "enable", NULL };
+    int ret;
 
-    yadif->mode = 0;
-    yadif->parity = -1;
-    yadif->auto_enable = 0;
     yadif->csp = NULL;
 
-    if (args)
-        sscanf(args, "%d:%d:%d",
-               &yadif->mode, &yadif->parity, &yadif->auto_enable);
+    yadif->class = &yadif_class;
+    av_opt_set_defaults(yadif);
+
+    if ((ret = av_opt_set_from_string(yadif, args, shorthand, "=", ":")) < 0)
+        return ret;
 
     yadif->filter_line = filter_line_c;
 
     if (ARCH_X86)
         ff_yadif_init_x86(yadif);
 
-    av_log(ctx, AV_LOG_VERBOSE, "mode:%d parity:%d auto_enable:%d\n",
-           yadif->mode, yadif->parity, yadif->auto_enable);
+    av_log(ctx, AV_LOG_VERBOSE, "mode:%d parity:%d deint:%d\n",
+           yadif->mode, yadif->parity, yadif->deint);
 
     return 0;
 }
 
 static int config_props(AVFilterLink *link)
 {
-    YADIFContext *yadif = link->src->priv;
+    AVFilterContext *ctx = link->src;
+    YADIFContext *yadif = ctx->priv;
 
     link->time_base.num = link->src->inputs[0]->time_base.num;
     link->time_base.den = link->src->inputs[0]->time_base.den * 2;
@@ -406,6 +403,11 @@ static int config_props(AVFilterLink *link)
 
     if(yadif->mode&1)
         link->frame_rate = av_mul_q(link->src->inputs[0]->frame_rate, (AVRational){2,1});
+
+    if (link->w < 3 || link->h < 3) {
+        av_log(ctx, AV_LOG_ERROR, "Video of less than 3 columns or lines is not supported\n");
+        return AVERROR(EINVAL);
+    }
 
     return 0;
 }
@@ -424,7 +426,6 @@ static const AVFilterPad avfilter_vf_yadif_outputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
-        .poll_frame    = poll_frame,
         .request_frame = request_frame,
         .config_props  = config_props,
     },
@@ -441,6 +442,7 @@ AVFilter avfilter_vf_yadif = {
     .query_formats = query_formats,
 
     .inputs    = avfilter_vf_yadif_inputs,
-
     .outputs   = avfilter_vf_yadif_outputs,
+
+    .priv_class = &yadif_class,
 };

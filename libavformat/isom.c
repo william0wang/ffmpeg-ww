@@ -166,6 +166,7 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
     { AV_CODEC_ID_H264, MKTAG('a', 'i', '1', '3') }, /* AVC-Intra 100M 1080p24/30/60 */
     { AV_CODEC_ID_H264, MKTAG('a', 'i', '1', '5') }, /* AVC-Intra 100M 1080i50 */
     { AV_CODEC_ID_H264, MKTAG('a', 'i', '1', '6') }, /* AVC-Intra 100M 1080i60 */
+    { AV_CODEC_ID_H264, MKTAG('A', 'V', 'i', 'n') }, /* AVC-Intra with implicit SPS/PPS */
 
     { AV_CODEC_ID_MPEG1VIDEO, MKTAG('m', '1', 'v', '1') }, /* Apple MPEG-1 Camcorder */
     { AV_CODEC_ID_MPEG1VIDEO, MKTAG('m', 'p', 'e', 'g') }, /* MPEG */
@@ -228,7 +229,7 @@ const AVCodecTag ff_codec_movvideo_tags[] = {
 
     { AV_CODEC_ID_DIRAC,     MKTAG('d', 'r', 'a', 'c') },
     { AV_CODEC_ID_DNXHD,     MKTAG('A', 'V', 'd', 'n') }, /* AVID DNxHD */
-//  { AV_CODEC_ID_FLV1,      MKTAG('H', '2', '6', '3') }, /* Flash Media Server, forced in demuxer */
+    { AV_CODEC_ID_H263,      MKTAG('H', '2', '6', '3') },
     { AV_CODEC_ID_MSMPEG4V3, MKTAG('3', 'I', 'V', 'D') }, /* 3ivx DivX Doctor */
     { AV_CODEC_ID_RAWVIDEO,  MKTAG('A', 'V', '1', 'x') }, /* AVID 1:1x */
     { AV_CODEC_ID_RAWVIDEO,  MKTAG('A', 'V', 'u', 'p') },

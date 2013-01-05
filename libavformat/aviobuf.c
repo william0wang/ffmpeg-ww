@@ -483,7 +483,7 @@ int avio_read(AVIOContext *s, unsigned char *buf, int size)
         len = s->buf_end - s->buf_ptr;
         if (len > size)
             len = size;
-        if (len == 0) {
+        if (len == 0 || s->write_flag) {
             if((s->direct || size > s->buffer_size) && !s->update_checksum){
                 if(s->read_packet)
                     len = s->read_packet(s->opaque, buf, size);
@@ -529,8 +529,22 @@ int ffio_read_partial(AVIOContext *s, unsigned char *buf, int size)
     if (size < 0)
         return -1;
 
+    if (s->read_packet && s->write_flag) {
+        len = s->read_packet(s->opaque, buf, size);
+        if (len > 0)
+            s->pos += len;
+        return len;
+    }
+
     len = s->buf_end - s->buf_ptr;
     if (len == 0) {
+        /* Reset the buf_end pointer to the start of the buffer, to make sure
+         * the fill_buffer call tries to read as much data as fits into the
+         * full buffer, instead of just what space is left after buf_end.
+         * This avoids returning partial packets at the end of the buffer,
+         * for packet based inputs.
+         */
+        s->buf_end = s->buf_ptr = s->buffer;
         fill_buffer(s);
         len = s->buf_end - s->buf_ptr;
     }

@@ -1276,6 +1276,7 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
             int color_greyscale;
             int color_table_id;
 
+            st->codec->codec_id = id;
             avio_rb16(pb); /* version */
             avio_rb16(pb); /* revision level */
             avio_rb32(pb); /* vendor */
@@ -1297,13 +1298,15 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
             if (len < 31)
                 avio_skip(pb, 31 - len);
             /* codec_tag YV12 triggers an UV swap in rawdec.c */
-            if (!memcmp(st->codec->codec_name, "Planar Y'CbCr 8-bit 4:2:0", 25))
+            if (!memcmp(st->codec->codec_name, "Planar Y'CbCr 8-bit 4:2:0", 25)){
                 st->codec->codec_tag=MKTAG('I', '4', '2', '0');
-            /* Flash Media Server streams files with Sorenson Spark and tag H263 */
-            if (!memcmp(st->codec->codec_name, "Sorenson H263", 13)
-                && format == MKTAG('H','2','6','3'))
-                id = AV_CODEC_ID_FLV1;
-            st->codec->codec_id = id;
+                st->codec->width &= ~1;
+                st->codec->height &= ~1;
+            }
+            /* Flash Media Server uses tag H263 with Sorenson Spark */
+            if (format == MKTAG('H','2','6','3') &&
+                !memcmp(st->codec->codec_name, "Sorenson H263", 13))
+                st->codec->codec_id = AV_CODEC_ID_FLV1;
 
             st->codec->bits_per_coded_sample = avio_rb16(pb); /* depth */
             color_table_id = avio_rb16(pb); /* colortable id */
@@ -2248,6 +2251,12 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 #endif
     }
 
+    // done for ai5q, ai52, ai55, ai1q, ai12 and ai15.
+    if (!st->codec->extradata_size && st->codec->codec_id == AV_CODEC_ID_H264 &&
+        st->codec->codec_tag != MKTAG('a', 'v', 'c', '1')) {
+        ff_generate_avci_extradata(st);
+    }
+
     switch (st->codec->codec_id) {
 #if CONFIG_H261_DECODER
     case AV_CODEC_ID_H261:
@@ -2693,27 +2702,14 @@ static int mov_read_chan2(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
-static int mov_read_tref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+static int mov_read_tmcd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
-    uint32_t i, size;
     MOVStreamContext *sc;
 
     if (c->fc->nb_streams < 1)
         return AVERROR_INVALIDDATA;
     sc = c->fc->streams[c->fc->nb_streams - 1]->priv_data;
-
-    size = avio_rb32(pb);
-    if (size < 12)
-        return 0;
-
-    sc->trefs_count = (size - 4) / 8;
-    sc->trefs = av_malloc(sc->trefs_count * sizeof(*sc->trefs));
-    if (!sc->trefs)
-        return AVERROR(ENOMEM);
-
-    sc->tref_type = avio_rl32(pb);
-    for (i = 0; i < sc->trefs_count; i++)
-        sc->trefs[i] = avio_rb32(pb);
+    sc->timecode_track = avio_rb32(pb);
     return 0;
 }
 
@@ -2764,7 +2760,8 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('t','f','h','d'), mov_read_tfhd }, /* track fragment header */
 { MKTAG('t','r','a','k'), mov_read_trak },
 { MKTAG('t','r','a','f'), mov_read_default },
-{ MKTAG('t','r','e','f'), mov_read_tref },
+{ MKTAG('t','r','e','f'), mov_read_default },
+{ MKTAG('t','m','c','d'), mov_read_tmcd },
 { MKTAG('c','h','a','p'), mov_read_chap },
 { MKTAG('t','r','e','x'), mov_read_trex },
 { MKTAG('t','r','u','n'), mov_read_trun },
@@ -3074,7 +3071,6 @@ static int mov_read_close(AVFormatContext *s)
             av_freep(&sc->drefs[j].dir);
         }
         av_freep(&sc->drefs);
-        av_freep(&sc->trefs);
         if (sc->pb && sc->pb != s->pb)
             avio_close(sc->pb);
         sc->pb = NULL;
@@ -3102,17 +3098,15 @@ static int mov_read_close(AVFormatContext *s)
 
 static int tmcd_is_referenced(AVFormatContext *s, int tmcd_id)
 {
-    int i, j;
+    int i;
 
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         MOVStreamContext *sc = st->priv_data;
 
-        if (s->streams[i]->codec->codec_type != AVMEDIA_TYPE_VIDEO)
-            continue;
-        for (j = 0; j < sc->trefs_count; j++)
-            if (tmcd_id == sc->trefs[j])
-                return 1;
+        if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO &&
+            sc->timecode_track == tmcd_id)
+            return 1;
     }
     return 0;
 }
@@ -3140,7 +3134,7 @@ static int mov_read_header(AVFormatContext *s)
 {
     MOVContext *mov = s->priv_data;
     AVIOContext *pb = s->pb;
-    int i, err;
+    int i, j, err;
     MOVAtom atom = { AV_RL32("root") };
 
     mov->fc = s;
@@ -3175,11 +3169,15 @@ static int mov_read_header(AVFormatContext *s)
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         MOVStreamContext *sc = st->priv_data;
-        if (sc->tref_type == AV_RL32("tmcd") && sc->trefs_count) {
+        if (sc->timecode_track > 0) {
             AVDictionaryEntry *tcr;
-            int tmcd_st_id = sc->trefs[0] - 1;
+            int tmcd_st_id = -1;
 
-            if (tmcd_st_id < 0 || tmcd_st_id >= s->nb_streams)
+            for (j = 0; j < s->nb_streams; j++)
+                if (s->streams[j]->id == sc->timecode_track)
+                    tmcd_st_id = j;
+
+            if (tmcd_st_id < 0)
                 continue;
             tcr = av_dict_get(s->streams[tmcd_st_id]->metadata, "timecode", NULL, 0);
             if (tcr)

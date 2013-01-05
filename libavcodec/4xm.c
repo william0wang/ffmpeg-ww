@@ -346,11 +346,11 @@ static void decode_p_block(FourXContext *f, uint16_t *dst, uint16_t *src,
     av_assert2(code >= 0 && code <= 6);
 
     if (code == 0) {
-        if (f->g.buffer_end - f->g.buffer < 1) {
+        if (bytestream2_get_bytes_left(&f->g) < 1) {
             av_log(f->avctx, AV_LOG_ERROR, "bytestream overread\n");
             return;
         }
-        src += f->mv[bytestream2_get_byte(&f->g)];
+        src += f->mv[bytestream2_get_byteu(&f->g)];
         if (start > src || src > end) {
             av_log(f->avctx, AV_LOG_ERROR, "mv out of pic\n");
             return;
@@ -369,37 +369,37 @@ static void decode_p_block(FourXContext *f, uint16_t *dst, uint16_t *src,
     } else if (code == 3 && f->version < 2) {
         mcdc(dst, src, log2w, h, stride, 1, 0);
     } else if (code == 4) {
-        if (f->g.buffer_end - f->g.buffer < 1) {
+        if (bytestream2_get_bytes_left(&f->g) < 1) {
             av_log(f->avctx, AV_LOG_ERROR, "bytestream overread\n");
             return;
         }
-        src += f->mv[bytestream2_get_byte(&f->g)];
+        src += f->mv[bytestream2_get_byteu(&f->g)];
         if (start > src || src > end) {
             av_log(f->avctx, AV_LOG_ERROR, "mv out of pic\n");
             return;
         }
-        if (f->g2.buffer_end - f->g2.buffer < 1){
+        if (bytestream2_get_bytes_left(&f->g2) < 2){
             av_log(f->avctx, AV_LOG_ERROR, "wordstream overread\n");
             return;
         }
-        mcdc(dst, src, log2w, h, stride, 1, bytestream2_get_le16(&f->g2));
+        mcdc(dst, src, log2w, h, stride, 1, bytestream2_get_le16u(&f->g2));
     } else if (code == 5) {
-        if (f->g2.buffer_end - f->g2.buffer < 1) {
+        if (bytestream2_get_bytes_left(&f->g2) < 2) {
             av_log(f->avctx, AV_LOG_ERROR, "wordstream overread\n");
             return;
         }
-        mcdc(dst, src, log2w, h, stride, 0, bytestream2_get_le16(&f->g2));
+        mcdc(dst, src, log2w, h, stride, 0, bytestream2_get_le16u(&f->g2));
     } else if (code == 6) {
-        if (f->g2.buffer_end - f->g2.buffer < 2) {
+        if (bytestream2_get_bytes_left(&f->g2) < 4) {
             av_log(f->avctx, AV_LOG_ERROR, "wordstream overread\n");
             return;
         }
         if (log2w) {
-            dst[0]      = bytestream2_get_le16(&f->g2);
-            dst[1]      = bytestream2_get_le16(&f->g2);
+            dst[0]      = bytestream2_get_le16u(&f->g2);
+            dst[1]      = bytestream2_get_le16u(&f->g2);
         } else {
-            dst[0]      = bytestream2_get_le16(&f->g2);
-            dst[stride] = bytestream2_get_le16(&f->g2);
+            dst[0]      = bytestream2_get_le16u(&f->g2);
+            dst[stride] = bytestream2_get_le16u(&f->g2);
         }
     }
 }
@@ -842,7 +842,7 @@ static int decode_frame(AVCodecContext *avctx, void *data,
                                      cfrm->size + data_size + FF_INPUT_BUFFER_PADDING_SIZE);
         // explicit check needed as memcpy below might not catch a NULL
         if (!cfrm->data) {
-            av_log(f->avctx, AV_LOG_ERROR, "realloc falure\n");
+            av_log(f->avctx, AV_LOG_ERROR, "realloc failure\n");
             return -1;
         }
 
@@ -901,6 +901,8 @@ static int decode_frame(AVCodecContext *avctx, void *data,
                 av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
                 return -1;
             }
+            for (i=0; i<avctx->height; i++)
+                memset(f->last_picture.data[0] + i*f->last_picture.linesize[0], 0, 2*avctx->width);
         }
 
         p->pict_type = AV_PICTURE_TYPE_P;

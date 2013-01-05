@@ -55,20 +55,20 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     }
 
     if (args) {
-        char *ptr=argd, *token;
+        char *ptr = argd, *token;
 
-        while(token = av_strtok(ptr, ":", &ptr)) {
+        while (token = av_strtok(ptr, ":", &ptr)) {
             char *value;
             av_strtok(token, "=", &value);
 
-            if(value) {
-                if((ret=av_opt_set(aresample->swr, token, value, 0)) < 0)
+            if (value) {
+                if ((ret = av_opt_set(aresample->swr, token, value, 0)) < 0)
                     goto end;
             } else {
                 int out_rate;
                 if ((ret = ff_parse_sample_rate(&out_rate, token, ctx)) < 0)
                     goto end;
-                if((ret = av_opt_set_int(aresample->swr, "osr", out_rate, 0)) < 0)
+                if ((ret = av_opt_set_int(aresample->swr, "osr", out_rate, 0)) < 0)
                     goto end;
             }
         }
@@ -184,6 +184,7 @@ static int filter_frame(AVFilterLink *inlink, AVFilterBufferRef *insamplesref)
 
     avfilter_copy_buffer_ref_props(outsamplesref, insamplesref);
     outsamplesref->format                = outlink->format;
+    outsamplesref->audio->channels       = outlink->channels;
     outsamplesref->audio->channel_layout = outlink->channel_layout;
     outsamplesref->audio->sample_rate    = outlink->sample_rate;
 

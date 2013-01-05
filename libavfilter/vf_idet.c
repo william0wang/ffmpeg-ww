@@ -18,14 +18,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <float.h> /* FLT_MAX */
+
 #include "libavutil/cpu.h"
 #include "libavutil/common.h"
+#include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
 #include "internal.h"
-
-#undef NDEBUG
-#include <assert.h>
 
 #define HIST_SIZE 4
 
@@ -37,12 +37,13 @@ typedef enum {
 } Type;
 
 typedef struct {
+    const AVClass *class;
     float interlace_threshold;
     float progressive_threshold;
 
     Type last_type;
-    Type prestat[4];
-    Type poststat[4];
+    int prestat[4];
+    int poststat[4];
 
     uint8_t history[HIST_SIZE];
 
@@ -53,6 +54,17 @@ typedef struct {
 
     const AVPixFmtDescriptor *csp;
 } IDETContext;
+
+#define OFFSET(x) offsetof(IDETContext, x)
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
+
+static const AVOption idet_options[] = {
+    { "intl_thres", "set interlacing threshold", OFFSET(interlace_threshold),   AV_OPT_TYPE_FLOAT, {.dbl = 1.01}, -1, FLT_MAX, FLAGS },
+    { "prog_thres", "set progressive threshold", OFFSET(progressive_threshold), AV_OPT_TYPE_FLOAT, {.dbl = 2.5},  -1, FLT_MAX, FLAGS },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(idet);
 
 static const char *type2str(Type type)
 {
@@ -207,23 +219,6 @@ static int request_frame(AVFilterLink *link)
     return 0;
 }
 
-static int poll_frame(AVFilterLink *link)
-{
-    IDETContext *idet = link->src->priv;
-    int ret, val;
-
-    val = ff_poll_frame(link->src->inputs[0]);
-
-    if (val >= 1 && !idet->next) { //FIXME change API to not requre this red tape
-        if ((ret = ff_request_frame(link->src->inputs[0])) < 0)
-            return ret;
-        val = ff_poll_frame(link->src->inputs[0]);
-    }
-    assert(idet->next || !val);
-
-    return val;
-}
-
 static av_cold void uninit(AVFilterContext *ctx)
 {
     IDETContext *idet = ctx->priv;
@@ -279,13 +274,14 @@ static int query_formats(AVFilterContext *ctx)
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     IDETContext *idet = ctx->priv;
+    static const char *shorthand[] = { "intl_thres", "prog_thres", NULL };
+    int ret;
 
-    idet->csp = NULL;
+    idet->class = &idet_class;
+    av_opt_set_defaults(idet);
 
-    idet->interlace_threshold   = 1.01;
-    idet->progressive_threshold = 2.5;
-
-    if (args) sscanf(args, "%f:%f", &idet->interlace_threshold, &idet->progressive_threshold);
+    if ((ret = av_opt_set_from_string(idet, args, shorthand, "=", ":")) < 0)
+        return ret;
 
     idet->last_type = UNDETERMINED;
     memset(idet->history, UNDETERMINED, HIST_SIZE);
@@ -311,7 +307,6 @@ static const AVFilterPad idet_outputs[] = {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
         .rej_perms     = AV_PERM_WRITE,
-        .poll_frame    = poll_frame,
         .request_frame = request_frame,
     },
     { NULL }
@@ -327,4 +322,5 @@ AVFilter avfilter_vf_idet = {
     .query_formats = query_formats,
     .inputs        = idet_inputs,
     .outputs       = idet_outputs,
+    .priv_class    = &idet_class,
 };
