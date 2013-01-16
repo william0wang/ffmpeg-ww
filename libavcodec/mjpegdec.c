@@ -852,7 +852,7 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor,
 
     point_transform += bits - s->bits;
 
-    av_assert0(nb_components==1 || nb_components==3);
+    av_assert0(nb_components>=1 && nb_components<=3);
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
@@ -1590,7 +1590,7 @@ int ff_mjpeg_find_marker(MJpegDecodeContext *s,
                 while ((src + t < buf_end) && x == 0xff)
                     x = src[t++];
                 if (x & 0x80) {
-                    t -= 2;
+                    t -= FFMIN(2, t);
                     break;
                 }
             }

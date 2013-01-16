@@ -43,7 +43,8 @@ OBJS-$(CONFIG_RTPDEC)                    += rdt.o                       \
                                             rtpdec_qt.o                 \
                                             rtpdec_svq3.o               \
                                             rtpdec_vp8.o                \
-                                            rtpdec_xiph.o
+                                            rtpdec_xiph.o               \
+                                            srtp.o
 OBJS-$(CONFIG_RTPENC_CHAIN)              += rtpenc_chain.o rtp.o
 
 # muxers/demuxers
@@ -136,6 +137,7 @@ OBJS-$(CONFIG_FLV_MUXER)                 += flvenc.o avc.o
 OBJS-$(CONFIG_FOURXM_DEMUXER)            += 4xm.o
 OBJS-$(CONFIG_FRAMECRC_MUXER)            += framecrcenc.o framehash.o
 OBJS-$(CONFIG_FRAMEMD5_MUXER)            += md5enc.o framehash.o
+OBJS-$(CONFIG_FRM_DEMUXER)               += frmdec.o
 OBJS-$(CONFIG_GIF_MUXER)                 += gif.o
 OBJS-$(CONFIG_GIF_DEMUXER)               += gifdec.o
 OBJS-$(CONFIG_GSM_DEMUXER)               += gsmdec.o
@@ -429,6 +431,7 @@ OBJS-$(CONFIG_RTMPTE_PROTOCOL)           += rtmpproto.o rtmppkt.o
 OBJS-$(CONFIG_RTMPTS_PROTOCOL)           += rtmpproto.o rtmppkt.o
 OBJS-$(CONFIG_RTP_PROTOCOL)              += rtpproto.o
 OBJS-$(CONFIG_SCTP_PROTOCOL)             += sctp.o
+OBJS-$(CONFIG_SRTP_PROTOCOL)             += srtpproto.o srtp.o
 OBJS-$(CONFIG_TCP_PROTOCOL)              += tcp.o
 OBJS-$(CONFIG_TLS_PROTOCOL)              += tls.o
 OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o

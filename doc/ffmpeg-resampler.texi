@@ -104,6 +104,21 @@ select rectangular dither
 select triangular dither
 @item triangular_hp
 select triangular dither with high pass
+@item lipshitz
+select lipshitz noise shaping dither
+@item shibata
+select shibata noise shaping dither
+@item low_shibata
+select low shibata noise shaping dither
+@item high_shibata
+select high shibata noise shaping dither
+@item f_weighted
+select f-weighted noise shaping dither
+@item modified_e_weighted
+select modified-e-weighted noise shaping dither
+@item improved_e_weighted
+select improved-e-weighted noise shaping dither
+
 @end table
 
 @item resampler
@@ -144,6 +159,14 @@ value of 28 gives SoX's 'Very High Quality'.
 @item cheby
 For soxr only, selects passband rolloff none (Chebyshev) & higher-precision
 approximation for 'irrational' ratios. Default value is 0.
+
+@item async
+For swr only, simple 1 parameter audio sync to timestamps using stretching,
+squeezing, filling and trimming. Setting this to 1 will enable filling and
+trimming, larger values represent the maximum amount in samples that the data
+may be stretched or squeezed for each second.
+Default value is 0, thus no compensation is applied to make the samples match
+the audio timestamps.
 
 @item min_comp
 For swr only, set the minimum difference between timestamps and audio data (in

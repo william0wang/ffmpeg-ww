@@ -257,15 +257,12 @@ hadamard8_16_wrapper 0, 14
 %endmacro
 
 INIT_MMX mmx
-%define ABS1 ABS1_MMX
 HADAMARD8_DIFF
 
 INIT_MMX mmxext
-%define ABS1 ABS1_MMXEXT
 HADAMARD8_DIFF
 
 INIT_XMM sse2
-%define ABS2 ABS2_MMXEXT
 %if ARCH_X86_64
 %define ABS_SUM_8x8 ABS_SUM_8x8_64
 %else
@@ -274,7 +271,6 @@ INIT_XMM sse2
 HADAMARD8_DIFF 10
 
 INIT_XMM ssse3
-%define ABS2        ABS2_SSSE3
 %define ABS_SUM_8x8 ABS_SUM_8x8_64
 HADAMARD8_DIFF 9
 

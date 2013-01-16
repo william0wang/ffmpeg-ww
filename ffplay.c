@@ -1753,6 +1753,7 @@ static int configure_video_filters(AVFilterGraph *graph, VideoState *is, const c
     if (!buffersink_params)
         return AVERROR(ENOMEM);
 
+    av_opt_get_int(sws_opts, "sws_flags", 0, &sws_flags);
     snprintf(sws_flags_str, sizeof(sws_flags_str), "flags=%"PRId64, sws_flags);
     graph->scale_sws_opts = av_strdup(sws_flags_str);
 
@@ -3241,7 +3242,7 @@ static const OptionDef options[] = {
     { "infbuf", OPT_BOOL | OPT_EXPERT, { &infinite_buffer }, "don't limit the input buffer size (useful with realtime streams)", "" },
     { "window_title", OPT_STRING | HAS_ARG, { &window_title }, "set window title", "window title" },
 #if CONFIG_AVFILTER
-    { "vf", OPT_STRING | HAS_ARG, { &vfilters }, "video filters", "filter list" },
+    { "vf", OPT_STRING | HAS_ARG, { &vfilters }, "set video filters", "filter_graph" },
 #endif
     { "rdftspeed", OPT_INT | HAS_ARG| OPT_AUDIO | OPT_EXPERT, { &rdftspeed }, "rdft speed", "msecs" },
     { "showmode", HAS_ARG, { .func_arg = opt_show_mode}, "select show mode (0 = video, 1 = waves, 2 = RDFT)", "mode" },

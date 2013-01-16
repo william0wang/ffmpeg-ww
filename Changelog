@@ -2,6 +2,11 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- VDPAU hardware acceleration through normal hwaccel
+- SRTP support
+
+
+version 1.1:
 
 - stream disposition information printing in ffprobe
 - filter for loudness analysis following EBU R128
@@ -55,6 +60,11 @@ version <next>:
 - adobe and limelight publisher authentication in RTMP
 - data: URI scheme
 - support building on the Plan 9 operating system
+- kerndeint filter ported from MPlayer
+- histeq filter ported from VirtualDub
+- Megalux Frame demuxer
+- 012v decoder
+- Improved AVC Intra decoding support
 
 
 version 1.0:

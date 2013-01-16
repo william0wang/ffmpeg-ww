@@ -831,6 +831,13 @@ int ff_get_audio_frame_size(AVCodecContext *enc, int size, int mux)
     if (enc->frame_size > 1)
         return enc->frame_size;
 
+    //For WMA we currently have no other means to calculate duration thus we
+    //do it here by assuming CBR, which is true for all known cases.
+    if(!mux && enc->bit_rate>0 && size>0 && enc->sample_rate>0 && enc->block_align>1) {
+        if (enc->codec_id == AV_CODEC_ID_WMAV1 || enc->codec_id == AV_CODEC_ID_WMAV2)
+            return  ((int64_t)size * 8 * enc->sample_rate) / enc->bit_rate;
+    }
+
     return -1;
 }
 
@@ -2769,7 +2776,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         /* we did not get all the codec info, but we read too much data */
         if (read_size >= ic->probesize) {
             ret = count;
-            av_log(ic, AV_LOG_DEBUG, "Probe buffer size limit %d reached\n", ic->probesize);
+            av_log(ic, AV_LOG_DEBUG, "Probe buffer size limit of %d bytes reached\n", ic->probesize);
             for (i = 0; i < ic->nb_streams; i++)
                 if (!ic->streams[i]->r_frame_rate.num &&
                     ic->streams[i]->info->duration_count <= 1)
@@ -2842,7 +2849,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 t = FFMAX(t, av_rescale_q(st->codec_info_nb_frames, av_inv_q(st->avg_frame_rate), AV_TIME_BASE_Q));
 
             if (t >= ic->max_analyze_duration) {
-                av_log(ic, AV_LOG_WARNING, "max_analyze_duration %d reached at %"PRId64"\n", ic->max_analyze_duration, t);
+                av_log(ic, AV_LOG_WARNING, "max_analyze_duration %d reached at %"PRId64" microseconds\n", ic->max_analyze_duration, t);
                 break;
             }
             if (pkt->duration) {
@@ -2854,7 +2861,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         {
             int64_t last = st->info->last_dts;
 
-            if(pkt->dts != AV_NOPTS_VALUE && last != AV_NOPTS_VALUE && pkt->dts > last){
+            if(   pkt->dts != AV_NOPTS_VALUE && last != AV_NOPTS_VALUE && pkt->dts > last
+               && pkt->dts - (uint64_t)last < INT64_MAX){
                 double dts= (is_relative(pkt->dts) ?  pkt->dts - RELATIVE_TS_BASE : pkt->dts) * av_q2d(st->time_base);
                 int64_t duration= pkt->dts - last;
 
@@ -2954,7 +2962,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
             if(st->codec->codec_id == AV_CODEC_ID_RAWVIDEO && !st->codec->codec_tag && !st->codec->bits_per_coded_sample){
                 uint32_t tag= avcodec_pix_fmt_to_codec_tag(st->codec->pix_fmt);
-                if(ff_find_pix_fmt(ff_raw_pix_fmt_tags, tag) == st->codec->pix_fmt)
+                if (avpriv_find_pix_fmt(ff_raw_pix_fmt_tags, tag) == st->codec->pix_fmt)
                     st->codec->codec_tag= tag;
             }
 
@@ -4288,8 +4296,8 @@ void ff_generate_avci_extradata(AVStream *st)
         0x9c, 0x0b, 0x73, 0xe6, 0xc0, 0xb5, 0x18, 0x63,
         0x0d, 0x39, 0xe0, 0x5b, 0x02, 0xd4, 0xc6, 0x19,
         0x1a, 0x79, 0x8c, 0x32, 0x34, 0x24, 0xf0, 0x16,
-        0x81, 0x13, 0xf7, 0xff, 0x80, 0x01, 0x80, 0x02,
-        0x71, 0x80, 0x80, 0x80, 0xa0, 0x00, 0x00, 0x03,
+        0x81, 0x13, 0xf7, 0xff, 0x80, 0x02, 0x00, 0x01,
+        0xf1, 0x80, 0x80, 0x80, 0xa0, 0x00, 0x00, 0x03,
         0x00, 0x20, 0x00, 0x00, 0x06, 0x50, 0x80, 0x00,
         // PPS
         0x00, 0x00, 0x00, 0x01, 0x68, 0xee, 0x31, 0x12,

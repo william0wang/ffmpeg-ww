@@ -122,6 +122,7 @@ void av_register_all(void)
     REGISTER_DEMUXER (FOURXM,           fourxm);
     REGISTER_MUXER   (FRAMECRC,         framecrc);
     REGISTER_MUXER   (FRAMEMD5,         framemd5);
+    REGISTER_DEMUXER (FRM,              frm);
     REGISTER_MUXDEMUX(G722,             g722);
     REGISTER_MUXDEMUX(G723_1,           g723_1);
     REGISTER_DEMUXER (G729,             g729);
@@ -326,6 +327,7 @@ void av_register_all(void)
     REGISTER_PROTOCOL(RTMPTS,           rtmpts);
     REGISTER_PROTOCOL(RTP,              rtp);
     REGISTER_PROTOCOL(SCTP,             sctp);
+    REGISTER_PROTOCOL(SRTP,             srtp);
     REGISTER_PROTOCOL(TCP,              tcp);
     REGISTER_PROTOCOL(TLS,              tls);
     REGISTER_PROTOCOL(UDP,              udp);
