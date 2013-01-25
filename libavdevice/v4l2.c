@@ -24,7 +24,7 @@
  * Video4Linux2 grab interface
  *
  * Part of this file is based on the V4L2 video capture example
- * (http://v4l2spec.bytesex.org/v4l2spec/capture.c)
+ * (http://linuxtv.org/downloads/v4l-dvb-apis/capture-example.html)
  *
  * Thanks to Michael Niedermayer for providing the mapping between
  * V4L2_PIX_FMT_* and AV_PIX_FMT_*
@@ -221,7 +221,7 @@ static int device_init(AVFormatContext *ctx, int *width, int *height,
     struct v4l2_format fmt = { .type = V4L2_BUF_TYPE_VIDEO_CAPTURE };
     struct v4l2_pix_format *pix = &fmt.fmt.pix;
 
-    int res;
+    int res = 0;
 
     pix->width = *width;
     pix->height = *height;
@@ -248,7 +248,8 @@ static int device_init(AVFormatContext *ctx, int *width, int *height,
     }
 
     if (fmt.fmt.pix.field == V4L2_FIELD_INTERLACED) {
-        av_log(ctx, AV_LOG_DEBUG, "The V4L2 driver using the interlaced mode");
+        av_log(ctx, AV_LOG_DEBUG,
+               "The V4L2 driver is using the interlaced mode\n");
         s->interlaced = 1;
     }
 

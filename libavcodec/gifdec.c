@@ -75,6 +75,7 @@ typedef struct GifState {
 
     AVCodecContext *avctx;
     int keyframe;
+    int keyframe_ok;
     int trans_color;    /**< color value that is used instead of transparent color */
 } GifState;
 
@@ -118,7 +119,7 @@ static void gif_copy_img_rect(const uint32_t *src, uint32_t *dst,
     const uint32_t *src_px, *src_pr,
                    *src_py = src + y_start,
                    *dst_py = dst + y_start;
-    const uint32_t *src_pb = src_py + t * linesize;
+    const uint32_t *src_pb = src_py + h * linesize;
     uint32_t *dst_px;
 
     for (; src_py < src_pb; src_py += linesize, dst_py += linesize) {
@@ -185,6 +186,8 @@ static int gif_read_image(GifState *s)
     /* verify that all the image is inside the screen dimensions */
     if (left + width > s->screen_width ||
         top + height > s->screen_height)
+        return AVERROR_INVALIDDATA;
+    if (width <= 0 || height <= 0)
         return AVERROR_INVALIDDATA;
 
     /* process disposal method */
@@ -472,6 +475,7 @@ static int gif_decode_frame(AVCodecContext *avctx, void *data, int *got_frame, A
     }
 
     if (s->keyframe) {
+        s->keyframe_ok = 0;
         if ((ret = gif_read_header1(s)) < 0)
             return ret;
 
@@ -489,7 +493,13 @@ static int gif_decode_frame(AVCodecContext *avctx, void *data, int *got_frame, A
 
         s->picture.pict_type = AV_PICTURE_TYPE_I;
         s->picture.key_frame = 1;
+        s->keyframe_ok = 1;
     } else {
+        if (!s->keyframe_ok) {
+            av_log(avctx, AV_LOG_ERROR, "cannot decode frame without keyframe\n");
+            return AVERROR_INVALIDDATA;
+        }
+
         if ((ret = avctx->reget_buffer(avctx, &s->picture)) < 0) {
             av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
             return ret;

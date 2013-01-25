@@ -282,6 +282,83 @@ aconvert=u8:auto
 @end example
 @end itemize
 
+@section afade
+
+Apply fade-in/out effect to input audio.
+
+The filter accepts parameters as a list of @var{key}=@var{value}
+pairs, separated by ":".
+
+A description of the accepted parameters follows.
+
+@table @option
+@item type, t
+Specify the effect type, can be either @code{in} for fade-in, or
+@code{out} for a fade-out effect. Default is @code{in}.
+
+@item start_sample, ss
+Specify the number of the start sample for starting to apply the fade
+effect. Default is 0.
+
+@item nb_samples, ns
+Specify the number of samples for which the fade effect has to last. At
+the end of the fade-in effect the output audio will have the same
+volume as the input audio, at the end of the fade-out transition
+the output audio will be silence. Default is 44100.
+
+@item start_time, st
+Specify time in seconds for starting to apply the fade
+effect. Default is 0.
+If set this option is used instead of @var{start_sample} one.
+
+@item duration, d
+Specify the number of seconds for which the fade effect has to last. At
+the end of the fade-in effect the output audio will have the same
+volume as the input audio, at the end of the fade-out transition
+the output audio will be silence. Default is 0.
+If set this option is used instead of @var{nb_samples} one.
+
+@item curve
+Set cuve for fade transition.
+@table @option
+@item @var{triangular, linear slope (default)}
+@code{tri}
+@item @var{quarter of sine wave}
+@code{qsin}
+@item @var{half of sine wave}
+@code{esin}
+@item @var{exponential sine wave}
+@code{hsin}
+@item @var{logarithmic}
+@code{log}
+@item @var{inverted parabola}
+@code{par}
+@item @var{quadratic}
+@code{qua}
+@item @var{cubic}
+@code{cub}
+@item @var{square root}
+@code{squ}
+@item @var{cubic root}
+@code{cbr}
+@end table
+@end table
+
+@subsection Examples
+@itemize
+@item
+Fade in first 15 seconds of audio:
+@example
+afade=t=in:ss=0:d=15
+@end example
+
+@item
+Fade out last 25 seconds of a 900 seconds audio:
+@example
+afade=t=out:ss=875:d=25
+@end example
+@end itemize
+
 @section aformat
 
 Set output format constraints for the input audio. The framework will
@@ -718,7 +795,7 @@ ffmpeg -f lavfi -i amovie=silence.mp3,silencedetect=noise=0.0001 -f null -
 Synchronize audio data with timestamps by squeezing/stretching it and/or
 dropping samples/adding silence when needed.
 
-As an alternative, you can use @ref{aresample} to do squeezing/stretching.
+This filter is not built by default, please use @ref{aresample} to do squeezing/stretching.
 
 The filter accepts the following named parameters:
 @table @option
@@ -1865,10 +1942,8 @@ Set the thickness of the box edge. Default value is @code{4}.
 @end table
 
 If the key of the first options is omitted, the arguments are
-interpreted according to the following syntax:
-@example
-drawbox=@var{x}:@var{y}:@var{width}:@var{height}:@var{color}:@var{thickness}
-@end example
+interpreted according to the syntax
+@var{x}:@var{y}:@var{width}:@var{height}:@var{color}:@var{thickness}.
 
 Some examples follow:
 @itemize
@@ -2278,56 +2353,70 @@ edgedetect=low=0.1:high=0.4
 
 Apply fade-in/out effect to input video.
 
-It accepts the parameters:
-@var{type}:@var{start_frame}:@var{nb_frames}[:@var{options}]
+The filter accepts parameters as a list of @var{key}=@var{value}
+pairs, separated by ":". If the key of the first options is omitted,
+the arguments are interpreted according to the syntax
+@var{type}:@var{start_frame}:@var{nb_frames}.
 
-@var{type} specifies if the effect type, can be either "in" for
-fade-in, or "out" for a fade-out effect.
-
-@var{start_frame} specifies the number of the start frame for starting
-to apply the fade effect.
-
-@var{nb_frames} specifies the number of frames for which the fade
-effect has to last. At the end of the fade-in effect the output video
-will have the same intensity as the input video, at the end of the
-fade-out transition the output video will be completely black.
-
-@var{options} is an optional sequence of @var{key}=@var{value} pairs,
-separated by ":". The description of the accepted options follows.
+A description of the accepted parameters follows.
 
 @table @option
-
 @item type, t
-See @var{type}.
+Specify if the effect type, can be either @code{in} for fade-in, or
+@code{out} for a fade-out effect. Default is @code{in}.
 
 @item start_frame, s
-See @var{start_frame}.
+Specify the number of the start frame for starting to apply the fade
+effect. Default is 0.
 
 @item nb_frames, n
-See @var{nb_frames}.
+Specify the number of frames for which the fade effect has to last. At
+the end of the fade-in effect the output video will have the same
+intensity as the input video, at the end of the fade-out transition
+the output video will be completely black. Default is 25.
 
 @item alpha
 If set to 1, fade only alpha channel, if one exists on the input.
 Default value is 0.
 @end table
 
-A few usage examples follow, usable too as test scenarios.
+@subsection Examples
+@itemize
+@item
+Fade in first 30 frames of video:
 @example
-# fade in first 30 frames of video
 fade=in:0:30
+@end example
 
-# fade out last 45 frames of a 200-frame video
+The command above is equivalent to:
+@example
+fade=t=in:s=0:n=30
+@end example
+
+@item
+Fade out last 45 frames of a 200-frame video:
+@example
 fade=out:155:45
+@end example
 
-# fade in first 25 frames and fade out last 25 frames of a 1000-frame video
+@item
+Fade in first 25 frames and fade out last 25 frames of a 1000-frame video:
+@example
 fade=in:0:25, fade=out:975:25
+@end example
 
-# make first 5 frames black, then fade in from frame 5-24
+@item
+Make first 5 frames black, then fade in from frame 5-24:
+@example
 fade=in:5:20
+@end example
 
-# fade in alpha over first 25 frames of video
+@item
+Fade in alpha over first 25 frames of video:
+@example
 fade=in:0:25:alpha=1
 @end example
+@end itemize
 
 @section field
 
