@@ -599,8 +599,10 @@ static const uint8_t *read_huffman_tables(FourXContext *f,
     for (;;) {
         int i;
 
-        if (start <= end && ptr_end - ptr < end - start + 1 + 1)
+        if (ptr_end - ptr < FFMAX(end - start + 1, 0) + 1) {
+            av_log(f->avctx, AV_LOG_ERROR, "invalid data in read_huffman_tables\n");
             return NULL;
+        }
         for (i = start; i <= end; i++)
             frequency[i] = *ptr++;
         start = *ptr++;
@@ -613,6 +615,11 @@ static const uint8_t *read_huffman_tables(FourXContext *f,
 
     while ((ptr - buf) & 3)
         ptr++; // 4byte align
+
+    if (ptr > ptr_end) {
+        av_log(f->avctx, AV_LOG_ERROR, "ptr overflow in read_huffman_tables\n");
+        return NULL;
+    }
 
     for (j = 257; j < 512; j++) {
         int min_freq[2] = { 256 * 256, 256 * 256 };
@@ -752,6 +759,8 @@ static int decode_i_frame(FourXContext *f, const uint8_t *buf, int length)
     prestream = read_huffman_tables(f, prestream, buf + length - prestream);
     if (!prestream)
         return -1;
+
+    av_assert0(prestream <= buf + length);
 
     init_get_bits(&f->gb, buf + 4, 8 * bitstream_size);
 
@@ -940,8 +949,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
         return AVERROR_INVALIDDATA;
     }
 
-    avcodec_get_frame_defaults(&f->current_picture);
-    avcodec_get_frame_defaults(&f->last_picture);
     f->version = AV_RL32(avctx->extradata) >> 16;
     ff_dsputil_init(&f->dsp, avctx);
     f->avctx = avctx;

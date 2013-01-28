@@ -300,11 +300,13 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 
     if (s->v_max == 1 && s->h_max == 1 && s->lossless==1 && nb_components==3)
         s->rgb = 1;
+    else if (!s->lossless)
+        s->rgb = 0;
 
     /* if different size, realloc/alloc picture */
     if (   width != s->width || height != s->height
-        || memcmp(s->h_count, h_count, sizeof(h_count[0])*nb_components)
-        || memcmp(s->v_count, v_count, sizeof(v_count[0])*nb_components)) {
+        || memcmp(s->h_count, h_count, sizeof(h_count))
+        || memcmp(s->v_count, v_count, sizeof(v_count))) {
         av_freep(&s->qscale_table);
 
         s->width      = width;
@@ -1735,23 +1737,23 @@ eoi_parser:
                     if (s->bottom_field == !s->interlace_polarity)
                         break;
                 }
-                    *picture   = *s->picture_ptr;
-                    *got_frame = 1;
-                    s->got_picture = 0;
+                *picture   = *s->picture_ptr;
+                *got_frame = 1;
+                s->got_picture = 0;
 
-                    if (!s->lossless) {
-                        picture->quality      = FFMAX3(s->qscale[0],
-                                                       s->qscale[1],
-                                                       s->qscale[2]);
-                        picture->qstride      = 0;
-                        picture->qscale_table = s->qscale_table;
-                        memset(picture->qscale_table, picture->quality,
-                               (s->width + 15) / 16);
-                        if (avctx->debug & FF_DEBUG_QP)
-                            av_log(avctx, AV_LOG_DEBUG,
-                                   "QP: %d\n", picture->quality);
-                        picture->quality *= FF_QP2LAMBDA;
-                    }
+                if (!s->lossless) {
+                    picture->quality      = FFMAX3(s->qscale[0],
+                                                   s->qscale[1],
+                                                   s->qscale[2]);
+                    picture->qstride      = 0;
+                    picture->qscale_table = s->qscale_table;
+                    memset(picture->qscale_table, picture->quality,
+                           (s->width + 15) / 16);
+                    if (avctx->debug & FF_DEBUG_QP)
+                        av_log(avctx, AV_LOG_DEBUG,
+                               "QP: %d\n", picture->quality);
+                    picture->quality *= FF_QP2LAMBDA;
+                }
 
                 goto the_end;
             case SOS:
