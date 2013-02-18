@@ -2,6 +2,7 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+
 - VDPAU hardware acceleration through normal hwaccel
 - SRTP support
 - Error diffusion dither in Swscale
@@ -10,6 +11,17 @@ version <next>:
 - EVRC decoder
 - audio fade filter
 - filtering audio with unknown channel layout
+- allpass, bass, bandpass, bandreject, biquad, equalizer, highpass, lowpass
+  and treble audio filter
+- improved showspectrum filter, with multichannel support and sox-like colors
+- histogram filter
+- tee muxer
+- il filter ported from libmpcodecs
+- support ID3v2 tags in ASF files
+- encrypted TTA stream decoding support
+- RF64 support in WAV muxer
+- noise filter ported from libmpcodecs
+- Subtitles character encoding conversion
 
 
 version 1.1:

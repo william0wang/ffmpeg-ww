@@ -2,6 +2,7 @@
 ;* mpeg4 qpel
 ;* Copyright (c) 2003 Michael Niedermayer <michaelni@gmx.at>
 ;* Copyright (c) 2008 Loren Merritt
+;* Copyright (c) 2013 Daniel Kang
 ;*
 ;* This file is part of FFmpeg.
 ;*
@@ -101,7 +102,7 @@ PUT_NO_RND_PIXELS8_L2
 ; put_no_rnd_pixels16_l2(uint8_t *dst, uint8_t *src1, uint8_t *src2, int dstStride, int src1Stride, int h)
 %macro PUT_NO_RND_PIXELS16_l2 0
 cglobal put_no_rnd_pixels16_l2, 6,6
-    movsxdifnidn r3, r3
+    movsxdifnidn r3, r3d
     movsxdifnidn r4, r4d
     pcmpeqb      m6, m6
     test        r5d, 1
@@ -169,7 +170,7 @@ INIT_MMX 3dnow
 PUT_NO_RND_PIXELS16_l2
 
 %macro MPEG4_QPEL16_H_LOWPASS 1
-cglobal %1_mpeg4_qpel16_h_lowpass, 5, 5, 0, 8
+cglobal %1_mpeg4_qpel16_h_lowpass, 5, 5, 0, 16
     movsxdifnidn r2, r2d
     movsxdifnidn r3, r3d
     pxor         m7, m7
@@ -202,7 +203,7 @@ cglobal %1_mpeg4_qpel16_h_lowpass, 5, 5, 0, 8
     paddw        m6, [PW_ROUND]
     paddw        m0, m6
     psraw        m0, 5
-    mova    [rsp-8], m0
+    mova    [rsp+8], m0
     mova         m0, [r1+5]
     mova         m5, m0
     mova         m6, m0
@@ -226,7 +227,7 @@ cglobal %1_mpeg4_qpel16_h_lowpass, 5, 5, 0, 8
     paddw        m1, [PW_ROUND]
     paddw        m3, m1
     psraw        m3, 5
-    mova         m1, [rsp-8]
+    mova         m1, [rsp+8]
     packuswb     m1, m3
     OP_MOV     [r0], m1, m4
     mova         m1, [r1+9]

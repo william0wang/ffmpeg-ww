@@ -27,11 +27,13 @@
  * The simplest mpeg encoder (well, it was the simplest!).
  */
 
+#include "libavutil/internal.h"
 #include "libavutil/intmath.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/opt.h"
 #include "avcodec.h"
+#include "dct.h"
 #include "dsputil.h"
 #include "mpegvideo.h"
 #include "h263.h"
@@ -1117,11 +1119,20 @@ static int load_input_picture(MpegEncContext *s, const AVFrame *pic_arg)
                     if (src_stride == dst_stride)
                         memcpy(dst, src, src_stride * h);
                     else {
-                        while (h--) {
-                            memcpy(dst, src, w);
-                            dst += dst_stride;
+                        int h2 = h;
+                        uint8_t *dst2 = dst;
+                        while (h2--) {
+                            memcpy(dst2, src, w);
+                            dst2 += dst_stride;
                             src += src_stride;
                         }
+                    }
+                    if ((s->width & 15) || (s->height & 15)) {
+                        s->dsp.draw_edges(dst, dst_stride,
+                                          w, h,
+                                          16>>h_shift,
+                                          16>>v_shift,
+                                          EDGE_BOTTOM);
                     }
                 }
             }
@@ -2844,6 +2855,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
                         int16_t ac[6][16];
                         const int mvdir= (best_s.mv_dir&MV_DIR_BACKWARD) ? 1 : 0;
                         static const int dquant_tab[4]={-1,1,-2,2};
+                        int storecoefs = s->mb_intra && s->dc_val[0];
 
                         av_assert2(backup_s.dquant == 0);
 
@@ -2863,7 +2875,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
                             if(qp < s->avctx->qmin || qp > s->avctx->qmax)
                                 continue;
                             backup_s.dquant= dquant;
-                            if(s->mb_intra && s->dc_val[0]){
+                            if(storecoefs){
                                 for(i=0; i<6; i++){
                                     dc[i]= s->dc_val[0][ s->block_index[i] ];
                                     memcpy(ac[i], s->ac_val[0][s->block_index[i]], sizeof(int16_t)*16);
@@ -2873,7 +2885,7 @@ static int encode_thread(AVCodecContext *c, void *arg){
                             encode_mb_hq(s, &backup_s, &best_s, CANDIDATE_MB_TYPE_INTER /* wrong but unused */, pb, pb2, tex_pb,
                                          &dmin, &next_block, s->mv[mvdir][0][0], s->mv[mvdir][0][1]);
                             if(best_s.qscale != qp){
-                                if(s->mb_intra && s->dc_val[0]){
+                                if(storecoefs){
                                     for(i=0; i<6; i++){
                                         s->dc_val[0][ s->block_index[i] ]= dc[i];
                                         memcpy(s->ac_val[0][s->block_index[i]], ac[i], sizeof(int16_t)*16);
@@ -3160,7 +3172,7 @@ static void merge_context_after_encode(MpegEncContext *dst, MpegEncContext *src)
     MERGE(b_count);
     MERGE(skip_count);
     MERGE(misc_bits);
-    MERGE(error_count);
+    MERGE(er.error_count);
     MERGE(padding_bug_score);
     MERGE(current_picture.f.error[0]);
     MERGE(current_picture.f.error[1]);

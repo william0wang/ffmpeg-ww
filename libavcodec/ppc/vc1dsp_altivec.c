@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/ppc/types_altivec.h"
 #include "libavutil/ppc/util_altivec.h"
 #include "libavcodec/dsputil.h"
@@ -325,17 +326,17 @@ static void vc1_inv_trans_8x4_altivec(uint8_t *dest, int stride, int16_t *block)
 
 #define OP_U8_ALTIVEC                          PUT_OP_U8_ALTIVEC
 #define PREFIX_no_rnd_vc1_chroma_mc8_altivec   put_no_rnd_vc1_chroma_mc8_altivec
-#include "h264_qpel_template.c"
+#include "h264chroma_template.c"
 #undef OP_U8_ALTIVEC
 #undef PREFIX_no_rnd_vc1_chroma_mc8_altivec
 
 #define OP_U8_ALTIVEC                          AVG_OP_U8_ALTIVEC
 #define PREFIX_no_rnd_vc1_chroma_mc8_altivec   avg_no_rnd_vc1_chroma_mc8_altivec
-#include "h264_qpel_template.c"
+#include "h264chroma_template.c"
 #undef OP_U8_ALTIVEC
 #undef PREFIX_no_rnd_vc1_chroma_mc8_altivec
 
-void ff_vc1dsp_init_altivec(VC1DSPContext* dsp)
+av_cold void ff_vc1dsp_init_altivec(VC1DSPContext *dsp)
 {
     if (!(av_get_cpu_flags() & AV_CPU_FLAG_ALTIVEC))
         return;

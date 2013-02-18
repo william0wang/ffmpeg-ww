@@ -1024,7 +1024,7 @@ ffmpeg -filter_complex 'color=c=red' -t 5 out.mkv
 
 As a special exception, you can use a bitmap subtitle stream as input: it
 will be converted into a video with the same size as the largest video in
-the file, or 720×576 if no video is present. Note that this is an
+the file, or 720x576 if no video is present. Note that this is an
 experimental and temporary solution. It will be removed once libavfilter has
 proper support for subtitles.
 
@@ -1330,7 +1330,7 @@ ffmpeg -i src.ext -lmax 21*QP2LAMBDA dst.ext
 @url{ffmpeg-scaler.html,ffmpeg-scaler},
 @url{ffmpeg-resampler.html,ffmpeg-resampler},
 @url{ffmpeg-codecs.html,ffmpeg-codecs},
-@url{ffmpeg-bitstream-filters,ffmpeg-bitstream-filters},
+@url{ffmpeg-bitstream-filters.html,ffmpeg-bitstream-filters},
 @url{ffmpeg-formats.html,ffmpeg-formats},
 @url{ffmpeg-devices.html,ffmpeg-devices},
 @url{ffmpeg-protocols.html,ffmpeg-protocols},

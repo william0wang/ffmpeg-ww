@@ -20,9 +20,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-
+#include "libavutil/attributes.h"
 #include "libavcodec/avcodec.h"
 #include "libavcodec/dsputil.h"
+#include "libavcodec/rnd_avg.h"
 #include "dsputil_sh4.h"
 
 
@@ -64,34 +65,6 @@
                 ref+=stride; \
                 dest+=stride; \
         } while(--height)
-
-
-#define         OP      put
-
-static void put_pixels4_c(uint8_t *dest,const uint8_t *ref, const int stride,int height)
-{
-        switch((int)ref&3){
-        case 0: OP_C40(); return;
-        case 1: OP_C4(1); return;
-        case 2: OP_C4(2); return;
-        case 3: OP_C4(3); return;
-        }
-}
-
-#undef          OP
-#define         OP      avg
-
-static void avg_pixels4_c(uint8_t *dest,const uint8_t *ref, const int stride,int height)
-{
-        switch((int)ref&3){
-        case 0: OP_C40(); return;
-        case 1: OP_C4(1); return;
-        case 2: OP_C4(2); return;
-        case 3: OP_C4(3); return;
-        }
-}
-
-#undef          OP
 
 #define         OP_C(ofs,sz,avg2) \
 { \
@@ -262,7 +235,7 @@ if (sz==16) { \
 
 #define         DEFFUNC(op,rnd,xy,sz,OP_N,avgfunc) \
 static void op##_##rnd##_pixels##sz##_##xy (uint8_t * dest, const uint8_t * ref, \
-                                const int stride, int height) \
+                                const ptrdiff_t stride, int height) \
 { \
         switch((int)ref&3) { \
         case 0:OP_N##0(sz,rnd##_##avgfunc); return; \
@@ -326,7 +299,7 @@ DEFFUNC(avg,no_rnd,xy,16,OP_XY,PACK)
 
 #endif
 
-void ff_dsputil_init_align(DSPContext* c, AVCodecContext *avctx)
+av_cold void ff_dsputil_init_align(DSPContext *c, AVCodecContext *avctx)
 {
         const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
@@ -397,14 +370,6 @@ void ff_dsputil_init_align(DSPContext* c, AVCodecContext *avctx)
     /* dspfunc(avg_no_rnd_qpel, 1, 8); */
 
 #undef dspfunc
-    if (!high_bit_depth) {
-    c->put_h264_chroma_pixels_tab[0]= put_h264_chroma_mc8_sh4;
-    c->put_h264_chroma_pixels_tab[1]= put_h264_chroma_mc4_sh4;
-    c->put_h264_chroma_pixels_tab[2]= put_h264_chroma_mc2_sh4;
-    c->avg_h264_chroma_pixels_tab[0]= avg_h264_chroma_mc8_sh4;
-    c->avg_h264_chroma_pixels_tab[1]= avg_h264_chroma_mc4_sh4;
-    c->avg_h264_chroma_pixels_tab[2]= avg_h264_chroma_mc2_sh4;
-    }
 
     c->put_mspel_pixels_tab[0]= put_mspel8_mc00_sh4;
     c->put_mspel_pixels_tab[1]= put_mspel8_mc10_sh4;

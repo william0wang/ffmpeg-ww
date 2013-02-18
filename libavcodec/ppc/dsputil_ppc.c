@@ -22,6 +22,7 @@
 
 #include <string.h>
 
+#include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/mem.h"
 #include "libavcodec/dsputil.h"
@@ -137,7 +138,7 @@ static long check_dcbzl_effect(void)
 }
 #endif
 
-void ff_dsputil_init_ppc(DSPContext* c, AVCodecContext *avctx)
+av_cold void ff_dsputil_init_ppc(DSPContext *c, AVCodecContext *avctx)
 {
     const int high_bit_depth = avctx->bits_per_raw_sample > 8;
     int mm_flags = av_get_cpu_flags();
@@ -164,8 +165,6 @@ void ff_dsputil_init_ppc(DSPContext* c, AVCodecContext *avctx)
     }
 
 #if HAVE_ALTIVEC
-    if(CONFIG_H264_DECODER) ff_dsputil_h264_init_ppc(c, avctx);
-
     if (mm_flags & AV_CPU_FLAG_ALTIVEC) {
         ff_dsputil_init_altivec(c, avctx);
         ff_int_init_altivec(c, avctx);

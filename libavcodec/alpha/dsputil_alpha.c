@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "libavcodec/dsputil.h"
 #include "dsputil_alpha.h"
 #include "asm.h"
@@ -32,7 +33,7 @@ void (*add_pixels_clamped_axp_p)(const int16_t *block, uint8_t *pixels,
 /* These functions were the base for the optimized assembler routines,
    and remain here for documentation purposes.  */
 static void put_pixels_clamped_mvi(const int16_t *block, uint8_t *pixels,
-                                   int line_size)
+                                   ptrdiff_t line_size)
 {
     int i = 8;
     uint64_t clampmask = zap(-1, 0xaa); /* 0x00ff00ff00ff00ff */
@@ -56,7 +57,7 @@ static void put_pixels_clamped_mvi(const int16_t *block, uint8_t *pixels,
 }
 
 void add_pixels_clamped_mvi(const int16_t *block, uint8_t *pixels,
-                            int line_size)
+                            ptrdiff_t line_size)
 {
     int h = 8;
     /* Keep this function a leaf function by generating the constants
@@ -211,8 +212,8 @@ static inline uint64_t avg4(uint64_t l1, uint64_t l2, uint64_t l3, uint64_t l4)
 
 #define MAKE_OP(OPNAME, SUFF, OPKIND, STORE)                                \
 static void OPNAME ## _pixels ## SUFF ## _axp                               \
-        (uint8_t *av_restrict block, const uint8_t *av_restrict pixels,           \
-         int line_size, int h)                                              \
+        (uint8_t *restrict block, const uint8_t *restrict pixels,           \
+         ptrdiff_t line_size, int h)                                        \
 {                                                                           \
     if ((size_t) pixels & 0x7) {                                            \
         OPKIND(uldq, STORE);                                                \
@@ -222,8 +223,8 @@ static void OPNAME ## _pixels ## SUFF ## _axp                               \
 }                                                                           \
                                                                             \
 static void OPNAME ## _pixels16 ## SUFF ## _axp                             \
-        (uint8_t *av_restrict block, const uint8_t *av_restrict pixels,           \
-         int line_size, int h)                                              \
+        (uint8_t *restrict block, const uint8_t *restrict pixels,           \
+         ptrdiff_t line_size, int h)                                        \
 {                                                                           \
     OPNAME ## _pixels ## SUFF ## _axp(block,     pixels,     line_size, h); \
     OPNAME ## _pixels ## SUFF ## _axp(block + 8, pixels + 8, line_size, h); \
@@ -262,13 +263,13 @@ PIXOP(put_no_rnd, STORE);
 PIXOP(avg_no_rnd, STORE);
 
 static void put_pixels16_axp_asm(uint8_t *block, const uint8_t *pixels,
-                                 int line_size, int h)
+                                 ptrdiff_t line_size, int h)
 {
     put_pixels_axp_asm(block,     pixels,     line_size, h);
     put_pixels_axp_asm(block + 8, pixels + 8, line_size, h);
 }
 
-void ff_dsputil_init_alpha(DSPContext* c, AVCodecContext *avctx)
+av_cold void ff_dsputil_init_alpha(DSPContext *c, AVCodecContext *avctx)
 {
     const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 

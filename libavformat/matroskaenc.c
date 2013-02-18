@@ -498,8 +498,9 @@ static int mkv_write_codecprivate(AVFormatContext *s, AVIOContext *pb, AVCodecCo
             if (!codec->codec_tag)
                 codec->codec_tag = ff_codec_get_tag(ff_codec_bmp_tags, codec->codec_id);
             if (!codec->codec_tag) {
-                av_log(s, AV_LOG_ERROR, "No bmp codec ID found.\n");
-                ret = -1;
+                av_log(s, AV_LOG_ERROR, "No bmp codec tag found for codec %s\n",
+                       avcodec_get_name(codec->codec_id));
+                ret = AVERROR(EINVAL);
             }
 
             ff_put_bmp_header(dyn_cp, codec, ff_codec_bmp_tags, 0);
@@ -509,8 +510,9 @@ static int mkv_write_codecprivate(AVFormatContext *s, AVIOContext *pb, AVCodecCo
         unsigned int tag;
         tag = ff_codec_get_tag(ff_codec_wav_tags, codec->codec_id);
         if (!tag) {
-            av_log(s, AV_LOG_ERROR, "No wav codec ID found.\n");
-            ret = -1;
+            av_log(s, AV_LOG_ERROR, "No wav codec tag found for codec %s\n",
+                   avcodec_get_name(codec->codec_id));
+            ret = AVERROR(EINVAL);
         }
         if (!codec->codec_tag)
             codec->codec_tag = tag;
@@ -530,12 +532,16 @@ static int mkv_write_tracks(AVFormatContext *s)
     MatroskaMuxContext *mkv = s->priv_data;
     AVIOContext *pb = s->pb;
     ebml_master tracks;
-    int i, j, ret;
+    int i, j, ret, default_stream_exists = 0;
 
     ret = mkv_add_seekhead_entry(mkv->main_seekhead, MATROSKA_ID_TRACKS, avio_tell(pb));
     if (ret < 0) return ret;
 
     tracks = start_ebml_master(pb, MATROSKA_ID_TRACKS, 0);
+    for (i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        default_stream_exists |= st->disposition & AV_DISPOSITION_DEFAULT;
+    }
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         AVCodecContext *codec = st->codec;
@@ -570,8 +576,9 @@ static int mkv_write_tracks(AVFormatContext *s)
         tag = av_dict_get(st->metadata, "language", NULL, 0);
         put_ebml_string(pb, MATROSKA_ID_TRACKLANGUAGE, tag ? tag->value:"und");
 
-        if (st->disposition)
+        if (default_stream_exists) {
             put_ebml_uint(pb, MATROSKA_ID_TRACKFLAGDEFAULT, !!(st->disposition & AV_DISPOSITION_DEFAULT));
+        }
         if (st->disposition & AV_DISPOSITION_FORCED)
             put_ebml_uint(pb, MATROSKA_ID_TRACKFLAGFORCED, 1);
 
@@ -930,6 +937,19 @@ static int mkv_write_header(AVFormatContext *s)
 
     if (s->avoid_negative_ts < 0)
         s->avoid_negative_ts = 1;
+
+    for (i = 0; i < s->nb_streams; i++)
+        if (s->streams[i]->codec->codec_id == AV_CODEC_ID_ATRAC3 ||
+            s->streams[i]->codec->codec_id == AV_CODEC_ID_COOK ||
+            s->streams[i]->codec->codec_id == AV_CODEC_ID_RA_288 ||
+            s->streams[i]->codec->codec_id == AV_CODEC_ID_SIPR ||
+            s->streams[i]->codec->codec_id == AV_CODEC_ID_RV10 ||
+            s->streams[i]->codec->codec_id == AV_CODEC_ID_RV20) {
+            av_log(s, AV_LOG_ERROR,
+                   "The Matroska muxer does not yet support muxing %s\n",
+                   avcodec_get_name(s->streams[i]->codec->codec_id));
+            return AVERROR_PATCHWELCOME;
+        }
 
     mkv->tracks = av_mallocz(s->nb_streams * sizeof(*mkv->tracks));
     if (!mkv->tracks)

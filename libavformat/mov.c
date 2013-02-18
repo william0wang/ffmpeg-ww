@@ -696,6 +696,9 @@ static int mov_read_chan(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     if (atom.size < 16)
         return 0;
 
+    /* skip version and flags */
+    avio_skip(pb, 4);
+
     ff_mov_read_chan(c->fc, pb, st, atom.size - 4);
 
     return 0;
@@ -2692,15 +2695,6 @@ static int mov_read_elst(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         av_log(c->fc, AV_LOG_WARNING, "multiple edit list entries, "
                "a/v desync might occur, patch welcome\n");
 
-    return 0;
-}
-
-static int mov_read_chan2(MOVContext *c, AVIOContext *pb, MOVAtom atom)
-{
-    if (atom.size < 16)
-        return 0;
-    avio_skip(pb, 4);
-    ff_mov_read_chan(c->fc, pb, c->fc->streams[0],  atom.size - 4);
     return 0;
 }
 
