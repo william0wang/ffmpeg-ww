@@ -15,6 +15,9 @@ libavutil:     2012-10-22
 
 API changes, most recent first:
 
+2013-02-24 - xxxxxx - lavfi 3.41.100 - buffersink.h
+  Add sample_rates field to AVABufferSinkParams.
+
 2013-01-17 - a1a707f - lavf 54.61.100
   Add av_codec_get_tag2().
 
@@ -137,6 +140,10 @@ API changes, most recent first:
 
 2012-03-26 - a67d9cf - lavfi 2.66.100
   Add avfilter_fill_frame_from_{audio_,}buffer_ref() functions.
+
+2013-xx-xx - xxxxxxx - lavfi 3.4.0 - avfiltergraph.h
+  Add resample_lavr_opts to AVFilterGraph for setting libavresample options
+  for auto-inserted resample filters.
 
 2013-xx-xx - xxxxxxx - lavu 52.7.0 - dict.h
   Add av_dict_parse_string() to set multiple key/value pairs at once from a

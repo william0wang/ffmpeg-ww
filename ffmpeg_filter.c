@@ -24,6 +24,8 @@
 #include "libavfilter/avfiltergraph.h"
 #include "libavfilter/buffersink.h"
 
+#include "libavresample/avresample.h"
+
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
@@ -673,6 +675,8 @@ static int configure_input_audio_filter(FilterGraph *fg, InputFilter *ifilter,
         av_strlcatf(args, sizeof(args), "async=%d", audio_sync_method);
         if (audio_drift_threshold != 0.1)
             av_strlcatf(args, sizeof(args), ":min_hard_comp=%f", audio_drift_threshold);
+        if (!fg->reconfiguration)
+            av_strlcatf(args, sizeof(args), ":first_pts=0");
         AUTO_INSERT_FILTER_INPUT("-async", "aresample", args);
     }
 
@@ -730,20 +734,29 @@ int configure_filtergraph(FilterGraph *fg)
 
     if (simple) {
         OutputStream *ost = fg->outputs[0]->ost;
-        char args[255];
+        char args[512];
+        AVDictionaryEntry *e = NULL;
+
         snprintf(args, sizeof(args), "flags=0x%X", (unsigned)ost->sws_flags);
         fg->graph->scale_sws_opts = av_strdup(args);
 
         args[0] = 0;
-        if (ost->swr_filter_type != SWR_FILTER_TYPE_KAISER)
-            av_strlcatf(args, sizeof(args), "filter_type=%d:", (int)ost->swr_filter_type);
-        if (ost->swr_dither_method)
-            av_strlcatf(args, sizeof(args), "dither_method=%d:", (int)ost->swr_dither_method);
-        if (ost->swr_dither_scale != 1.0)
-            av_strlcatf(args, sizeof(args), "dither_scale=%f:", ost->swr_dither_scale);
+        while ((e = av_dict_get(ost->swr_opts, "", e,
+                                AV_DICT_IGNORE_SUFFIX))) {
+            av_strlcatf(args, sizeof(args), "%s=%s:", e->key, e->value);
+        }
         if (strlen(args))
             args[strlen(args)-1] = 0;
         av_opt_set(fg->graph, "aresample_swr_opts", args, 0);
+
+        args[0] = '\0';
+        while ((e = av_dict_get(fg->outputs[0]->ost->resample_opts, "", e,
+                                AV_DICT_IGNORE_SUFFIX))) {
+            av_strlcatf(args, sizeof(args), "%s=%s:", e->key, e->value);
+        }
+        if (strlen(args))
+            args[strlen(args) - 1] = '\0';
+        fg->graph->resample_lavr_opts = av_strdup(args);
     }
 
     if ((ret = avfilter_graph_parse2(fg->graph, graph_desc, &inputs, &outputs)) < 0)
@@ -785,6 +798,7 @@ int configure_filtergraph(FilterGraph *fg)
         }
     }
 
+    fg->reconfiguration = 1;
     return 0;
 }
 

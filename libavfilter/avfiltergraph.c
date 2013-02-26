@@ -68,6 +68,7 @@ void avfilter_graph_free(AVFilterGraph **graph)
     av_freep(&(*graph)->sink_links);
     av_freep(&(*graph)->scale_sws_opts);
     av_freep(&(*graph)->aresample_swr_opts);
+    av_freep(&(*graph)->resample_lavr_opts);
     av_freep(&(*graph)->filters);
     av_freep(graph);
 }
@@ -272,8 +273,8 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                 continue;
 
             if (link->in_formats != link->out_formats &&
-                !ff_merge_formats(link->in_formats,
-                                        link->out_formats))
+                !ff_merge_formats(link->in_formats, link->out_formats,
+                                  link->type))
                 convert_needed = 1;
             if (link->type == AVMEDIA_TYPE_AUDIO) {
                 if (link->in_channel_layouts != link->out_channel_layouts &&
@@ -323,8 +324,13 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 
                     snprintf(inst_name, sizeof(inst_name), "auto-inserted resampler %d",
                              resampler_count++);
+                    scale_args[0] = '\0';
+                    if (graph->aresample_swr_opts)
+                        snprintf(scale_args, sizeof(scale_args), "%s",
+                                 graph->aresample_swr_opts);
                     if ((ret = avfilter_graph_create_filter(&convert, filter,
-                                                            inst_name, graph->aresample_swr_opts, NULL, graph)) < 0)
+                                                            inst_name, graph->aresample_swr_opts,
+                                                            NULL, graph)) < 0)
                         return ret;
                     break;
                 default:
@@ -337,8 +343,8 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                 filter_query_formats(convert);
                 inlink  = convert->inputs[0];
                 outlink = convert->outputs[0];
-                if (!ff_merge_formats( inlink->in_formats,  inlink->out_formats) ||
-                    !ff_merge_formats(outlink->in_formats, outlink->out_formats))
+                if (!ff_merge_formats( inlink->in_formats,  inlink->out_formats,  inlink->type) ||
+                    !ff_merge_formats(outlink->in_formats, outlink->out_formats, outlink->type))
                     ret |= AVERROR(ENOSYS);
                 if (inlink->type == AVMEDIA_TYPE_AUDIO &&
                     (!ff_merge_samplerates(inlink->in_samplerates,

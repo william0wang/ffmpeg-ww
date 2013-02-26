@@ -139,7 +139,7 @@ typedef struct SubPicture {
 typedef struct AudioParams {
     int freq;
     int channels;
-    int channel_layout;
+    int64_t channel_layout;
     enum AVSampleFormat fmt;
 } AudioParams;
 
@@ -2131,8 +2131,8 @@ static int audio_decode_frame(VideoState *is)
                                                  0, NULL);
                 if (!is->swr_ctx || swr_init(is->swr_ctx) < 0) {
                     fprintf(stderr, "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
-                        is->frame->sample_rate,   av_get_sample_fmt_name(is->frame->format), (int)is->frame->channels,
-                        is->audio_tgt.freq, av_get_sample_fmt_name(is->audio_tgt.fmt), is->audio_tgt.channels);
+                            is->frame->sample_rate, av_get_sample_fmt_name(is->frame->format), is->frame->channels,
+                            is->audio_tgt.freq, av_get_sample_fmt_name(is->audio_tgt.fmt), is->audio_tgt.channels);
                     break;
                 }
                 is->audio_src.channel_layout = dec_channel_layout;

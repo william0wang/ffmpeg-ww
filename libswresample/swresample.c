@@ -91,6 +91,10 @@ static const AVOption options[]={
 {"phase_shift"          , "set swr resampling phase shift", OFFSET(phase_shift)  , AV_OPT_TYPE_INT  , {.i64=10                    }, 0      , 24        , PARAM },
 {"linear_interp"        , "enable linear interpolation" , OFFSET(linear_interp)  , AV_OPT_TYPE_INT  , {.i64=0                     }, 0      , 1         , PARAM },
 {"cutoff"               , "set cutoff frequency ratio"  , OFFSET(cutoff)         , AV_OPT_TYPE_DOUBLE,{.dbl=0.                    }, 0      , 1         , PARAM },
+
+/* duplicate option in order to work with avconv */
+{"resample_cutoff"      , "set cutoff frequency ratio"  , OFFSET(cutoff)         , AV_OPT_TYPE_DOUBLE,{.dbl=0.                    }, 0      , 1         , PARAM },
+
 {"resampler"            , "set resampling Engine"       , OFFSET(engine)         , AV_OPT_TYPE_INT  , {.i64=0                     }, 0      , SWR_ENGINE_NB-1, PARAM, "resampler"},
 {"swr"                  , "select SW Resampler"         , 0                      , AV_OPT_TYPE_CONST, {.i64=SWR_ENGINE_SWR        }, INT_MIN, INT_MAX   , PARAM, "resampler"},
 {"soxr"                 , "select SoX Resampler"        , 0                      , AV_OPT_TYPE_CONST, {.i64=SWR_ENGINE_SOXR       }, INT_MIN, INT_MAX   , PARAM, "resampler"},
@@ -123,6 +127,7 @@ static const AVOption options[]={
 
 { "kaiser_beta"         , "set swr Kaiser Window Beta"  , OFFSET(kaiser_beta)    , AV_OPT_TYPE_INT  , {.i64=9                     }, 2      , 16        , PARAM },
 
+{ "output_sample_bits"   , ""  , OFFSET(dither.output_sample_bits)               , AV_OPT_TYPE_INT  , {.i64=0                     }, 0      , 64        , 0 },
 {0}
 };
 
@@ -334,7 +339,8 @@ av_cold int swr_init(struct SwrContext *s){
             s->async = 1;
         s->firstpts =
         s->outpts   = s->firstpts_in_samples * s->out_sample_rate;
-    }
+    } else
+        s->firstpts = AV_NOPTS_VALUE;
 
     if (s->async) {
         if (s->min_compensation >= FLT_MAX/2)
@@ -894,6 +900,10 @@ int swr_set_compensation(struct SwrContext *s, int sample_delta, int compensatio
 int64_t swr_next_pts(struct SwrContext *s, int64_t pts){
     if(pts == INT64_MIN)
         return s->outpts;
+
+    if (s->firstpts == AV_NOPTS_VALUE)
+        s->outpts = s->firstpts = pts;
+
     if(s->min_compensation >= FLT_MAX) {
         return (s->outpts = pts - swr_get_delay(s, s->in_sample_rate * (int64_t)s->out_sample_rate));
     } else {

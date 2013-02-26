@@ -130,7 +130,6 @@ Component options:
   --disable-pthreads       disable pthreads [auto]
   --disable-w32threads     disable Win32 threads [auto]
   --disable-os2threads     disable OS/2 threads [auto]
-  --enable-x11grab         enable X11 grabbing [no]
   --disable-network        disable network support [no]
   --disable-dct            disable DCT code
   --disable-dwt            disable DWT code
@@ -142,9 +141,9 @@ Component options:
 
 Hardware accelerators:
   --enable-dxva2           enable DXVA2 code
-  --enable-vaapi           enable VAAPI code [autodetect]
-  --enable-vda             enable VDA code   [autodetect]
-  --enable-vdpau           enable VDPAU code [autodetect]
+  --enable-vaapi           enable VAAPI code
+  --enable-vda             enable VDA code
+  --enable-vdpau           enable VDPAU code
 
 Individual component options:
   --disable-everything     disable all components listed below
@@ -234,6 +233,7 @@ External library support:
                            native MPEG-4/Xvid encoder exists [no]
   --enable-openal          enable OpenAL 1.1 capture support [no]
   --enable-openssl         enable openssl [no]
+  --enable-x11grab         enable X11 grabbing [no]
   --enable-zlib            enable zlib [autodetect]
 
 Advanced options (experts only):
@@ -255,6 +255,7 @@ Advanced options (experts only):
   --ld=LD                  use linker LD [$ld_default]
   --host-cc=HOSTCC         use host C compiler HOSTCC
   --host-cflags=HCFLAGS    use HCFLAGS when compiling for host
+  --host-cppflags=HCPPFLAGS use HCPPFLAGS when compiling for host
   --host-ld=HOSTLD         use host linker HOSTLD
   --host-ldflags=HLDFLAGS  use HLDFLAGS when linking for host
   --host-libs=HLIBS        use libs HLIBS when linking for host
@@ -699,6 +700,10 @@ add_extralibs(){
     prepend extralibs $($ldflags_filter "$@")
 }
 
+add_host_cppflags(){
+    append host_cppflags "$@"
+}
+
 add_host_cflags(){
     append host_cflags $($host_cflags_filter "$@")
 }
@@ -1066,6 +1071,13 @@ check_host_cc(){
     check_cmd $host_cc $host_cflags "$@" $HOSTCC_C $(hostcc_o $TMPO) $TMPC
 }
 
+check_host_cppflags(){
+    log check_host_cppflags "$@"
+    check_host_cc "$@" <<EOF && append host_cppflags "$@"
+int x;
+EOF
+}
+
 check_host_cflags(){
     log check_host_cflags "$@"
     set -- $($host_cflags_filter "$@")
@@ -1103,61 +1115,13 @@ COMPONENT_LIST="
     protocols
 "
 
-DOCUMENT_LIST="
-    doc
-    htmlpages
-    manpages
-    podpages
-    txtpages
-"
-
-HWACCEL_LIST="
-    dxva2
-    vaapi
-    vda
-    vdpau
-"
-
-LIBRARY_LIST="
-    avcodec
-    avdevice
-    avfilter
-    avformat
-    avresample
-    avutil
-    postproc
-    swresample
-    swscale
-"
-
-PROGRAM_LIST="
-    ffplay
-    ffprobe
-    ffserver
-    ffmpeg
-"
-
-CONFIG_LIST="
-    $COMPONENT_LIST
-    $DOCUMENT_LIST
-    $HWACCEL_LIST
-    $LIBRARY_LIST
-    $PROGRAM_LIST
+EXTERNAL_LIBRARY_LIST="
     avisynth
     bzlib
     crystalhd
-    dct
-    dwt
-    fast_unaligned
-    fft
     fontconfig
     frei0r
-    ftrapv
     gnutls
-    gpl
-    gray
-    hardcoded_tables
-    incompatible_fork_abi
     libaacplus
     libass
     libbluray
@@ -1197,6 +1161,62 @@ CONFIG_LIST="
     libx264
     libxavs
     libxvid
+    openal
+    openssl
+    x11grab
+    zlib
+"
+
+DOCUMENT_LIST="
+    doc
+    htmlpages
+    manpages
+    podpages
+    txtpages
+"
+
+HWACCEL_LIST="
+    dxva2
+    vaapi
+    vda
+    vdpau
+"
+
+LIBRARY_LIST="
+    avcodec
+    avdevice
+    avfilter
+    avformat
+    avresample
+    avutil
+    postproc
+    swresample
+    swscale
+"
+
+PROGRAM_LIST="
+    ffplay
+    ffprobe
+    ffserver
+    ffmpeg
+"
+
+CONFIG_LIST="
+    $COMPONENT_LIST
+    $DOCUMENT_LIST
+    $EXTERNAL_LIBRARY_LIST
+    $HWACCEL_LIST
+    $LIBRARY_LIST
+    $PROGRAM_LIST
+    dct
+    dwt
+    fast_unaligned
+    fft
+    ftrapv
+    gpl
+    gray
+    hardcoded_tables
+    incompatible_fork_abi
     lsp
     lzo
     mdct
@@ -1204,8 +1224,6 @@ CONFIG_LIST="
     memory_poisoning
     network
     nonfree
-    openal
-    openssl
     pic
     rdft
     runtime_cpudetect
@@ -1218,8 +1236,6 @@ CONFIG_LIST="
     thumb
     version3
     xmm_clobber_test
-    x11grab
-    zlib
 "
 
 THREADS_LIST='
@@ -1569,6 +1585,7 @@ CMDLINE_SET="
 CMDLINE_APPEND="
     extra_cflags
     extra_cxxflags
+    host_cppflags
 "
 
 # code dependency declarations
@@ -1790,41 +1807,59 @@ zmbv_encoder_select="zlib"
 
 # hardware accelerators
 crystalhd_deps="libcrystalhd_libcrystalhd_if_h"
+dxva2_deps="dxva2api_h"
 vaapi_deps="va_va_h"
 vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
+vda_extralibs="-framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 
-h263_vaapi_hwaccel_select="vaapi h263_decoder"
-h263_vdpau_hwaccel_select="vdpau h263_decoder"
+h263_vaapi_hwaccel_deps="vaapi"
+h263_vaapi_hwaccel_select="h263_decoder"
+h263_vdpau_hwaccel_deps="vdpau"
+h263_vdpau_hwaccel_select="h263_decoder"
 h264_crystalhd_decoder_select="crystalhd h264_mp4toannexb_bsf h264_parser"
-h264_dxva2_hwaccel_deps="dxva2api_h"
-h264_dxva2_hwaccel_select="dxva2 h264_decoder"
-h264_vaapi_hwaccel_select="vaapi h264_decoder"
-h264_vda_decoder_select="vda h264_parser h264_decoder"
-h264_vda_hwaccel_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
-h264_vda_hwaccel_select="vda h264_decoder"
-h264_vdpau_decoder_select="vdpau h264_decoder"
-h264_vdpau_hwaccel_select="vdpau h264_decoder"
-mpeg_vdpau_decoder_select="vdpau mpegvideo_decoder"
-mpeg1_vdpau_decoder_select="vdpau mpeg1video_decoder"
-mpeg1_vdpau_hwaccel_select="vdpau mpeg1video_decoder"
+h264_dxva2_hwaccel_deps="dxva2"
+h264_dxva2_hwaccel_select="h264_decoder"
+h264_vaapi_hwaccel_deps="vaapi"
+h264_vaapi_hwaccel_select="h264_decoder"
+h264_vda_decoder_deps="vda"
+h264_vda_decoder_select="h264_decoder"
+h264_vda_hwaccel_deps="vda"
+h264_vda_hwaccel_select="h264_decoder"
+h264_vdpau_decoder_deps="vdpau"
+h264_vdpau_decoder_select="h264_decoder"
+h264_vdpau_hwaccel_deps="vdpau"
+h264_vdpau_hwaccel_select="h264_decoder"
+mpeg_vdpau_decoder_deps="vdpau"
+mpeg_vdpau_decoder_select="mpegvideo_decoder"
+mpeg1_vdpau_decoder_deps="vdpau"
+mpeg1_vdpau_decoder_select="mpeg1video_decoder"
+mpeg1_vdpau_hwaccel_deps="vdpau"
+mpeg1_vdpau_hwaccel_select="mpeg1video_decoder"
 mpeg2_crystalhd_decoder_select="crystalhd"
-mpeg2_dxva2_hwaccel_deps="dxva2api_h"
-mpeg2_dxva2_hwaccel_select="dxva2 mpeg2video_decoder"
-mpeg2_vdpau_hwaccel_select="vdpau mpeg2video_decoder"
-mpeg2_vaapi_hwaccel_select="vaapi mpeg2video_decoder"
-mpeg2_vdpau_hwaccel_select="vdpau mpeg2video_decoder"
+mpeg2_dxva2_hwaccel_deps="dxva2"
+mpeg2_dxva2_hwaccel_select="mpeg2video_decoder"
+mpeg2_vaapi_hwaccel_deps="vaapi"
+mpeg2_vaapi_hwaccel_select="mpeg2video_decoder"
+mpeg2_vdpau_hwaccel_deps="vdpau"
+mpeg2_vdpau_hwaccel_select="mpeg2video_decoder"
 mpeg4_crystalhd_decoder_select="crystalhd"
-mpeg4_vaapi_hwaccel_select="vaapi mpeg4_decoder"
-mpeg4_vdpau_decoder_select="vdpau mpeg4_decoder"
-mpeg4_vdpau_hwaccel_select="vdpau mpeg4_decoder"
+mpeg4_vaapi_hwaccel_deps="vaapi"
+mpeg4_vaapi_hwaccel_select="mpeg4_decoder"
+mpeg4_vdpau_decoder_deps="vdpau"
+mpeg4_vdpau_decoder_select="mpeg4_decoder"
+mpeg4_vdpau_hwaccel_deps="vdpau"
+mpeg4_vdpau_hwaccel_select="mpeg4_decoder"
 msmpeg4_crystalhd_decoder_select="crystalhd"
 vc1_crystalhd_decoder_select="crystalhd"
-vc1_dxva2_hwaccel_deps="dxva2api_h"
-vc1_dxva2_hwaccel_select="dxva2 vc1_decoder"
-vc1_vaapi_hwaccel_select="vaapi vc1_decoder"
-vc1_vdpau_decoder_select="vdpau vc1_decoder"
-vc1_vdpau_hwaccel_select="vdpau vc1_decoder"
+vc1_dxva2_hwaccel_deps="dxva2"
+vc1_dxva2_hwaccel_select="vc1_decoder"
+vc1_vaapi_hwaccel_deps="vaapi"
+vc1_vaapi_hwaccel_select="vc1_decoder"
+vc1_vdpau_decoder_deps="vdpau"
+vc1_vdpau_decoder_select="vc1_decoder"
+vc1_vdpau_hwaccel_deps="vdpau"
+vc1_vdpau_hwaccel_select="vc1_decoder"
 wmv3_crystalhd_decoder_select="crystalhd"
 wmv3_dxva2_hwaccel_select="vc1_dxva2_hwaccel"
 wmv3_vaapi_hwaccel_select="vc1_vaapi_hwaccel"
@@ -2152,7 +2187,8 @@ HOSTCC_C='-c'
 HOSTCC_O='-o $@'
 HOSTLD_O='-o $@'
 
-host_cflags='-D_ISOC99_SOURCE -D_XOPEN_SOURCE=600 -O3 -g'
+host_cflags='-O3 -g'
+host_cppflags='-D_ISOC99_SOURCE -D_XOPEN_SOURCE=600'
 host_libs='-lm'
 host_cflags_filter=echo
 host_ldflags_filter=echo
@@ -2229,10 +2265,14 @@ die_unknown(){
     exit 1
 }
 
+print_3_columns() {
+    cat | tr ' ' '\n' | sort | pr -r -3 -t
+}
+
 show_list() {
     suffix=_$1
     shift
-    echo $* | sed s/$suffix//g | tr ' ' '\n' | sort | pr -3 -t
+    echo $* | sed s/$suffix//g | print_3_columns
     exit 0
 }
 
@@ -3774,20 +3814,13 @@ check_header termios.h
 check_header unistd.h
 check_header vdpau/vdpau.h
 check_header vdpau/vdpau_x11.h
+check_header VideoDecodeAcceleration/VDADecoder.h
 check_header windows.h
 check_header X11/extensions/XvMClib.h
 check_header asm/types.h
 
 disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
 disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
-
-# check for VDA header
-if ! disabled vda && ! enabled ppc; then
-    if check_header VideoDecodeAcceleration/VDADecoder.h; then
-        enable vda
-        add_extralibs -framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore
-    fi
-fi
 
 if ! disabled w32threads && ! enabled pthreads; then
     check_func_headers "windows.h process.h" _beginthreadex && enable w32threads
@@ -4001,10 +4034,9 @@ if ! disabled vaapi; then
     } || disable vaapi
 fi
 
-if ! disabled vdpau && enabled vdpau_vdpau_h; then
+enabled vdpau &&
     check_cpp_condition vdpau/vdpau.h "defined VDP_DECODER_PROFILE_MPEG4_PART2_ASP" ||
-        { echolog "Please upgrade to libvdpau >= 0.2 if you would like vdpau support." && disable vdpau; }
-fi
+    disable vdpau
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 enabled coverage && add_cflags "-fprofile-arcs -ftest-coverage" && add_ldflags "-fprofile-arcs -ftest-coverage"
@@ -4269,52 +4301,6 @@ echo "network support           ${network-no}"
 echo "threading support         ${thread_type-no}"
 echo "safe bitstream reader     ${safe_bitstream_reader-no}"
 echo "SDL support               ${sdl-no}"
-echo "libdxva2 enabled          ${dxva2-no}"
-echo "libva enabled             ${vaapi-no}"
-echo "libvdpau enabled          ${vdpau-no}"
-echo "AVISynth enabled          ${avisynth-no}"
-echo "frei0r enabled            ${frei0r-no}"
-echo "gnutls enabled            ${gnutls-no}"
-echo "libaacplus enabled        ${libaacplus-no}"
-echo "libass enabled            ${libass-no}"
-echo "libcaca enabled           ${libcaca-no}"
-echo "libcdio support           ${libcdio-no}"
-echo "libcelt enabled           ${libcelt-no}"
-echo "libdc1394 support         ${libdc1394-no}"
-echo "libfaac enabled           ${libfaac-no}"
-echo "libfdk-aac enabled        ${libfdk_aac-no}"
-echo "libgsm enabled            ${libgsm-no}"
-echo "libiec61883 support       ${libiec61883-no}"
-echo "libilbc enabled           ${libilbc-no}"
-echo "libmodplug enabled        ${libmodplug-no}"
-echo "libmp3lame enabled        ${libmp3lame-no}"
-echo "libnut enabled            ${libnut-no}"
-echo "libopencore-amrnb support ${libopencore_amrnb-no}"
-echo "libopencore-amrwb support ${libopencore_amrwb-no}"
-echo "libopencv support         ${libopencv-no}"
-echo "libopenjpeg enabled       ${libopenjpeg-no}"
-echo "libopus enabled           ${libopus-no}"
-echo "libpulse enabled          ${libpulse-no}"
-echo "librtmp enabled           ${librtmp-no}"
-echo "libschroedinger enabled   ${libschroedinger-no}"
-echo "libsoxr enabled           ${libsoxr-no}"
-echo "libspeex enabled          ${libspeex-no}"
-echo "libstagefright-h264 enabled    ${libstagefright_h264-no}"
-echo "libtheora enabled         ${libtheora-no}"
-echo "libtwolame enabled        ${libtwolame-no}"
-echo "libutvideo enabled        ${libutvideo-no}"
-echo "libv4l2 enabled           ${libv4l2-no}"
-echo "libvo-aacenc support      ${libvo_aacenc-no}"
-echo "libvo-amrwbenc support    ${libvo_amrwbenc-no}"
-echo "libvorbis enabled         ${libvorbis-no}"
-echo "libvpx enabled            ${libvpx-no}"
-echo "libx264 enabled           ${libx264-no}"
-echo "libxavs enabled           ${libxavs-no}"
-echo "libxvid enabled           ${libxvid-no}"
-echo "openal enabled            ${openal-no}"
-echo "openssl enabled           ${openssl-no}"
-echo "zlib enabled              ${zlib-no}"
-echo "bzlib enabled             ${bzlib-no}"
 echo "texi2html enabled         ${texi2html-no}"
 echo "perl enabled              ${perl-no}"
 echo "pod2man enabled           ${pod2man-no}"
@@ -4323,10 +4309,14 @@ test -n "$random_seed" &&
     echo "random seed               ${random_seed}"
 echo
 
+echo "External libraries:"
+print_enabled '' $EXTERNAL_LIBRARY_LIST | print_3_columns
+echo
+
 for type in decoder encoder hwaccel parser demuxer muxer protocol filter bsf indev outdev; do
     echo "Enabled ${type}s:"
     eval list=\$$(toupper $type)_LIST
-    print_enabled '_*' $list | sort | pr -r -3 -t
+    print_enabled '_*' $list | print_3_columns
     echo
 done
 
@@ -4425,6 +4415,7 @@ AS_DEPFLAGS=$AS_DEPFLAGS
 HOSTCC=$host_cc
 HOSTLD=$host_ld
 HOSTCFLAGS=$host_cflags
+HOSTCPPFLAGS=$host_cppflags
 HOSTEXESUF=$HOSTEXESUF
 HOSTLDFLAGS=$host_ldflags
 HOSTLIBS=$host_libs
