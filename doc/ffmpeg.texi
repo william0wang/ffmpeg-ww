@@ -256,6 +256,14 @@ libx264, and the 138th audio, which will be encoded with libvorbis.
 Stop writing the output after its duration reaches @var{duration}.
 @var{duration} may be a number in seconds, or in @code{hh:mm:ss[.xxx]} form.
 
+-to and -t are mutually exclusive and -t has priority.
+
+@item -to @var{position} (@emph{output})
+Stop writing the output at @var{position}.
+@var{position} may be a number in seconds, or in @code{hh:mm:ss[.xxx]} form.
+
+-to and -t are mutually exclusive and -t has priority.
+
 @item -fs @var{limit_size} (@emph{output})
 Set the file size limit, expressed in bytes.
 
@@ -403,11 +411,11 @@ will be used.
 
 E.g. to extract the first attachment to a file named 'out.ttf':
 @example
-ffmpeg -dump_attachment:t:0 out.ttf INPUT
+ffmpeg -dump_attachment:t:0 out.ttf -i INPUT
 @end example
 To extract all attachments to files determined by the @code{filename} tag:
 @example
-ffmpeg -dump_attachment:t "" INPUT
+ffmpeg -dump_attachment:t "" -i INPUT
 @end example
 
 Technical note -- attachments are implemented as codec extradata, so this

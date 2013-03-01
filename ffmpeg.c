@@ -459,6 +459,7 @@ static void exit_program(void)
         avcodec_free_frame(&input_streams[i]->decoded_frame);
         av_dict_free(&input_streams[i]->opts);
         free_buffer_pool(&input_streams[i]->buffer_pool);
+        avsubtitle_free(&input_streams[i]->prev_sub.subtitle);
         avfilter_unref_bufferp(&input_streams[i]->sub2video.ref);
         av_freep(&input_streams[i]->filters);
         av_freep(&input_streams[i]);
@@ -1214,7 +1215,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
                     p = psnr(error / scale);
                     snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "%c:%2.2f ", type[j], p);
                     av_bprintf(&buf_script, "stream_%d_%d_psnr_%c=%2.2f\n",
-                               ost->file_index, ost->index, type[i] | 32, p);
+                               ost->file_index, ost->index, type[j] | 32, p);
                 }
                 p = psnr(error_sum / scale_sum);
                 snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf), "*:%2.2f ", psnr(error_sum / scale_sum));

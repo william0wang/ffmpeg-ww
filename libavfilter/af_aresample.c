@@ -160,13 +160,13 @@ static int config_output(AVFilterLink *outlink)
     outlink->time_base = (AVRational) {1, out_rate};
 
     av_assert0(outlink->sample_rate == out_rate);
-    av_assert0(outlink->channel_layout == out_layout);
+    av_assert0(outlink->channel_layout == out_layout || !outlink->channel_layout);
     av_assert0(outlink->format == out_format);
 
     aresample->ratio = (double)outlink->sample_rate / inlink->sample_rate;
 
-    av_get_channel_layout_string(inchl_buf,  sizeof(inchl_buf),  -1, inlink ->channel_layout);
-    av_get_channel_layout_string(outchl_buf, sizeof(outchl_buf), -1, outlink->channel_layout);
+    av_get_channel_layout_string(inchl_buf,  sizeof(inchl_buf),  inlink ->channels, inlink ->channel_layout);
+    av_get_channel_layout_string(outchl_buf, sizeof(outchl_buf), outlink->channels, outlink->channel_layout);
 
     av_log(ctx, AV_LOG_VERBOSE, "ch:%d chl:%s fmt:%s r:%dHz -> ch:%d chl:%s fmt:%s r:%dHz\n",
            inlink ->channels, inchl_buf,  av_get_sample_fmt_name(inlink->format),  inlink->sample_rate,

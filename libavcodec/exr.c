@@ -37,6 +37,7 @@
 #include "mathops.h"
 #include "thread.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/avassert.h"
 
 enum ExrCompr {
     EXR_RAW   = 0,
@@ -44,9 +45,21 @@ enum ExrCompr {
     EXR_ZIP1  = 2,
     EXR_ZIP16 = 3,
     EXR_PIZ   = 4,
+    EXR_PXR24 = 5,
     EXR_B44   = 6,
     EXR_B44A  = 7,
 };
+
+enum ExrPixelType {
+    EXR_UINT,
+    EXR_HALF,
+    EXR_FLOAT
+};
+
+typedef struct EXRChannel {
+    int               xsub, ysub;
+    enum ExrPixelType pixel_type;
+} EXRChannel;
 
 typedef struct EXRThreadData {
     uint8_t *uncompressed_data;
@@ -59,7 +72,7 @@ typedef struct EXRThreadData {
 typedef struct EXRContext {
     AVFrame picture;
     int compr;
-    int bits_per_color_id;
+    enum ExrPixelType pixel_type;
     int channel_offsets[4]; // 0 = red, 1 = green, 2 = blue and 3 = alpha
     const AVPixFmtDescriptor *desc;
 
@@ -67,11 +80,16 @@ typedef struct EXRContext {
     uint32_t ymax, ymin;
     uint32_t xdelta, ydelta;
 
+    int ysize;
+
     uint64_t scan_line_size;
     int scan_lines_per_block;
 
     const uint8_t *buf, *table;
     int buf_size;
+
+    EXRChannel *channels;
+    int nb_channels;
 
     EXRThreadData *thread_data;
     int thread_data_size;
@@ -199,10 +217,28 @@ static void reorder_pixels(uint8_t *src, uint8_t *dst, int size)
     }
 }
 
-static int rle_uncompress(const uint8_t *src, int ssize, uint8_t *dst, int dsize)
+static int zip_uncompress(const uint8_t *src, int compressed_size,
+                          int uncompressed_size, EXRThreadData *td)
 {
-    int8_t *d = (int8_t *)dst;
+    unsigned long dest_len = uncompressed_size;
+
+    if (uncompress(td->tmp, &dest_len, src, compressed_size) != Z_OK ||
+        dest_len != uncompressed_size)
+        return AVERROR(EINVAL);
+
+    predictor(td->tmp, uncompressed_size);
+    reorder_pixels(td->tmp, td->uncompressed_data, uncompressed_size);
+
+    return 0;
+}
+
+static int rle_uncompress(const uint8_t *src, int compressed_size,
+                          int uncompressed_size, EXRThreadData *td)
+{
+    int8_t *d = (int8_t *)td->tmp;
     const int8_t *s = (const int8_t *)src;
+    int ssize = compressed_size;
+    int dsize = uncompressed_size;
     int8_t *dend = d + dsize;
     int count;
 
@@ -232,7 +268,68 @@ static int rle_uncompress(const uint8_t *src, int ssize, uint8_t *dst, int dsize
         }
     }
 
-    return dend != d;
+    if (dend != d)
+        return AVERROR_INVALIDDATA;
+
+    predictor(td->tmp, uncompressed_size);
+    reorder_pixels(td->tmp, td->uncompressed_data, uncompressed_size);
+
+    return 0;
+}
+
+static int pxr24_uncompress(EXRContext *s, const uint8_t *src,
+                            int compressed_size, int uncompressed_size,
+                            EXRThreadData *td)
+{
+    unsigned long dest_len = uncompressed_size;
+    const uint8_t *in = td->tmp;
+    uint8_t *out;
+    int c, i, j;
+
+    if (uncompress(td->tmp, &dest_len, src, compressed_size) != Z_OK ||
+        dest_len != uncompressed_size)
+        return AVERROR(EINVAL);
+
+    out = td->uncompressed_data;
+    for (i = 0; i < s->ysize; i++) {
+        for (c = 0; c < s->nb_channels; c++) {
+            EXRChannel *channel = &s->channels[c];
+            const uint8_t *ptr[4];
+            uint32_t pixel = 0;
+
+            switch (channel->pixel_type) {
+            case EXR_FLOAT:
+                ptr[0] = in;
+                ptr[1] = ptr[0] + s->xdelta;
+                ptr[2] = ptr[1] + s->xdelta;
+                in = ptr[2] + s->xdelta;
+
+                for (j = 0; j < s->xdelta; ++j) {
+                    uint32_t diff = (*(ptr[0]++) << 24) |
+                                    (*(ptr[1]++) << 16) |
+                                    (*(ptr[2]++) <<  8);
+                    pixel += diff;
+                    AV_WL32(out, pixel);
+                }
+                break;
+            case EXR_HALF:
+                ptr[0] = in;
+                ptr[1] = ptr[0] + s->xdelta;
+                in = ptr[1] + s->xdelta;
+                for (j = 0; j < s->xdelta; j++, out += 2) {
+                    uint32_t diff = (*(ptr[0]++) << 8) | *(ptr[1]++);
+
+                    pixel += diff;
+                    AV_WL16(out, pixel);
+                }
+                break;
+            default:
+                av_assert1(0);
+            }
+        }
+    }
+
+    return 0;
 }
 
 static int decode_block(AVCodecContext *avctx, void *tdata,
@@ -251,7 +348,7 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
     const uint8_t *src;
     int axmax = (avctx->width - (s->xmax + 1)) * 2 * s->desc->nb_components;
     int bxmin = s->xmin * 2 * s->desc->nb_components;
-    int i, x, buf_size = s->buf_size;
+    int ret, i, x, buf_size = s->buf_size;
 
     line_offset = AV_RL64(s->table + jobnr * 8);
     // Check if the buffer has the required bytes needed from the offset
@@ -267,7 +364,8 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
     if (data_size <= 0 || data_size > buf_size)
         return AVERROR_INVALIDDATA;
 
-    uncompressed_size = s->scan_line_size * FFMIN(s->scan_lines_per_block, s->ymax - line + 1);
+    s->ysize = FFMIN(s->scan_lines_per_block, s->ymax - line + 1);
+    uncompressed_size = s->scan_line_size * s->ysize;
     if ((s->compr == EXR_RAW && (data_size != uncompressed_size ||
                                  line_offset > buf_size - uncompressed_size)) ||
         (s->compr != EXR_RAW && (data_size > uncompressed_size ||
@@ -280,25 +378,19 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
         av_fast_padded_malloc(&td->tmp, &td->tmp_size, uncompressed_size);
         if (!td->uncompressed_data || !td->tmp)
             return AVERROR(ENOMEM);
-    }
-    if ((s->compr == EXR_ZIP1 || s->compr == EXR_ZIP16) && data_size < uncompressed_size) {
-        unsigned long dest_len = uncompressed_size;
 
-        if (uncompress(td->tmp, &dest_len, src, data_size) != Z_OK ||
-            dest_len != uncompressed_size) {
-            av_log(avctx, AV_LOG_ERROR, "error during zlib decompression\n");
-            return AVERROR(EINVAL);
+        switch (s->compr) {
+        case EXR_ZIP1:
+        case EXR_ZIP16:
+            ret = zip_uncompress(src, data_size, uncompressed_size, td);
+            break;
+        case EXR_PXR24:
+            ret = pxr24_uncompress(s, src, data_size, uncompressed_size, td);
+            break;
+        case EXR_RLE:
+            ret = rle_uncompress(src, data_size, uncompressed_size, td);
         }
-    } else if (s->compr == EXR_RLE && data_size < uncompressed_size) {
-        if (rle_uncompress(src, data_size, td->tmp, uncompressed_size)) {
-            av_log(avctx, AV_LOG_ERROR, "error during rle decompression\n");
-            return AVERROR(EINVAL);
-        }
-    }
 
-    if (data_size < uncompressed_size) {
-        predictor(td->tmp, uncompressed_size);
-        reorder_pixels(td->tmp, td->uncompressed_data, uncompressed_size);
         src = td->uncompressed_data;
     }
 
@@ -323,7 +415,7 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
         // Zero out the start if xmin is not 0
         memset(ptr_x, 0, bxmin);
         ptr_x += s->xmin * s->desc->nb_components;
-        if (s->bits_per_color_id == 2) {
+        if (s->pixel_type == EXR_FLOAT) {
             // 32-bit
             for (x = 0; x < xdelta; x++) {
                 *ptr_x++ = exr_flt2uint(bytestream_get_le32(&r));
@@ -389,7 +481,8 @@ static int decode_frame(AVCodecContext *avctx,
     s->channel_offsets[1] = -1;
     s->channel_offsets[2] = -1;
     s->channel_offsets[3] = -1;
-    s->bits_per_color_id = -1;
+    s->pixel_type = -1;
+    s->nb_channels = 0;
     s->compr = -1;
     s->buf = buf;
     s->buf_size = buf_size;
@@ -428,7 +521,8 @@ static int decode_frame(AVCodecContext *avctx,
 
             channel_list_end = buf + variable_buffer_data_size;
             while (channel_list_end - buf >= 19) {
-                int current_bits_per_color_id = -1;
+                EXRChannel *channel;
+                int current_pixel_type = -1;
                 int channel_index = -1;
                 int xsub, ysub;
 
@@ -451,9 +545,9 @@ static int decode_frame(AVCodecContext *avctx,
                     return AVERROR_INVALIDDATA;
                 }
 
-                current_bits_per_color_id = bytestream_get_le32(&buf);
-                if (current_bits_per_color_id > 2) {
-                    av_log(avctx, AV_LOG_ERROR, "Unknown color format\n");
+                current_pixel_type = bytestream_get_le32(&buf);
+                if (current_pixel_type > 2) {
+                    av_log(avctx, AV_LOG_ERROR, "Unknown pixel type\n");
                     return AVERROR_INVALIDDATA;
                 }
 
@@ -466,15 +560,23 @@ static int decode_frame(AVCodecContext *avctx,
                 }
 
                 if (channel_index >= 0) {
-                    if (s->bits_per_color_id != -1 && s->bits_per_color_id != current_bits_per_color_id) {
+                    if (s->pixel_type != -1 && s->pixel_type != current_pixel_type) {
                         av_log(avctx, AV_LOG_ERROR, "RGB channels not of the same depth\n");
                         return AVERROR_INVALIDDATA;
                     }
-                    s->bits_per_color_id  = current_bits_per_color_id;
+                    s->pixel_type = current_pixel_type;
                     s->channel_offsets[channel_index] = current_channel_offset;
                 }
 
-                current_channel_offset += 1 << current_bits_per_color_id;
+                s->channels = av_realloc_f(s->channels, ++s->nb_channels, sizeof(EXRChannel));
+                if (!s->channels)
+                    return AVERROR(ENOMEM);
+                channel = &s->channels[s->nb_channels - 1];
+                channel->pixel_type = current_pixel_type;
+                channel->xsub = xsub;
+                channel->ysub = ysub;
+
+                current_channel_offset += 1 << current_pixel_type;
             }
 
             /* Check if all channels are set with an offset or if the channels
@@ -585,20 +687,19 @@ static int decode_frame(AVCodecContext *avctx,
     }
     buf++;
 
-    switch (s->bits_per_color_id) {
-    case 2: // 32-bit
-    case 1: // 16-bit
+    switch (s->pixel_type) {
+    case EXR_FLOAT:
+    case EXR_HALF:
         if (s->channel_offsets[3] >= 0)
             avctx->pix_fmt = AV_PIX_FMT_RGBA64;
         else
             avctx->pix_fmt = AV_PIX_FMT_RGB48;
         break;
-    // 8-bit
-    case 0:
-        av_log_missing_feature(avctx, "8-bit OpenEXR", 1);
+    case EXR_UINT:
+        av_log_missing_feature(avctx, "32-bit unsigned int", 1);
         return AVERROR_PATCHWELCOME;
     default:
-        av_log(avctx, AV_LOG_ERROR, "Unknown color format : %d\n", s->bits_per_color_id);
+        av_log(avctx, AV_LOG_ERROR, "Missing channel list\n");
         return AVERROR_INVALIDDATA;
     }
 
@@ -608,6 +709,7 @@ static int decode_frame(AVCodecContext *avctx,
     case EXR_ZIP1:
         s->scan_lines_per_block = 1;
         break;
+    case EXR_PXR24:
     case EXR_ZIP16:
         s->scan_lines_per_block = 16;
         break;
@@ -640,7 +742,7 @@ static int decode_frame(AVCodecContext *avctx,
     scan_line_blocks = (s->ydelta + s->scan_lines_per_block - 1) / s->scan_lines_per_block;
 
     if (s->compr != EXR_RAW) {
-        int thread_data_size, prev_size;
+        size_t thread_data_size, prev_size;
         EXRThreadData *m;
 
         prev_size = s->thread_data_size;
@@ -710,6 +812,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
     av_freep(&s->thread_data);
     s->thread_data_size = 0;
+    av_freep(&s->channels);
 
     return 0;
 }
