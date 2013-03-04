@@ -120,6 +120,7 @@ const char *const forced_keyframes_const_names[] = {
 
 static void do_video_stats(OutputStream *ost, int frame_size);
 static int64_t getutime(void);
+static int64_t getmaxrss(void);
 
 static int run_as_daemon  = 0;
 static int64_t video_size = 0;
@@ -408,6 +409,11 @@ static void exit_program(void)
 {
     int i, j;
 
+    if (do_benchmark) {
+        int maxrss = getmaxrss() / 1024;
+        printf("bench: maxrss=%ikB\n", maxrss);
+    }
+
     for (i = 0; i < nb_filtergraphs; i++) {
         avfilter_graph_free(&filtergraphs[i]->graph);
         for (j = 0; j < filtergraphs[i]->nb_inputs; j++) {
@@ -685,7 +691,7 @@ static void pre_process_video_frame(InputStream *ist, AVPicture *picture, void *
     dec = ist->st->codec;
 
     /* deinterlace : must be done before any resize */
-    if (do_deinterlace) {
+    if (FF_API_DEINTERLACE && do_deinterlace) {
         int size;
 
         /* create temporary picture */
@@ -1263,7 +1269,10 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
     av_bprintf(&buf_script, "drop_frames=%d\n", nb_frames_drop);
 
     if (print_stats || is_last_report) {
-    av_log(NULL, AV_LOG_INFO, "%s    \r", buf);
+        if (print_stats==1 && AV_LOG_INFO > av_log_get_level()) {
+            fprintf(stderr, "%s    \r", buf);
+        } else
+            av_log(NULL, AV_LOG_INFO, "%s    \r", buf);
 
     fflush(stderr);
     }
@@ -1947,7 +1956,7 @@ static int init_input_stream(int ist_index, char *error, int error_len)
             return AVERROR(EINVAL);
         }
 
-        ist->dr1 = (codec->capabilities & CODEC_CAP_DR1) && !do_deinterlace;
+        ist->dr1 = (codec->capabilities & CODEC_CAP_DR1) && !(FF_API_DEINTERLACE && do_deinterlace);
         if (codec->type == AVMEDIA_TYPE_VIDEO && ist->dr1) {
             ist->st->codec->get_buffer     = codec_get_buffer;
             ist->st->codec->release_buffer = codec_release_buffer;
@@ -2424,6 +2433,8 @@ static int transcode_init(void)
 
             if (ost->st->codec->me_threshold)
                 input_streams[ost->source_index]->st->codec->debug |= FF_DEBUG_MV;
+        } else {
+            av_opt_set_dict(ost->st->codec, &ost->opts);
         }
     }
 
@@ -3320,8 +3331,7 @@ int main(int argc, char **argv)
         exit(1);
     ti = getutime() - ti;
     if (do_benchmark) {
-        int maxrss = getmaxrss() / 1024;
-        printf("bench: utime=%0.3fs maxrss=%ikB\n", ti / 1000000.0, maxrss);
+        printf("bench: utime=%0.3fs\n", ti / 1000000.0);
     }
 
     exit(received_nb_signals ? 255 : 0);

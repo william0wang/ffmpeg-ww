@@ -81,7 +81,7 @@ int copy_ts           = 0;
 int copy_tb           = -1;
 int debug_ts          = 0;
 int exit_on_error     = 0;
-int print_stats       = 1;
+int print_stats       = -1;
 int qp_hist           = 0;
 int stdin_interaction = 1;
 int frame_bits_per_raw_sample = 0;
@@ -957,6 +957,8 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
                    preset, ost->file_index, ost->index);
             exit(1);
         }
+    } else {
+        ost->opts = filter_codec_opts(o->g->codec_opts, AV_CODEC_ID_NONE, oc, st, NULL);
     }
 
     avcodec_get_context_defaults3(st->codec, ost->enc);
@@ -1704,7 +1706,8 @@ loop_end:
             print_error(filename, err);
             exit(1);
         }
-    }
+    } else if (strcmp(oc->oformat->name, "image2")==0 && !av_filename_number_test(filename))
+        assert_file_overwrite(filename);
 
     if (o->mux_preload) {
         uint8_t buf[64];
@@ -2126,12 +2129,14 @@ static int opt_vsync(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
+#if FF_API_DEINTERLACE
 static int opt_deinterlace(void *optctx, const char *opt, const char *arg)
 {
     av_log(NULL, AV_LOG_WARNING, "-%s is deprecated, use -filter:v yadif instead\n", opt);
     do_deinterlace = 1;
     return 0;
 }
+#endif
 
 static int opt_timecode(void *optctx, const char *opt, const char *arg)
 {
@@ -2519,8 +2524,10 @@ const OptionDef options[] = {
         "select the pass number (1 to 3)", "n" },
     { "passlogfile",  OPT_VIDEO | HAS_ARG | OPT_STRING | OPT_EXPERT | OPT_SPEC,  { .off = OFFSET(passlogfiles) },
         "select two pass log file name prefix", "prefix" },
+#if FF_API_DEINTERLACE
     { "deinterlace",  OPT_VIDEO | OPT_EXPERT ,                                   { .func_arg = opt_deinterlace },
         "this option is deprecated, use the yadif filter instead" },
+#endif
     { "psnr",         OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_psnr },
         "calculate PSNR of compressed frames" },
     { "vstats",       OPT_VIDEO | OPT_EXPERT ,                                   { &opt_vstats },
