@@ -29,6 +29,7 @@ the caller can decide which variant streams to actually receive.
 The total bitrate of the variant that the stream belongs to is
 available in a metadata key named "variant_bitrate".
 
+@anchor{concat}
 @section concat
 
 Virtual concatenation script demuxer.
@@ -43,6 +44,12 @@ done globally and may cause gaps if all streams do not have exactly the same
 length.
 
 All files must have the same streams (same codecs, same time base, etc.).
+
+The duration of each file is used to adjust the timestamps of the next file:
+if the duration is incorrect (because it was computed using the bit-rate or
+because the file is truncated, for example), it can cause artifacts. The
+@code{duration} directive can be used to override the duration stored in
+each file.
 
 @subsection Syntax
 

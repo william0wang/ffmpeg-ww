@@ -188,7 +188,7 @@ External library support:
   --enable-fontconfig      enable fontconfig
   --enable-frei0r          enable frei0r video filtering
   --enable-gnutls          enable gnutls [no]
-  --enable-iconv           enable iconv [autodetect]
+  --enable-iconv           enable iconv [no]
   --enable-libaacplus      enable AAC+ encoding via libaacplus [no]
   --enable-libass          enable libass subtitles rendering [no]
   --enable-libbluray       enable BluRay reading using libbluray [no]
@@ -456,14 +456,18 @@ set_weak(){
     done
 }
 
+sanitize_var_name(){
+    echo $@ | sed 's/[^A-Za-z0-9_]/_/g'
+}
+
 set_safe(){
     var=$1
     shift
-    eval $(echo "$var" | sed 's/[^A-Za-z0-9_]/_/g')='$*'
+    eval $(sanitize_var_name "$var")='$*'
 }
 
 get_safe(){
-    eval echo \$$(echo "$1" | sed 's/[^A-Za-z0-9_]/_/g')
+    eval echo \$$(sanitize_var_name "$1")
 }
 
 pushvar(){
@@ -1020,7 +1024,7 @@ check_type(){
 }
 
 check_struct(){
-    log check_type "$@"
+    log check_struct "$@"
     headers=$1
     struct=$2
     member=$3
@@ -1028,6 +1032,16 @@ check_struct(){
     disable_safe "${struct}_${member}"
     check_code cc "$headers" "const void *p = &(($struct *)0)->$member" "$@" &&
         enable_safe "${struct}_${member}"
+}
+
+check_builtin(){
+    log check_builtin "$@"
+    name=$1
+    headers=$2
+    builtin=$3
+    shift 3
+    disable "$name"
+    check_code ld "$headers" "$builtin" "cc" "$@" && enable "$name"
 }
 
 require(){
@@ -1656,7 +1670,7 @@ mdct_select="fft"
 rdft_select="fft"
 mpegaudio_select="mpegaudiodsp"
 mpegaudiodsp_select="dct"
-mpegvideo_select="error_resilience videodsp"
+mpegvideo_select="error_resilience videodsp h264chroma"
 mpegvideoenc_select="mpegvideo"
 
 # decoders / encoders
@@ -1674,7 +1688,7 @@ atrac1_decoder_select="mdct sinewin"
 atrac3_decoder_select="mdct"
 binkaudio_dct_decoder_select="mdct rdft dct sinewin"
 binkaudio_rdft_decoder_select="mdct rdft sinewin"
-cavs_decoder_select="golomb mpegvideo"
+cavs_decoder_select="golomb h264chroma mpegvideo"
 comfortnoise_encoder_select="lpc"
 cook_decoder_select="mdct sinewin"
 cscd_decoder_select="lzo"
@@ -1762,8 +1776,8 @@ rv30_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvi
 rv40_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo"
 shorten_decoder_select="golomb"
 sipr_decoder_select="lsp"
-snow_decoder_select="dwt rangecoder"
-snow_encoder_select="aandcttables dwt error_resilience mpegvideoenc rangecoder"
+snow_decoder_select="dwt h264qpel rangecoder"
+snow_encoder_select="aandcttables dwt h264qpel error_resilience mpegvideoenc rangecoder"
 sonic_decoder_select="golomb"
 sonic_encoder_select="golomb"
 sonic_ls_encoder_select="golomb"
@@ -1783,8 +1797,8 @@ vc1image_decoder_select="vc1_decoder"
 vorbis_decoder_select="mdct"
 vorbis_encoder_select="mdct"
 vp3_decoder_select="vp3dsp videodsp"
-vp5_decoder_select="vp3dsp videodsp"
-vp6_decoder_select="huffman vp3dsp videodsp"
+vp5_decoder_select="h264chroma vp3dsp videodsp"
+vp6_decoder_select="h264chroma huffman vp3dsp videodsp"
 vp6a_decoder_select="vp6_decoder"
 vp6f_decoder_select="vp6_decoder"
 vp8_decoder_select="h264pred videodsp"
@@ -2067,6 +2081,7 @@ removelogo_filter_deps="avcodec avformat swscale"
 scale_filter_deps="swscale"
 smartblur_filter_deps="gpl swscale"
 showspectrum_filter_deps="avcodec rdft"
+stereo3d_filter_deps="gpl"
 subtitles_filter_deps="avformat avcodec libass"
 super2xsai_filter_deps="gpl"
 tinterlace_filter_deps="gpl"
@@ -3639,9 +3654,8 @@ elif enabled sparc; then
 
 elif enabled x86; then
 
-    check_code ld intrin.h "__rdtsc()" "cc" && enable rdtsc
-
-    check_code ld mmintrin.h "_mm_empty()" "cc" && enable mm_empty
+    check_builtin rdtsc    intrin.h   "__rdtsc()"
+    check_builtin mm_empty mmintrin.h "_mm_empty()"
 
     enable local_aligned_8 local_aligned_16
 
@@ -3873,7 +3887,6 @@ enabled avisynth   && require2 vfw32 "windows.h vfw.h" AVIFileInit -lavifil32
 enabled fontconfig && require_pkg_config fontconfig "fontconfig/fontconfig.h" FcInit
 enabled frei0r     && { check_header frei0r.h || die "ERROR: frei0r.h header not found"; }
 enabled gnutls     && require_pkg_config gnutls gnutls/gnutls.h gnutls_global_init
-enabled iconv      && { check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || die "ERROR: iconv not found"; }
 enabled libiec61883 && require libiec61883 libiec61883/iec61883.h iec61883_cmp_connect -lraw1394 -lavc1394 -lrom1394 -liec61883
 enabled libaacplus && require  "libaacplus >= 2.0.0" aacplus.h aacplusEncOpen -laacplus
 enabled libass     && require_pkg_config libass ass/ass.h ass_library_init
@@ -4037,6 +4050,9 @@ fi
 enabled vdpau &&
     check_cpp_condition vdpau/vdpau.h "defined VDP_DECODER_PROFILE_MPEG4_PART2_ASP" ||
     disable vdpau
+
+# Funny iconv installations are not unusual, so check it after all flags have been set
+enabled iconv && { check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || die "ERROR: iconv not found"; }
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 enabled coverage && add_cflags "-fprofile-arcs -ftest-coverage" && add_ldflags "-fprofile-arcs -ftest-coverage"

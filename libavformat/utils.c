@@ -627,7 +627,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename, AVInputForma
             goto fail;
 
     if (id3v2_extra_meta) {
-        if (!strcmp(s->iformat->name, "mp3")) {
+        if (!strcmp(s->iformat->name, "mp3") || !strcmp(s->iformat->name, "aac")) {
             if((ret = ff_id3v2_parse_apic(s, &id3v2_extra_meta)) < 0)
                 goto fail;
         } else
@@ -2230,8 +2230,10 @@ static void update_stream_timings(AVFormatContext *ic)
     }
         if (ic->pb && (filesize = avio_size(ic->pb)) > 0 && ic->duration != AV_NOPTS_VALUE) {
             /* compute the bitrate */
-            ic->bit_rate = (double)filesize * 8.0 * AV_TIME_BASE /
+            double bitrate = (double)filesize * 8.0 * AV_TIME_BASE /
                 (double)ic->duration;
+            if (bitrate >= 0 && bitrate <= INT_MAX)
+                ic->bit_rate = bitrate;
         }
 }
 
@@ -2342,8 +2344,10 @@ static void estimate_timings_from_pts(AVFormatContext *ic, int64_t old_offset)
                 else
                     duration -= st->first_dts;
                 if (duration > 0) {
-                    if (st->duration == AV_NOPTS_VALUE || st->duration < duration)
+                    if (st->duration == AV_NOPTS_VALUE || st->info->last_duration<=0 ||
+                        (st->duration < duration && FFABS(duration - st->info->last_duration) < 60LL*st->time_base.den / st->time_base.num))
                         st->duration = duration;
+                    st->info->last_duration = duration;
                 }
             }
             av_free_packet(pkt);
