@@ -74,21 +74,22 @@ typedef struct {
 } UnsharpContext;
 
 #define OFFSET(x) offsetof(UnsharpContext, x)
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 
 static const AVOption unsharp_options[] = {
-    { "luma_msize_x",    "set luma matrix x size",     OFFSET(luma_msize_x),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "lx",              "set luma matrix x size",     OFFSET(luma_msize_x),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "luma_msize_y",    "set luma matrix y size",     OFFSET(luma_msize_y),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "ly",              "set luma matrix y size",     OFFSET(luma_msize_y),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "luma_amount",     "set luma effect amount",     OFFSET(luma_amount),     AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, -DBL_MAX, DBL_MAX },
-    { "la",              "set luma effect amount",     OFFSET(luma_amount),     AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, -DBL_MAX, DBL_MAX },
+    { "luma_msize_x",    "set luma matrix x size",     OFFSET(luma_msize_x),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "lx",              "set luma matrix x size",     OFFSET(luma_msize_x),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "luma_msize_y",    "set luma matrix y size",     OFFSET(luma_msize_y),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "ly",              "set luma matrix y size",     OFFSET(luma_msize_y),    AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "luma_amount",     "set luma effect amount",     OFFSET(luma_amount),     AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, -DBL_MAX, DBL_MAX, .flags=FLAGS },
+    { "la",              "set luma effect amount",     OFFSET(luma_amount),     AV_OPT_TYPE_DOUBLE, {.dbl=1.0}, -DBL_MAX, DBL_MAX, .flags=FLAGS },
 
-    { "chroma_msize_x",  "set chroma matrix x size",   OFFSET(chroma_msize_x), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "cx",              "set chroma matrix x size",   OFFSET(chroma_msize_x), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "chroma_msize_y",  "set chroma matrix y size",   OFFSET(chroma_msize_y), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "cy"          ,    "set chroma matrix y size",   OFFSET(chroma_msize_y), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63 },
-    { "chroma_amount",   "set chroma effect strenght", OFFSET(chroma_amount),  AV_OPT_TYPE_DOUBLE, {.dbl=0.0}, -DBL_MAX, DBL_MAX },
-    { "ca",              "set chroma effect strenght", OFFSET(chroma_amount),  AV_OPT_TYPE_DOUBLE, {.dbl=0.0}, -DBL_MAX, DBL_MAX },
+    { "chroma_msize_x",  "set chroma matrix x size",   OFFSET(chroma_msize_x), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "cx",              "set chroma matrix x size",   OFFSET(chroma_msize_x), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "chroma_msize_y",  "set chroma matrix y size",   OFFSET(chroma_msize_y), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "cy"          ,    "set chroma matrix y size",   OFFSET(chroma_msize_y), AV_OPT_TYPE_INT,    {.i64=5}, 3, 63, .flags=FLAGS },
+    { "chroma_amount",   "set chroma effect strenght", OFFSET(chroma_amount),  AV_OPT_TYPE_DOUBLE, {.dbl=0.0}, -DBL_MAX, DBL_MAX, .flags=FLAGS },
+    { "ca",              "set chroma effect strenght", OFFSET(chroma_amount),  AV_OPT_TYPE_DOUBLE, {.dbl=0.0}, -DBL_MAX, DBL_MAX, .flags=FLAGS },
 
     { NULL }
 };
@@ -258,26 +259,26 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_opt_free(unsharp);
 }
 
-static int filter_frame(AVFilterLink *link, AVFilterBufferRef *in)
+static int filter_frame(AVFilterLink *link, AVFrame *in)
 {
     UnsharpContext *unsharp = link->dst->priv;
     AVFilterLink *outlink   = link->dst->outputs[0];
-    AVFilterBufferRef *out;
+    AVFrame *out;
     int cw = SHIFTUP(link->w, unsharp->hsub);
     int ch = SHIFTUP(link->h, unsharp->vsub);
 
-    out = ff_get_video_buffer(outlink, AV_PERM_WRITE, outlink->w, outlink->h);
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
-        avfilter_unref_bufferp(&in);
+        av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
-    avfilter_copy_buffer_ref_props(out, in);
+    av_frame_copy_props(out, in);
 
     apply_unsharp(out->data[0], out->linesize[0], in->data[0], in->linesize[0], link->w, link->h, &unsharp->luma);
     apply_unsharp(out->data[1], out->linesize[1], in->data[1], in->linesize[1], cw,      ch,      &unsharp->chroma);
     apply_unsharp(out->data[2], out->linesize[2], in->data[2], in->linesize[2], cw,      ch,      &unsharp->chroma);
 
-    avfilter_unref_bufferp(&in);
+    av_frame_free(&in);
     return ff_filter_frame(outlink, out);
 }
 
@@ -287,7 +288,6 @@ static const AVFilterPad avfilter_vf_unsharp_inputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = filter_frame,
         .config_props = config_props,
-        .min_perms    = AV_PERM_READ,
     },
     { NULL }
 };

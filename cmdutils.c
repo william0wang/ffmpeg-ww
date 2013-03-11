@@ -36,9 +36,7 @@
 #include "libavresample/avresample.h"
 #include "libswscale/swscale.h"
 #include "libswresample/swresample.h"
-#if CONFIG_POSTPROC
 #include "libpostproc/postprocess.h"
-#endif
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
@@ -494,10 +492,10 @@ int opt_default(void *optctx, const char *opt, const char *arg)
         consumed = 1;
     }
     if ((o = av_opt_find(&fc, opt, NULL, 0,
-                              AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
+                         AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ))) {
         av_dict_set(&format_opts, opt, arg, FLAGS);
-        if(consumed)
-            av_log(NULL, AV_LOG_VERBOSE, "Routing %s to codec and muxer layer\n", opt);
+        if (consumed)
+            av_log(NULL, AV_LOG_VERBOSE, "Routing option %s to both codec and muxer layer\n", opt);
         consumed = 1;
     }
 #if CONFIG_SWSCALE
@@ -991,12 +989,10 @@ static void print_all_libs_info(int flags, int level)
     PRINT_LIB_INFO(avformat, AVFORMAT, flags, level);
     PRINT_LIB_INFO(avdevice, AVDEVICE, flags, level);
     PRINT_LIB_INFO(avfilter, AVFILTER, flags, level);
-//    PRINT_LIB_INFO(avresample, AVRESAMPLE, flags, level);
+    PRINT_LIB_INFO(avresample, AVRESAMPLE, flags, level);
     PRINT_LIB_INFO(swscale,  SWSCALE,  flags, level);
     PRINT_LIB_INFO(swresample,SWRESAMPLE,  flags, level);
-#if CONFIG_POSTPROC
     PRINT_LIB_INFO(postproc, POSTPROC, flags, level);
-#endif
 }
 
 static void print_program_info(int flags, int level)

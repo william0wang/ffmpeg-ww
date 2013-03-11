@@ -361,7 +361,8 @@ want to create filter graphs with multiple inputs and/or outputs.
 Specify the preset for matching stream(s).
 
 @item -stats (@emph{global})
-Print encoding progress/statistics. On by default.
+Print encoding progress/statistics. It is on by default, to explicitly
+disable it you need to specify @code{-nostats}.
 
 @item -progress @var{url} (@emph{global})
 Send program-friendly progress information to @var{url}.
@@ -679,6 +680,9 @@ non-monotonic timestamps.
 Note that this option will delay the output of all data until the next
 subtitle packet is decoded: it may increase memory consumption and latency a
 lot.
+
+@item -canvas_size @var{size}
+Set the size of the canvas used to render subtitles.
 
 @end table
 

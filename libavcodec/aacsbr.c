@@ -925,13 +925,11 @@ static void read_sbr_extension(AACContext *ac, SpectralBandReplication *sbr,
 {
     switch (bs_extension_id) {
     case EXTENSION_ID_PS:
-        if (ac->oc[1].m4ac.ps != 1) {
-            av_log(ac->avctx, AV_LOG_DEBUG, "Parametric Stereo was found in the bitstream.\n");
-            ac->oc[1].m4ac.ps = 1;
-            ff_aac_output_configure(ac, ac->oc[1].layout_map, ac->oc[1].layout_map_tags,
-                                    ac->oc[1].status, 1);
-        }
-        av_assert0(ac->oc[1].m4ac.ps);
+        if (!ac->oc[1].m4ac.ps) {
+            av_log(ac->avctx, AV_LOG_ERROR, "Parametric Stereo signaled to be not-present but was found in the bitstream.\n");
+            skip_bits_long(gb, *num_bits_left); // bs_fill_bits
+            *num_bits_left = 0;
+        } else {
 #if 1
             *num_bits_left -= ff_ps_read_data(ac->avctx, gb, &sbr->ps, *num_bits_left);
 #else
@@ -939,6 +937,7 @@ static void read_sbr_extension(AACContext *ac, SpectralBandReplication *sbr,
             skip_bits_long(gb, *num_bits_left); // bs_fill_bits
             *num_bits_left = 0;
 #endif
+        }
         break;
     default:
         // some files contain 0-padding
@@ -1132,7 +1131,12 @@ static void sbr_dequant(SpectralBandReplication *sbr, int id_aac)
             for (k = 0; k < sbr->n[sbr->data[0].bs_freq_res[e]]; k++) {
                 float temp1 = exp2f(sbr->data[0].env_facs[e][k] * alpha + 7.0f);
                 float temp2 = exp2f((pan_offset - sbr->data[1].env_facs[e][k]) * alpha);
-                float fac   = temp1 / (1.0f + temp2);
+                float fac;
+                if (temp1 > 1E20) {
+                    av_log(NULL, AV_LOG_ERROR, "envelope scalefactor overflow in dequant\n");
+                    temp1 = 1;
+                }
+                fac   = temp1 / (1.0f + temp2);
                 sbr->data[0].env_facs[e][k] = fac;
                 sbr->data[1].env_facs[e][k] = fac * temp2;
             }
@@ -1141,7 +1145,12 @@ static void sbr_dequant(SpectralBandReplication *sbr, int id_aac)
             for (k = 0; k < sbr->n_q; k++) {
                 float temp1 = exp2f(NOISE_FLOOR_OFFSET - sbr->data[0].noise_facs[e][k] + 1);
                 float temp2 = exp2f(12 - sbr->data[1].noise_facs[e][k]);
-                float fac   = temp1 / (1.0f + temp2);
+                float fac;
+                if (temp1 > 1E20) {
+                    av_log(NULL, AV_LOG_ERROR, "envelope scalefactor overflow in dequant\n");
+                    temp1 = 1;
+                }
+                fac = temp1 / (1.0f + temp2);
                 sbr->data[0].noise_facs[e][k] = fac;
                 sbr->data[1].noise_facs[e][k] = fac * temp2;
             }
@@ -1150,9 +1159,15 @@ static void sbr_dequant(SpectralBandReplication *sbr, int id_aac)
         for (ch = 0; ch < (id_aac == TYPE_CPE) + 1; ch++) {
             float alpha = sbr->data[ch].bs_amp_res ? 1.0f : 0.5f;
             for (e = 1; e <= sbr->data[ch].bs_num_env; e++)
-                for (k = 0; k < sbr->n[sbr->data[ch].bs_freq_res[e]]; k++)
+                for (k = 0; k < sbr->n[sbr->data[ch].bs_freq_res[e]]; k++){
                     sbr->data[ch].env_facs[e][k] =
                         exp2f(alpha * sbr->data[ch].env_facs[e][k] + 6.0f);
+                    if (sbr->data[ch].env_facs[e][k] > 1E20) {
+                        av_log(NULL, AV_LOG_ERROR, "envelope scalefactor overflow in dequant\n");
+                        sbr->data[ch].env_facs[e][k] = 1;
+                    }
+                }
+
             for (e = 1; e <= sbr->data[ch].bs_num_noise; e++)
                 for (k = 0; k < sbr->n_q; k++)
                     sbr->data[ch].noise_facs[e][k] =
