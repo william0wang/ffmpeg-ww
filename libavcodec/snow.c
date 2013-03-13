@@ -401,6 +401,7 @@ av_cold int ff_snow_common_init(AVCodecContext *avctx){
     s->max_ref_frames=1; //just make sure it's not an invalid value in case of no initial keyframe
 
     ff_dsputil_init(&s->dsp, avctx);
+    ff_hpeldsp_init(&s->hdsp, avctx->flags);
     ff_videodsp_init(&s->vdsp, 8);
     ff_dwt_init(&s->dwt);
     ff_h264qpel_init(&s->h264qpel, 8);
@@ -431,11 +432,11 @@ av_cold int ff_snow_common_init(AVCodecContext *avctx){
     mcf(12,12)
 
 #define mcfh(dx,dy)\
-    s->dsp.put_pixels_tab       [0][dy/4+dx/8]=\
-    s->dsp.put_no_rnd_pixels_tab[0][dy/4+dx/8]=\
+    s->hdsp.put_pixels_tab       [0][dy/4+dx/8]=\
+    s->hdsp.put_no_rnd_pixels_tab[0][dy/4+dx/8]=\
         mc_block_hpel ## dx ## dy ## 16;\
-    s->dsp.put_pixels_tab       [1][dy/4+dx/8]=\
-    s->dsp.put_no_rnd_pixels_tab[1][dy/4+dx/8]=\
+    s->hdsp.put_pixels_tab       [1][dy/4+dx/8]=\
+    s->hdsp.put_no_rnd_pixels_tab[1][dy/4+dx/8]=\
         mc_block_hpel ## dx ## dy ## 8;
 
     mcfh(0, 0)
@@ -456,9 +457,14 @@ av_cold int ff_snow_common_init(AVCodecContext *avctx){
     FF_ALLOCZ_OR_GOTO(avctx, s->temp_idwt_buffer,    width * sizeof(IDWTELEM), fail);
     FF_ALLOC_OR_GOTO(avctx,  s->run_buffer,          ((width + 1) >> 1) * ((height + 1) >> 1) * sizeof(*s->run_buffer), fail);
 
-    for(i=0; i<MAX_REF_FRAMES; i++)
+    for(i=0; i<MAX_REF_FRAMES; i++) {
         for(j=0; j<MAX_REF_FRAMES; j++)
             ff_scale_mv_ref[i][j] = 256*(i+1)/(j+1);
+        avcodec_get_frame_defaults(&s->last_picture[i]);
+    }
+
+    avcodec_get_frame_defaults(&s->mconly_picture);
+    avcodec_get_frame_defaults(&s->current_picture);
 
     return 0;
 fail:

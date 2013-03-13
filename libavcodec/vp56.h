@@ -29,6 +29,7 @@
 #include "vp56data.h"
 #include "dsputil.h"
 #include "get_bits.h"
+#include "hpeldsp.h"
 #include "bytestream.h"
 #include "h264chroma.h"
 #include "videodsp.h"
@@ -95,12 +96,12 @@ typedef struct VP56Model {
 
 struct vp56_context {
     AVCodecContext *avctx;
-    DSPContext dsp;
     H264ChromaContext h264chroma;
+    HpelDSPContext hdsp;
     VideoDSPContext vdsp;
     VP3DSPContext vp3dsp;
     VP56DSPContext vp56dsp;
-    ScanTable scantable;
+    uint8_t idct_scantable[64];
     AVFrame *frames[4];
     uint8_t *edge_emu_buffer_alloc;
     uint8_t *edge_emu_buffer;

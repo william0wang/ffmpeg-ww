@@ -294,7 +294,8 @@ static int write_option(void *optctx, const OptionDef *po, const char *opt,
         int ret = po->u.func_arg(optctx, opt, arg);
         if (ret < 0) {
             av_log(NULL, AV_LOG_ERROR,
-                   "Failed to set value '%s' for option '%s'\n", arg, opt);
+                   "Failed to set value '%s' for option '%s': %s\n",
+                   arg, opt, av_err2str(ret));
             return ret;
         }
     }
@@ -377,6 +378,16 @@ int parse_optgroup(void *optctx, OptionGroup *g)
 
     for (i = 0; i < g->nb_opts; i++) {
         Option *o = &g->opts[i];
+
+        if (g->group_def->flags &&
+            !(g->group_def->flags & o->opt->flags)) {
+            av_log(NULL, AV_LOG_ERROR, "Option %s (%s) cannot be applied to "
+                   "%s %s -- you are trying to apply an input option to an "
+                   "output file or vice versa. Move this option before the "
+                   "file it belongs to.\n", o->key, o->opt->help,
+                   g->group_def->name, g->arg);
+            return AVERROR(EINVAL);
+        }
 
         av_log(NULL, AV_LOG_DEBUG, "Applying option %s (%s) with argument %s.\n",
                o->key, o->opt->help, o->val);
@@ -536,6 +547,8 @@ int opt_default(void *optctx, const char *opt, const char *arg)
 
     if (consumed)
         return 0;
+    av_log(NULL, AV_LOG_ERROR, "Could not find option '%s' in any of the FFmpeg subsystems "
+           "(codec, format, scaler, resampler contexts)\n", opt);
     return AVERROR_OPTION_NOT_FOUND;
 }
 
@@ -1825,145 +1838,4 @@ void *grow_array(void *array, int elem_size, int *size, int new_size)
         return tmp;
     }
     return array;
-}
-
-static int alloc_buffer(FrameBuffer **pool, AVCodecContext *s, FrameBuffer **pbuf)
-{
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(s->pix_fmt);
-    FrameBuffer *buf;
-    int i, ret;
-    int pixel_size;
-    int h_chroma_shift, v_chroma_shift;
-    int edge = 32; // XXX should be avcodec_get_edge_width(), but that fails on svq1
-    int w = s->width, h = s->height;
-
-    if (!desc)
-        return AVERROR(EINVAL);
-    pixel_size = desc->comp[0].step_minus1 + 1;
-
-    buf = av_mallocz(sizeof(*buf));
-    if (!buf)
-        return AVERROR(ENOMEM);
-
-    avcodec_align_dimensions(s, &w, &h);
-
-    if (!(s->flags & CODEC_FLAG_EMU_EDGE)) {
-        w += 2*edge;
-        h += 2*edge;
-    }
-
-    if ((ret = av_image_alloc(buf->base, buf->linesize, w, h,
-                              s->pix_fmt, 32)) < 0) {
-        av_freep(&buf);
-        av_log(s, AV_LOG_ERROR, "alloc_buffer: av_image_alloc() failed\n");
-        return ret;
-    }
-
-    avcodec_get_chroma_sub_sample(s->pix_fmt, &h_chroma_shift, &v_chroma_shift);
-    for (i = 0; i < FF_ARRAY_ELEMS(buf->data); i++) {
-        const int h_shift = i==0 ? 0 : h_chroma_shift;
-        const int v_shift = i==0 ? 0 : v_chroma_shift;
-        if ((s->flags & CODEC_FLAG_EMU_EDGE) || !buf->linesize[i] || !buf->base[i])
-            buf->data[i] = buf->base[i];
-        else
-            buf->data[i] = buf->base[i] +
-                           FFALIGN((buf->linesize[i]*edge >> v_shift) +
-                                   (pixel_size*edge >> h_shift), 32);
-    }
-    buf->w       = s->width;
-    buf->h       = s->height;
-    buf->pix_fmt = s->pix_fmt;
-    buf->pool    = pool;
-
-    *pbuf = buf;
-    return 0;
-}
-
-int codec_get_buffer(AVCodecContext *s, AVFrame *frame)
-{
-    FrameBuffer **pool = s->opaque;
-    FrameBuffer *buf;
-    int ret, i;
-
-    if(av_image_check_size(s->width, s->height, 0, s) || s->pix_fmt<0) {
-        av_log(s, AV_LOG_ERROR, "codec_get_buffer: image parameters invalid\n");
-        return -1;
-    }
-
-    if (!*pool && (ret = alloc_buffer(pool, s, pool)) < 0)
-        return ret;
-
-    buf              = *pool;
-    *pool            = buf->next;
-    buf->next        = NULL;
-    if (buf->w != s->width || buf->h != s->height || buf->pix_fmt != s->pix_fmt) {
-        av_freep(&buf->base[0]);
-        av_free(buf);
-        if ((ret = alloc_buffer(pool, s, &buf)) < 0)
-            return ret;
-    }
-    av_assert0(!buf->refcount);
-    buf->refcount++;
-
-    frame->opaque        = buf;
-    frame->type          = FF_BUFFER_TYPE_USER;
-    frame->extended_data = frame->data;
-
-    for (i = 0; i < FF_ARRAY_ELEMS(buf->data); i++) {
-        frame->base[i]     = buf->base[i];  // XXX h264.c uses base though it shouldn't
-        frame->data[i]     = buf->data[i];
-        frame->linesize[i] = buf->linesize[i];
-    }
-
-    return 0;
-}
-
-static void unref_buffer(FrameBuffer *buf)
-{
-    FrameBuffer **pool = buf->pool;
-
-    av_assert0(buf->refcount > 0);
-    buf->refcount--;
-    if (!buf->refcount) {
-        FrameBuffer *tmp;
-        for(tmp= *pool; tmp; tmp= tmp->next)
-            av_assert1(tmp != buf);
-
-        buf->next = *pool;
-        *pool = buf;
-    }
-}
-
-void codec_release_buffer(AVCodecContext *s, AVFrame *frame)
-{
-    FrameBuffer *buf = frame->opaque;
-    int i;
-
-    if(frame->type!=FF_BUFFER_TYPE_USER) {
-        avcodec_default_release_buffer(s, frame);
-        return;
-    }
-
-    for (i = 0; i < FF_ARRAY_ELEMS(frame->data); i++)
-        frame->data[i] = NULL;
-
-    unref_buffer(buf);
-}
-
-void filter_release_buffer(AVFilterBuffer *fb)
-{
-    FrameBuffer *buf = fb->priv;
-    av_free(fb);
-    unref_buffer(buf);
-}
-
-void free_buffer_pool(FrameBuffer **pool)
-{
-    FrameBuffer *buf = *pool;
-    while (buf) {
-        *pool = buf->next;
-        av_freep(&buf->base[0]);
-        av_free(buf);
-        buf = *pool;
-    }
 }

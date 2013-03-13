@@ -194,6 +194,7 @@ av_cold int ff_dct_common_init(MpegEncContext *s)
 {
     ff_dsputil_init(&s->dsp, s->avctx);
     ff_h264chroma_init(&s->h264chroma, 8); //for lowres
+    ff_hpeldsp_init(&s->hdsp, s->avctx->flags);
     ff_videodsp_init(&s->vdsp, s->avctx->bits_per_raw_sample);
 
     s->dct_unquantize_h263_intra = dct_unquantize_h263_intra_c;
@@ -1189,9 +1190,6 @@ static int free_context_frame(MpegEncContext *s)
 
     s->linesize = s->uvlinesize = 0;
 
-    for (i = 0; i < 3; i++)
-        av_freep(&s->visualization_buffer[i]);
-
     return 0;
 }
 
@@ -1913,15 +1911,13 @@ static void draw_arrow(uint8_t *buf, int sx, int sy, int ex,
 /**
  * Print debugging info for the given picture.
  */
-void ff_print_debug_info2(AVCodecContext *avctx, Picture *p, uint8_t *mbskip_table,
-                         uint8_t *visualization_buffer[3], int *low_delay,
+void ff_print_debug_info2(AVCodecContext *avctx, Picture *p, AVFrame *pict, uint8_t *mbskip_table,
+                         int *low_delay,
                          int mb_width, int mb_height, int mb_stride, int quarter_sample)
 {
-    AVFrame *pict;
     if (avctx->hwaccel || !p || !p->mb_type
         || (avctx->codec->capabilities&CODEC_CAP_HWACCEL_VDPAU))
         return;
-    pict = &p->f;
 
 
     if (avctx->debug & (FF_DEBUG_SKIP | FF_DEBUG_QP | FF_DEBUG_MB_TYPE)) {
@@ -2003,20 +1999,16 @@ void ff_print_debug_info2(AVCodecContext *avctx, Picture *p, uint8_t *mbskip_tab
         int h_chroma_shift, v_chroma_shift, block_height;
         const int width          = avctx->width;
         const int height         = avctx->height;
-        const int mv_sample_log2 = 4 - pict->motion_subsample_log2;
+        const int mv_sample_log2 = avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_SVQ3 ? 2 : 1;
         const int mv_stride      = (mb_width << mv_sample_log2) +
                                    (avctx->codec->id == AV_CODEC_ID_H264 ? 0 : 1);
+
         *low_delay = 0; // needed to see the vectors without trashing the buffers
 
         avcodec_get_chroma_sub_sample(avctx->pix_fmt, &h_chroma_shift, &v_chroma_shift);
 
-        for (i = 0; i < 3; i++) {
-            size_t size= (i == 0) ? pict->linesize[i] * FFALIGN(height, 16):
-                         pict->linesize[i] * FFALIGN(height, 16) >> v_chroma_shift;
-            visualization_buffer[i]= av_realloc(visualization_buffer[i], size);
-            memcpy(visualization_buffer[i], pict->data[i], size);
-            pict->data[i] = visualization_buffer[i];
-        }
+        av_frame_make_writable(pict);
+
         pict->opaque = NULL;
         ptr          = pict->data[0];
         block_height = 16 >> v_chroma_shift;
@@ -2205,9 +2197,9 @@ void ff_print_debug_info2(AVCodecContext *avctx, Picture *p, uint8_t *mbskip_tab
     }
 }
 
-void ff_print_debug_info(MpegEncContext *s, Picture *p)
+void ff_print_debug_info(MpegEncContext *s, Picture *p, AVFrame *pict)
 {
-    ff_print_debug_info2(s->avctx, p, s->mbskip_table, s->visualization_buffer, &s->low_delay,
+    ff_print_debug_info2(s->avctx, p, pict, s->mbskip_table, &s->low_delay,
                          s->mb_width, s->mb_height, s->mb_stride, s->quarter_sample);
 }
 
@@ -2802,13 +2794,13 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
                 }else{
                     op_qpix= s->me.qpel_put;
                     if ((!s->no_rounding) || s->pict_type==AV_PICTURE_TYPE_B){
-                        op_pix = s->dsp.put_pixels_tab;
+                        op_pix = s->hdsp.put_pixels_tab;
                     }else{
-                        op_pix = s->dsp.put_no_rnd_pixels_tab;
+                        op_pix = s->hdsp.put_no_rnd_pixels_tab;
                     }
                     if (s->mv_dir & MV_DIR_FORWARD) {
                         ff_MPV_motion(s, dest_y, dest_cb, dest_cr, 0, s->last_picture.f.data, op_pix, op_qpix);
-                        op_pix = s->dsp.avg_pixels_tab;
+                        op_pix = s->hdsp.avg_pixels_tab;
                         op_qpix= s->me.qpel_avg;
                     }
                     if (s->mv_dir & MV_DIR_BACKWARD) {
@@ -2929,9 +2921,9 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
         }
 skip_idct:
         if(!readable){
-            s->dsp.put_pixels_tab[0][0](s->dest[0], dest_y ,   linesize,16);
-            s->dsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[1], dest_cb, uvlinesize,16 >> s->chroma_y_shift);
-            s->dsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[2], dest_cr, uvlinesize,16 >> s->chroma_y_shift);
+            s->hdsp.put_pixels_tab[0][0](s->dest[0], dest_y ,   linesize,16);
+            s->hdsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[1], dest_cb, uvlinesize,16 >> s->chroma_y_shift);
+            s->hdsp.put_pixels_tab[s->chroma_x_shift][0](s->dest[2], dest_cr, uvlinesize,16 >> s->chroma_y_shift);
         }
     }
 }

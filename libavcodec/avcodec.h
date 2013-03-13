@@ -499,10 +499,6 @@ enum AVCodecID {
 #endif
 };
 
-#if FF_API_CODEC_ID
-#define CodecID AVCodecID
-#endif
-
 /**
  * This struct describes the properties of a single codec described by an
  * AVCodecID.
@@ -546,11 +542,6 @@ typedef struct AVCodecDescriptor {
  * Subtitle codec is bitmap based
  */
 #define AV_CODEC_PROP_BITMAP_SUB    (1 << 16)
-
-#if FF_API_OLD_DECODE_AUDIO
-/* in bytes */
-#define AVCODEC_MAX_AUDIO_FRAME_SIZE 192000 // 1 second of 48khz 32bit audio
-#endif
 
 /**
  * @ingroup lavc_decoding
@@ -721,12 +712,6 @@ typedef struct RcOverride{
 #define CODEC_FLAG2_DROP_FRAME_TIMECODE 0x00002000 ///< timecode is in drop frame format. DEPRECATED!!!!
 #define CODEC_FLAG2_IGNORE_CROP   0x00010000 ///< Discard cropping information from SPS.
 
-#if FF_API_MPV_GLOBAL_OPTS
-#define CODEC_FLAG_CBP_RD         0x04000000 ///< Use rate distortion optimization for cbp.
-#define CODEC_FLAG_QP_RD          0x08000000 ///< Use rate distortion optimization for qp selectioon.
-#define CODEC_FLAG2_STRICT_GOP    0x00000002 ///< Strictly enforce GOP size.
-#define CODEC_FLAG2_SKIP_RD       0x00004000 ///< RD optimal MB level residual skipping
-#endif
 #define CODEC_FLAG2_CHUNKS        0x00008000 ///< Input bitstream might be truncated at a packet boundaries instead of only at frame boundaries.
 #define CODEC_FLAG2_SHOW_ALL      0x00400000 ///< Show all frames before the first keyframe
 
@@ -1170,13 +1155,6 @@ typedef struct AVCodecContext {
      */
     unsigned int stream_codec_tag;
 
-#if FF_API_SUB_ID
-    /**
-     * @deprecated this field is unused
-     */
-    attribute_deprecated int sub_id;
-#endif
-
     void *priv_data;
 
     /**
@@ -1404,22 +1382,6 @@ typedef struct AVCodecContext {
 #define FF_RC_STRATEGY_XVID 1
 
     int b_frame_strategy;
-
-#if FF_API_MPV_GLOBAL_OPTS
-    /**
-     * luma single coefficient elimination threshold
-     * - encoding: Set by user.
-     * - decoding: unused
-     */
-    attribute_deprecated int luma_elim_threshold;
-
-    /**
-     * chroma single coeff elimination threshold
-     * - encoding: Set by user.
-     * - decoding: unused
-     */
-    attribute_deprecated int chroma_elim_threshold;
-#endif
 
     /**
      * qscale offset between IP and B-frames
@@ -1650,16 +1612,6 @@ typedef struct AVCodecContext {
      */
     int inter_quant_bias;
 
-#if FF_API_COLOR_TABLE_ID
-    /**
-     * color table ID
-     * - encoding: unused
-     * - decoding: Which clrtable should be used for 8bit RGB images.
-     *             Tables have to be stored somewhere. FIXME
-     */
-    attribute_deprecated int color_table_id;
-#endif
-
     /**
      * slice flags
      * - encoding: unused
@@ -1715,20 +1667,6 @@ typedef struct AVCodecContext {
      * - decoding: unused
      */
     int noise_reduction;
-
-#if FF_API_INTER_THRESHOLD
-    /**
-     * @deprecated this field is unused
-     */
-    attribute_deprecated int inter_threshold;
-#endif
-
-#if FF_API_MPV_GLOBAL_OPTS
-    /**
-     * @deprecated use mpegvideo private options instead
-     */
-    attribute_deprecated int quantizer_noise_shaping;
-#endif
 
     /**
      * Motion estimation threshold below which no motion estimation is
@@ -2571,7 +2509,6 @@ typedef struct AVCodecContext {
 #define FF_IDCT_INT           1
 #define FF_IDCT_SIMPLE        2
 #define FF_IDCT_SIMPLEMMX     3
-#define FF_IDCT_LIBMPEG2MMX   4
 #if FF_API_MMI
 #define FF_IDCT_MMI           5
 #endif
@@ -2594,14 +2531,6 @@ typedef struct AVCodecContext {
 #define FF_IDCT_WMV2          19
 #define FF_IDCT_EA            21
 #define FF_IDCT_BINK          24
-#endif
-
-#if FF_API_DSP_MASK
-    /**
-     * Unused.
-     * @deprecated use av_set_cpu_flags_mask() instead.
-     */
-    attribute_deprecated unsigned dsp_mask;
 #endif
 
     /**
@@ -2794,21 +2723,21 @@ typedef struct AVCodecContext {
 #define FF_LEVEL_UNKNOWN -99
 
     /**
-     *
+     * Skip loop filtering for selected frames.
      * - encoding: unused
      * - decoding: Set by user.
      */
     enum AVDiscard skip_loop_filter;
 
     /**
-     *
+     * Skip IDCT/dequantization for selected frames.
      * - encoding: unused
      * - decoding: Set by user.
      */
     enum AVDiscard skip_idct;
 
     /**
-     *
+     * Skip decoding for selected frames.
      * - encoding: unused
      * - decoding: Set by user.
      */
@@ -4167,103 +4096,6 @@ int avcodec_encode_subtitle(AVCodecContext *avctx, uint8_t *buf, int buf_size,
  * @}
  */
 
-#if FF_API_AVCODEC_RESAMPLE
-/**
- * @defgroup lavc_resample Audio resampling
- * @ingroup libavc
- * @deprecated use libswresample instead
- *
- * @{
- */
-struct ReSampleContext;
-struct AVResampleContext;
-
-typedef struct ReSampleContext ReSampleContext;
-
-/**
- *  Initialize audio resampling context.
- *
- * @param output_channels  number of output channels
- * @param input_channels   number of input channels
- * @param output_rate      output sample rate
- * @param input_rate       input sample rate
- * @param sample_fmt_out   requested output sample format
- * @param sample_fmt_in    input sample format
- * @param filter_length    length of each FIR filter in the filterbank relative to the cutoff frequency
- * @param log2_phase_count log2 of the number of entries in the polyphase filterbank
- * @param linear           if 1 then the used FIR filter will be linearly interpolated
-                           between the 2 closest, if 0 the closest will be used
- * @param cutoff           cutoff frequency, 1.0 corresponds to half the output sampling rate
- * @return allocated ReSampleContext, NULL if error occurred
- */
-attribute_deprecated
-ReSampleContext *av_audio_resample_init(int output_channels, int input_channels,
-                                        int output_rate, int input_rate,
-                                        enum AVSampleFormat sample_fmt_out,
-                                        enum AVSampleFormat sample_fmt_in,
-                                        int filter_length, int log2_phase_count,
-                                        int linear, double cutoff);
-
-attribute_deprecated
-int audio_resample(ReSampleContext *s, short *output, short *input, int nb_samples);
-
-/**
- * Free resample context.
- *
- * @param s a non-NULL pointer to a resample context previously
- *          created with av_audio_resample_init()
- */
-attribute_deprecated
-void audio_resample_close(ReSampleContext *s);
-
-
-/**
- * Initialize an audio resampler.
- * Note, if either rate is not an integer then simply scale both rates up so they are.
- * @param filter_length length of each FIR filter in the filterbank relative to the cutoff freq
- * @param log2_phase_count log2 of the number of entries in the polyphase filterbank
- * @param linear If 1 then the used FIR filter will be linearly interpolated
-                 between the 2 closest, if 0 the closest will be used
- * @param cutoff cutoff frequency, 1.0 corresponds to half the output sampling rate
- */
-attribute_deprecated
-struct AVResampleContext *av_resample_init(int out_rate, int in_rate, int filter_length, int log2_phase_count, int linear, double cutoff);
-
-/**
- * Resample an array of samples using a previously configured context.
- * @param src an array of unconsumed samples
- * @param consumed the number of samples of src which have been consumed are returned here
- * @param src_size the number of unconsumed samples available
- * @param dst_size the amount of space in samples available in dst
- * @param update_ctx If this is 0 then the context will not be modified, that way several channels can be resampled with the same context.
- * @return the number of samples written in dst or -1 if an error occurred
- */
-attribute_deprecated
-int av_resample(struct AVResampleContext *c, short *dst, short *src, int *consumed, int src_size, int dst_size, int update_ctx);
-
-
-/**
- * Compensate samplerate/timestamp drift. The compensation is done by changing
- * the resampler parameters, so no audible clicks or similar distortions occur
- * @param compensation_distance distance in output samples over which the compensation should be performed
- * @param sample_delta number of output samples which should be output less
- *
- * example: av_resample_compensate(c, 10, 500)
- * here instead of 510 samples only 500 samples would be output
- *
- * note, due to rounding the actual compensation might be slightly different,
- * especially if the compensation_distance is large and the in_rate used during init is small
- */
-attribute_deprecated
-void av_resample_compensate(struct AVResampleContext *c, int sample_delta, int compensation_distance);
-attribute_deprecated
-void av_resample_close(struct AVResampleContext *c);
-
-/**
- * @}
- */
-#endif
-
 /**
  * @addtogroup lavc_picture
  * @{
@@ -4418,38 +4250,6 @@ unsigned int avcodec_pix_fmt_to_codec_tag(enum AVPixelFormat pix_fmt);
  */
 int avcodec_get_pix_fmt_loss(enum AVPixelFormat dst_pix_fmt, enum AVPixelFormat src_pix_fmt,
                              int has_alpha);
-
-#if FF_API_FIND_BEST_PIX_FMT
-/**
- * @deprecated use avcodec_find_best_pix_fmt_of_2() instead.
- *
- * Find the best pixel format to convert to given a certain source pixel
- * format.  When converting from one pixel format to another, information loss
- * may occur.  For example, when converting from RGB24 to GRAY, the color
- * information will be lost. Similarly, other losses occur when converting from
- * some formats to other formats. avcodec_find_best_pix_fmt() searches which of
- * the given pixel formats should be used to suffer the least amount of loss.
- * The pixel formats from which it chooses one, are determined by the
- * pix_fmt_mask parameter.
- *
- * Note, only the first 64 pixel formats will fit in pix_fmt_mask.
- *
- * @code
- * src_pix_fmt = AV_PIX_FMT_YUV420P;
- * pix_fmt_mask = (1 << AV_PIX_FMT_YUV422P) | (1 << AV_PIX_FMT_RGB24);
- * dst_pix_fmt = avcodec_find_best_pix_fmt(pix_fmt_mask, src_pix_fmt, alpha, &loss);
- * @endcode
- *
- * @param[in] pix_fmt_mask bitmask determining which pixel format to choose from
- * @param[in] src_pix_fmt source pixel format
- * @param[in] has_alpha Whether the source pixel format alpha channel is used.
- * @param[out] loss_ptr Combination of flags informing you what kind of losses will occur.
- * @return The best pixel format to convert to or -1 if none was found.
- */
-attribute_deprecated
-enum AVPixelFormat avcodec_find_best_pix_fmt(int64_t pix_fmt_mask, enum AVPixelFormat src_pix_fmt,
-                              int has_alpha, int *loss_ptr);
-#endif /* FF_API_FIND_BEST_PIX_FMT */
 
 /**
  * Find the best pixel format to convert to given a certain source pixel

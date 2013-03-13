@@ -523,9 +523,9 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
     } else { // hpel mc - always used for luma
         dxy = (my & 2) | ((mx & 2) >> 1);
         if (!v->rnd)
-            dsp->put_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
+            s->hdsp.put_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
         else
-            dsp->put_no_rnd_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
+            s->hdsp.put_no_rnd_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
     }
 
     if (s->flags & CODEC_FLAG_GRAY) return;
@@ -557,7 +557,6 @@ static inline int median4(int a, int b, int c, int d)
 static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir)
 {
     MpegEncContext *s = &v->s;
-    DSPContext *dsp = &v->s.dsp;
     uint8_t *srcY;
     int dxy, mx, my, src_x, src_y;
     int off;
@@ -722,9 +721,9 @@ static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir)
     } else { // hpel mc - always used for luma
         dxy = (my & 2) | ((mx & 2) >> 1);
         if (!v->rnd)
-            dsp->put_pixels_tab[1][dxy](s->dest[0] + off, srcY, s->linesize, 8);
+            s->hdsp.put_pixels_tab[1][dxy](s->dest[0] + off, srcY, s->linesize, 8);
         else
-            dsp->put_no_rnd_pixels_tab[1][dxy](s->dest[0] + off, srcY, s->linesize, 8);
+            s->hdsp.put_no_rnd_pixels_tab[1][dxy](s->dest[0] + off, srcY, s->linesize, 8);
     }
 }
 
@@ -1969,9 +1968,9 @@ static void vc1_interp_mc(VC1Context *v)
         dxy = (my & 2) | ((mx & 2) >> 1);
 
         if (!v->rnd)
-            dsp->avg_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
+            s->hdsp.avg_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
         else
-            dsp->avg_no_rnd_pixels_tab[dxy](s->dest[0] + off, srcY, s->linesize, 16);
+            s->hdsp.avg_no_rnd_pixels_tab[dxy](s->dest[0] + off, srcY, s->linesize, 16);
     }
 
     if (s->flags & CODEC_FLAG_GRAY) return;
@@ -5763,11 +5762,11 @@ image:
         if (s->pict_type == AV_PICTURE_TYPE_B || s->low_delay) {
             if ((ret = av_frame_ref(pict, &s->current_picture_ptr->f)) < 0)
                 goto err;
-            ff_print_debug_info(s, s->current_picture_ptr);
+            ff_print_debug_info(s, s->current_picture_ptr, pict);
         } else if (s->last_picture_ptr != NULL) {
             if ((ret = av_frame_ref(pict, &s->last_picture_ptr->f)) < 0)
                 goto err;
-            ff_print_debug_info(s, s->last_picture_ptr);
+            ff_print_debug_info(s, s->last_picture_ptr, pict);
         }
         if (s->last_picture_ptr || s->low_delay) {
             *got_frame = 1;

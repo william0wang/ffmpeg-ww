@@ -333,12 +333,6 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
     s->flags2       = avctx->flags2;
     s->max_b_frames = avctx->max_b_frames;
     s->codec_id     = avctx->codec->id;
-#if FF_API_MPV_GLOBAL_OPTS
-    if (avctx->luma_elim_threshold)
-        s->luma_elim_threshold   = avctx->luma_elim_threshold;
-    if (avctx->chroma_elim_threshold)
-        s->chroma_elim_threshold = avctx->chroma_elim_threshold;
-#endif
     s->strict_std_compliance = avctx->strict_std_compliance;
     s->quarter_sample     = (avctx->flags & CODEC_FLAG_QPEL) != 0;
     s->mpeg_quant         = avctx->mpeg_quant;
@@ -357,11 +351,6 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
 
     /* Fixed QSCALE */
     s->fixed_qscale = !!(avctx->flags & CODEC_FLAG_QSCALE);
-
-#if FF_API_MPV_GLOBAL_OPTS
-    if (s->flags & CODEC_FLAG_QP_RD)
-        s->mpv_flags |= FF_MPV_FLAG_QP_RD;
-#endif
 
     s->adaptive_quant = (s->avctx->lumi_masking ||
                          s->avctx->dark_masking ||
@@ -555,11 +544,6 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-#if FF_API_MPV_GLOBAL_OPTS
-    if (s->flags & CODEC_FLAG_CBP_RD)
-        s->mpv_flags |= FF_MPV_FLAG_CBP_RD;
-#endif
-
     if ((s->mpv_flags & FF_MPV_FLAG_CBP_RD) && !avctx->trellis) {
         av_log(avctx, AV_LOG_ERROR, "CBP RD needs trellis quant\n");
         return -1;
@@ -679,15 +663,6 @@ av_cold int ff_MPV_encode_init(AVCodecContext *avctx)
         return -1;
     }
     s->time_increment_bits = av_log2(s->avctx->time_base.den - 1) + 1;
-
-#if FF_API_MPV_GLOBAL_OPTS
-    if (avctx->flags2 & CODEC_FLAG2_SKIP_RD)
-        s->mpv_flags |= FF_MPV_FLAG_SKIP_RD;
-    if (avctx->flags2 & CODEC_FLAG2_STRICT_GOP)
-        s->mpv_flags |= FF_MPV_FLAG_STRICT_GOP;
-    if (avctx->quantizer_noise_shaping)
-        s->quantizer_noise_shaping = avctx->quantizer_noise_shaping;
-#endif
 
     switch (avctx->codec->id) {
     case AV_CODEC_ID_MPEG1VIDEO:
@@ -1918,10 +1893,10 @@ static av_always_inline void encode_mb_internal(MpegEncContext *s,
         dest_cr = s->dest[2];
 
         if ((!s->no_rounding) || s->pict_type == AV_PICTURE_TYPE_B) {
-            op_pix  = s->dsp.put_pixels_tab;
+            op_pix  = s->hdsp.put_pixels_tab;
             op_qpix = s->dsp.put_qpel_pixels_tab;
         } else {
-            op_pix  = s->dsp.put_no_rnd_pixels_tab;
+            op_pix  = s->hdsp.put_no_rnd_pixels_tab;
             op_qpix = s->dsp.put_no_rnd_qpel_pixels_tab;
         }
 
@@ -1929,7 +1904,7 @@ static av_always_inline void encode_mb_internal(MpegEncContext *s,
             ff_MPV_motion(s, dest_y, dest_cb, dest_cr, 0,
                           s->last_picture.f.data,
                           op_pix, op_qpix);
-            op_pix  = s->dsp.avg_pixels_tab;
+            op_pix  = s->hdsp.avg_pixels_tab;
             op_qpix = s->dsp.avg_qpel_pixels_tab;
         }
         if (s->mv_dir & MV_DIR_BACKWARD) {
@@ -2923,9 +2898,9 @@ static int encode_thread(AVCodecContext *c, void *arg){
                     ff_h263_update_motion_val(s);
 
                 if(next_block==0){ //FIXME 16 vs linesize16
-                    s->dsp.put_pixels_tab[0][0](s->dest[0], s->rd_scratchpad                     , s->linesize  ,16);
-                    s->dsp.put_pixels_tab[1][0](s->dest[1], s->rd_scratchpad + 16*s->linesize    , s->uvlinesize, 8);
-                    s->dsp.put_pixels_tab[1][0](s->dest[2], s->rd_scratchpad + 16*s->linesize + 8, s->uvlinesize, 8);
+                    s->hdsp.put_pixels_tab[0][0](s->dest[0], s->rd_scratchpad                     , s->linesize  ,16);
+                    s->hdsp.put_pixels_tab[1][0](s->dest[1], s->rd_scratchpad + 16*s->linesize    , s->uvlinesize, 8);
+                    s->hdsp.put_pixels_tab[1][0](s->dest[2], s->rd_scratchpad + 16*s->linesize + 8, s->uvlinesize, 8);
                 }
 
                 if(s->avctx->mb_decision == FF_MB_DECISION_BITS)

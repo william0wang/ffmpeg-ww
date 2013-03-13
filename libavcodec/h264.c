@@ -385,7 +385,6 @@ static int alloc_picture(H264Context *h, Picture *pic)
         pic->motion_val[i] = (int16_t (*)[2])pic->motion_val_buf[i]->data + 4;
         pic->ref_index[i]  = pic->ref_index_buf[i]->data;
     }
-    pic->f.motion_subsample_log2 = 2;
 
     return 0;
 fail:
@@ -2989,7 +2988,7 @@ static int h264_set_parameter_from_sps(H264Context *h)
     return 0;
 }
 
-static enum PixelFormat get_pixel_format(H264Context *h, int force_callback)
+static enum AVPixelFormat get_pixel_format(H264Context *h, int force_callback)
 {
     switch (h->sps.bit_depth_luma) {
     case 9:
@@ -4918,15 +4917,15 @@ not_extra:
             if ((ret = av_frame_ref(pict, &h->next_output_pic->f)) < 0)
                 return ret;
             *got_frame = 1;
+            if (CONFIG_MPEGVIDEO) {
+                ff_print_debug_info2(h->avctx, h->next_output_pic, pict, h->er.mbskip_table,
+                                    &h->low_delay,
+                                    h->mb_width, h->mb_height, h->mb_stride, 1);
+            }
         }
     }
 
     assert(pict->data[0] || !*got_frame);
-
-    if (CONFIG_MPEGVIDEO) {
-        ff_print_debug_info2(h->avctx, pict, h->er.mbskip_table, h->visualization_buffer, &h->low_delay,
-                             h->mb_width, h->mb_height, h->mb_stride, 1);
-    }
 
     return get_consumed_bytes(buf_index, buf_size);
 }

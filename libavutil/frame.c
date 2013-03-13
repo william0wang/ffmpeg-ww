@@ -17,7 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "audioconvert.h"
+#include "channel_layout.h"
 #include "buffer.h"
 #include "common.h"
 #include "dict.h"
@@ -106,7 +106,7 @@ static int get_video_buffer(AVFrame *frame, int align)
     }
 
     for (i = 0; i < 4 && frame->linesize[i]; i++) {
-        int h = frame->height;
+        int h = FFALIGN(frame->height, 32);
         if (i == 1 || i == 2)
             h = -((-h) >> desc->log2_chroma_h);
 
@@ -398,6 +398,7 @@ int av_frame_copy_props(AVFrame *dst, const AVFrame *src)
     dst->pkt_pts             = src->pkt_pts;
     dst->pkt_dts             = src->pkt_dts;
     dst->pkt_pos             = src->pkt_pos;
+    dst->reordered_opaque    = src->reordered_opaque;
     dst->quality             = src->quality;
     dst->coded_picture_number = src->coded_picture_number;
     dst->display_picture_number = src->display_picture_number;

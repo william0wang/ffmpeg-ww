@@ -245,55 +245,15 @@ static void op##_##rnd##_pixels##sz##_##xy (uint8_t * dest, const uint8_t * ref,
         } \
 }
 
-#define OP put
+#define         put_pixels8_c            ff_put_rnd_pixels8_o
+#define         put_pixels16_c           ff_put_rnd_pixels16_o
+#define         avg_pixels8_c            ff_avg_rnd_pixels8_o
+#define         avg_pixels16_c           ff_avg_rnd_pixels16_o
+#define         put_no_rnd_pixels8_c     ff_put_rnd_pixels8_o
+#define         put_no_rnd_pixels16_c    ff_put_rnd_pixels16_o
+#define         avg_no_rnd_pixels16_c    ff_avg_rnd_pixels16_o
 
-DEFFUNC(put,   rnd,o,8,OP_C,avg32)
-DEFFUNC(put,   rnd,x,8,OP_X,avg32)
-DEFFUNC(put,no_rnd,x,8,OP_X,avg32)
-DEFFUNC(put,   rnd,y,8,OP_Y,avg32)
-DEFFUNC(put,no_rnd,y,8,OP_Y,avg32)
-DEFFUNC(put,   rnd,xy,8,OP_XY,PACK)
-DEFFUNC(put,no_rnd,xy,8,OP_XY,PACK)
-DEFFUNC(put,   rnd,o,16,OP_C,avg32)
-DEFFUNC(put,   rnd,x,16,OP_X,avg32)
-DEFFUNC(put,no_rnd,x,16,OP_X,avg32)
-DEFFUNC(put,   rnd,y,16,OP_Y,avg32)
-DEFFUNC(put,no_rnd,y,16,OP_Y,avg32)
-DEFFUNC(put,   rnd,xy,16,OP_XY,PACK)
-DEFFUNC(put,no_rnd,xy,16,OP_XY,PACK)
-
-#undef OP
-#define OP avg
-
-DEFFUNC(avg,   rnd,o,8,OP_C,avg32)
-DEFFUNC(avg,   rnd,x,8,OP_X,avg32)
-DEFFUNC(avg,   rnd,y,8,OP_Y,avg32)
-DEFFUNC(avg,   rnd,xy,8,OP_XY,PACK)
-DEFFUNC(avg,   rnd,o,16,OP_C,avg32)
-DEFFUNC(avg,   rnd,x,16,OP_X,avg32)
-DEFFUNC(avg,no_rnd,x,16,OP_X,avg32)
-DEFFUNC(avg,   rnd,y,16,OP_Y,avg32)
-DEFFUNC(avg,no_rnd,y,16,OP_Y,avg32)
-DEFFUNC(avg,   rnd,xy,16,OP_XY,PACK)
-DEFFUNC(avg,no_rnd,xy,16,OP_XY,PACK)
-
-#undef OP
-
-#define         put_no_rnd_pixels8_o     put_rnd_pixels8_o
-#define         put_no_rnd_pixels16_o    put_rnd_pixels16_o
-#define         avg_no_rnd_pixels16_o    avg_rnd_pixels16_o
-
-#define         put_pixels8_c            put_rnd_pixels8_o
-#define         put_pixels16_c           put_rnd_pixels16_o
-#define         avg_pixels8_c            avg_rnd_pixels8_o
-#define         avg_pixels16_c           avg_rnd_pixels16_o
-#define         put_no_rnd_pixels8_c     put_rnd_pixels8_o
-#define         put_no_rnd_pixels16_c    put_rnd_pixels16_o
-#define         avg_no_rnd_pixels16_c    avg_rnd_pixels16_o
-
-#define         QPEL
-
-#ifdef QPEL
+#if CONFIG_H264QPEL
 
 #include "qpel.c"
 
@@ -303,41 +263,7 @@ av_cold void ff_dsputil_init_align(DSPContext *c, AVCodecContext *avctx)
 {
         const int high_bit_depth = avctx->bits_per_raw_sample > 8;
 
-        if (!high_bit_depth) {
-        c->put_pixels_tab[0][0] = put_rnd_pixels16_o;
-        c->put_pixels_tab[0][1] = put_rnd_pixels16_x;
-        c->put_pixels_tab[0][2] = put_rnd_pixels16_y;
-        c->put_pixels_tab[0][3] = put_rnd_pixels16_xy;
-        c->put_pixels_tab[1][0] = put_rnd_pixels8_o;
-        c->put_pixels_tab[1][1] = put_rnd_pixels8_x;
-        c->put_pixels_tab[1][2] = put_rnd_pixels8_y;
-        c->put_pixels_tab[1][3] = put_rnd_pixels8_xy;
-
-        c->put_no_rnd_pixels_tab[0][0] = put_no_rnd_pixels16_o;
-        c->put_no_rnd_pixels_tab[0][1] = put_no_rnd_pixels16_x;
-        c->put_no_rnd_pixels_tab[0][2] = put_no_rnd_pixels16_y;
-        c->put_no_rnd_pixels_tab[0][3] = put_no_rnd_pixels16_xy;
-        c->put_no_rnd_pixels_tab[1][0] = put_no_rnd_pixels8_o;
-        c->put_no_rnd_pixels_tab[1][1] = put_no_rnd_pixels8_x;
-        c->put_no_rnd_pixels_tab[1][2] = put_no_rnd_pixels8_y;
-        c->put_no_rnd_pixels_tab[1][3] = put_no_rnd_pixels8_xy;
-
-        c->avg_pixels_tab[0][0] = avg_rnd_pixels16_o;
-        c->avg_pixels_tab[0][1] = avg_rnd_pixels16_x;
-        c->avg_pixels_tab[0][2] = avg_rnd_pixels16_y;
-        c->avg_pixels_tab[0][3] = avg_rnd_pixels16_xy;
-        c->avg_pixels_tab[1][0] = avg_rnd_pixels8_o;
-        c->avg_pixels_tab[1][1] = avg_rnd_pixels8_x;
-        c->avg_pixels_tab[1][2] = avg_rnd_pixels8_y;
-        c->avg_pixels_tab[1][3] = avg_rnd_pixels8_xy;
-
-        c->avg_no_rnd_pixels_tab[0] = avg_no_rnd_pixels16_o;
-        c->avg_no_rnd_pixels_tab[1] = avg_no_rnd_pixels16_x;
-        c->avg_no_rnd_pixels_tab[2] = avg_no_rnd_pixels16_y;
-        c->avg_no_rnd_pixels_tab[3] = avg_no_rnd_pixels16_xy;
-        }
-
-#ifdef QPEL
+#if CONFIG_H264QPEL
 
 #define dspfunc(PFX, IDX, NUM) \
     c->PFX ## _pixels_tab[IDX][ 0] = PFX ## NUM ## _mc00_sh4; \

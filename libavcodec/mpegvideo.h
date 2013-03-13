@@ -33,6 +33,7 @@
 #include "error_resilience.h"
 #include "get_bits.h"
 #include "h264chroma.h"
+#include "hpeldsp.h"
 #include "put_bits.h"
 #include "ratecontrol.h"
 #include "parser.h"
@@ -343,7 +344,6 @@ typedef struct MpegEncContext {
     Picture *last_picture_ptr;     ///< pointer to the previous picture.
     Picture *next_picture_ptr;     ///< pointer to the next picture (for bidir pred)
     Picture *current_picture_ptr;  ///< pointer to the current picture
-    uint8_t *visualization_buffer[3]; ///< temporary buffer vor MV visualization
     int last_dc[3];                ///< last DC values for MPEG1
     int16_t *dc_val_base;
     int16_t *dc_val[3];            ///< used for mpeg4 DC prediction, all 3 arrays must be continuous
@@ -389,6 +389,7 @@ typedef struct MpegEncContext {
 
     DSPContext dsp;             ///< pointers for accelerated dsp functions
     H264ChromaContext h264chroma;
+    HpelDSPContext hdsp;
     VideoDSPContext vdsp;
     int f_code;                 ///< forward MV resolution
     int b_code;                 ///< backward MV resolution for B Frames (mpeg4)
@@ -807,7 +808,12 @@ void ff_draw_horiz_band(AVCodecContext *avctx, DSPContext *dsp, Picture *cur,
                         int v_edge_pos, int h_edge_pos);
 void ff_mpeg_draw_horiz_band(MpegEncContext *s, int y, int h);
 void ff_mpeg_flush(AVCodecContext *avctx);
-void ff_print_debug_info(MpegEncContext *s, Picture *p);
+
+void ff_print_debug_info(MpegEncContext *s, Picture *p, AVFrame *pict);
+void ff_print_debug_info2(AVCodecContext *avctx, Picture *p, AVFrame *pict, uint8_t *mbskip_table,
+                         int *low_delay,
+                         int mb_width, int mb_height, int mb_stride, int quarter_sample);
+
 void ff_write_quant_matrix(PutBitContext *pb, uint16_t *matrix);
 void ff_release_unused_pictures(MpegEncContext *s, int remove_current);
 int ff_find_unused_picture(MpegEncContext *s, int shared);
@@ -956,10 +962,6 @@ void ff_wmv2_encode_mb(MpegEncContext * s,
 
 int ff_mpeg_ref_picture(MpegEncContext *s, Picture *dst, Picture *src);
 void ff_mpeg_unref_picture(MpegEncContext *s, Picture *picture);
-
-void ff_print_debug_info2(AVCodecContext *avctx, Picture *pict, uint8_t *mbskip_table,
-                         uint8_t *visualization_buffer[3], int *low_delay,
-                         int mb_width, int mb_height, int mb_stride, int quarter_sample);
 
 
 #endif /* AVCODEC_MPEGVIDEO_H */
