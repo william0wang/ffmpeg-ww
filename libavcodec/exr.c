@@ -348,7 +348,8 @@ static int decode_block(AVCodecContext *avctx, void *tdata,
     const uint8_t *src;
     int axmax = (avctx->width - (s->xmax + 1)) * 2 * s->desc->nb_components;
     int bxmin = s->xmin * 2 * s->desc->nb_components;
-    int ret, i, x, buf_size = s->buf_size;
+    int i, x, buf_size = s->buf_size;
+    int av_unused ret;
 
     line_offset = AV_RL64(s->table + jobnr * 8);
     // Check if the buffer has the required bytes needed from the offset
@@ -696,7 +697,7 @@ static int decode_frame(AVCodecContext *avctx,
             avctx->pix_fmt = AV_PIX_FMT_RGB48;
         break;
     case EXR_UINT:
-        av_log_missing_feature(avctx, "32-bit unsigned int", 1);
+        avpriv_request_sample(avctx, "32-bit unsigned int");
         return AVERROR_PATCHWELCOME;
     default:
         av_log(avctx, AV_LOG_ERROR, "Missing channel list\n");
@@ -754,10 +755,8 @@ static int decode_frame(AVCodecContext *avctx,
         memset(s->thread_data + prev_size, 0, s->thread_data_size - prev_size);
     }
 
-    if ((ret = ff_thread_get_buffer(avctx, &frame, 0)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_thread_get_buffer(avctx, &frame, 0)) < 0)
         return ret;
-    }
 
     if (buf_end - buf < scan_line_blocks * 8)
         return AVERROR_INVALIDDATA;

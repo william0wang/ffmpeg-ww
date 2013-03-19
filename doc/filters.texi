@@ -662,6 +662,7 @@ afade=t=out:ss=875:d=25
 @end example
 @end itemize
 
+@anchor{aformat}
 @section aformat
 
 Set output format constraints for the input audio. The framework will
@@ -1800,16 +1801,22 @@ the position in the file if known or -1 and the timestamp in seconds.
 In order to display the output lines, you need to set the loglevel at
 least to the AV_LOG_INFO value.
 
-The filter accepts the syntax:
-@example
-blackframe[=@var{amount}:[@var{threshold}]]
-@end example
+The filter accepts parameters as a list of @var{key}=@var{value}
+pairs, separated by ":". If the key of the first options is omitted,
+the arguments are interpreted according to the syntax
+blackframe[=@var{amount}[:@var{threshold}]].
 
-@var{amount} is the percentage of the pixels that have to be below the
-threshold, and defaults to 98.
+A description of the accepted options follows.
 
-@var{threshold} is the threshold below which a pixel value is
-considered black, and defaults to 32.
+@table @option
+@item amount
+Set the percentage of pixels that have to be below the
+threshold to enable black detection. Default value is 98.
+
+@item threshold
+Set the threshold below which a pixel value is considered
+black. Default value is 32.
+@end table
 
 @section blend
 
@@ -2190,27 +2197,30 @@ Calculate necessary cropping parameters and prints the recommended
 parameters through the logging system. The detected dimensions
 correspond to the non-black area of the input video.
 
-It accepts the syntax:
-@example
-cropdetect[=@var{limit}[:@var{round}[:@var{reset}]]]
-@end example
+The filter accepts parameters as a list of @var{key}=@var{value}
+pairs, separated by ":". If the key of the first options is omitted,
+the arguments are interpreted according to the syntax
+[@option{limit}[:@option{round}[:@option{reset}]]].
+
+A description of the accepted options follows.
 
 @table @option
 
 @item limit
-Threshold, which can be optionally specified from nothing (0) to
-everything (255), defaults to 24.
+Set higher black value threshold, which can be optionally specified
+from nothing (0) to everything (255). An intensity value greater
+to the set value is considered non-black. Default value is 24.
 
 @item round
-Value which the width/height should be divisible by, defaults to
-16. The offset is automatically adjusted to center the video. Use 2 to
-get only even dimensions (needed for 4:2:2 video). 16 is best when
-encoding to most video codecs.
+Set the value for which the width/height should be divisible by. The
+offset is automatically adjusted to center the video. Use 2 to get
+only even dimensions (needed for 4:2:2 video). 16 is best when
+encoding to most video codecs. Default value is 16.
 
 @item reset
-Counter that determines after how many frames cropdetect will reset
-the previously detected largest video area and start over to detect
-the current optimal crop area. Defaults to 0.
+Set the counter that determines after how many frames cropdetect will
+reset the previously detected largest video area and start over to
+detect the current optimal crop area. Default value is 0.
 
 This can be useful when channel logos distort the video area. 0
 indicates never reset and return the largest area encountered during
@@ -3025,6 +3035,7 @@ framework.
 
 The filter does not take parameters.
 
+@anchor{format}
 @section format
 
 Convert the input video to one of the specified pixel formats.
@@ -3844,6 +3855,12 @@ format=rgba,lutrgb=a="maxval-minval/2"
 Correct luminance gamma by a 0.5 factor:
 @example
 lutyuv=y=gammaval(0.5)
+@end example
+
+@item
+Discard least significant bits of luma:
+@example
+lutyuv=y='bitand(val, 128+64+32)'
 @end example
 @end itemize
 
@@ -6082,6 +6099,43 @@ tools.
 
 Below is a description of the currently available multimedia filters.
 
+@section aperms, perms
+
+Set read/write permissions for the output frames.
+
+These filters are mainly aimed at developers to test direct path in the
+following filter in the filtergraph.
+
+The filters accept parameters as a list of @var{key}=@var{value} pairs,
+separated by ":". If the key of the first options is omitted, the argument is
+assumed to be the @var{mode}.
+
+A description of the accepted parameters follows.
+
+@table @option
+@item mode
+Select the permissions mode.
+
+It accepts the following values:
+@table @samp
+@item none
+Do nothing. This is the default.
+@item ro
+Set all the output frames read-only.
+@item rw
+Set all the output frames directly writable.
+@item toggle
+Make the frame read-only if writable, and writable if read-only.
+@item random
+Set each output frame read-only or writable randomly.
+@end table
+@end table
+
+Note: in case of auto-inserted filter between the permission filter and the
+following one, the permission might not be received as expected in that
+following filter. Inserting a @ref{format} or @ref{aformat} filter before the
+perms/aperms filter can avoid this problem.
+
 @section aselect, select
 Select frames to pass in output.
 
@@ -6528,6 +6582,26 @@ Set the EBU scale meter. Default is @code{9}. Common values are @code{9} and
 @code{18}, respectively for EBU scale meter +9 and EBU scale meter +18. Any
 other integer value between this range is allowed.
 
+@item metadata
+Set metadata injection. If set to @code{1}, the audio input will be segmented
+into 100ms output frames, each of them containing various loudness information
+in metadata.  All the metadata keys are prefixed with @code{lavfi.r128.}.
+
+Default is @code{0}.
+
+@item framelog
+Force the frame logging level.
+
+Available values are:
+@table @samp
+@item info
+information logging level
+@item verbose
+verbose logging level
+@end table
+
+By default, the logging level is set to @var{info}. If the @option{video} or
+the @option{metadata} options are set, it switches to @var{verbose}.
 @end table
 
 @subsection Examples
@@ -6551,12 +6625,14 @@ ffmpeg -nostats -i input.mp3 -filter_complex ebur128 -f null -
 Set the timebase to use for the output frames timestamps.
 It is mainly useful for testing timebase configuration.
 
-It accepts in input an arithmetic expression representing a rational.
-The expression can contain the constants "AVTB" (the
-default timebase), "intb" (the input timebase) and "sr" (the sample rate,
-audio only).
+This filter accepts a single option @option{tb}, which can be
+specified either by setting @option{tb}=@var{VALUE} or setting the
+value alone.
 
-The default value for the input is "intb".
+The value for @option{tb} is an arithmetic expression representing a
+rational. The expression can contain the constants "AVTB" (the default
+timebase), "intb" (the input timebase) and "sr" (the sample rate,
+audio only). Default value is "intb".
 
 @subsection Examples
 

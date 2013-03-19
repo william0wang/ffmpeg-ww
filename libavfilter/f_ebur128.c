@@ -33,6 +33,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/dict.h"
 #include "libavutil/xga_font_data.h"
 #include "libavutil/opt.h"
 #include "libavutil/timestamp.h"
@@ -123,6 +124,11 @@ typedef struct {
     double integrated_loudness;     ///< integrated loudness in LUFS (I)
     double loudness_range;          ///< loudness range in LU (LRA)
     double lra_low, lra_high;       ///< low and high LRA values
+
+    /* misc */
+    int loglevel;                   ///< log level for frame logging
+    int metadata;                   ///< whether or not to inject loudness results in frames
+    int request_fulfilled;          ///< 1 if some audio just got pushed, 0 otherwise. FIXME: remove me
 } EBUR128Context;
 
 #define OFFSET(x) offsetof(EBUR128Context, x)
@@ -133,6 +139,10 @@ static const AVOption ebur128_options[] = {
     { "video", "set video output", OFFSET(do_video), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, V|F },
     { "size",  "set video size",   OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x480"}, 0, 0, V|F },
     { "meter", "set scale meter (+9 to +18)",  OFFSET(meter), AV_OPT_TYPE_INT, {.i64 = 9}, 9, 18, V|F },
+    { "framelog", "force frame logging level", OFFSET(loglevel), AV_OPT_TYPE_INT, {.i64 = -1},   INT_MIN, INT_MAX, A|V|F, "level" },
+        { "info",    "information logging level", 0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_INFO},    INT_MIN, INT_MAX, A|V|F, "level" },
+        { "verbose", "verbose logging level",     0, AV_OPT_TYPE_CONST, {.i64 = AV_LOG_VERBOSE}, INT_MIN, INT_MAX, A|V|F, "level" },
+    { "metadata", "inject metadata in the filtergraph", OFFSET(metadata), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, A|V|F },
     { NULL },
 };
 
@@ -310,6 +320,20 @@ static int config_video_output(AVFilterLink *outlink)
     return 0;
 }
 
+static int config_audio_input(AVFilterLink *inlink)
+{
+    AVFilterContext *ctx = inlink->dst;
+    EBUR128Context *ebur128 = ctx->priv;
+
+    /* force 100ms framing in case of metadata injection: the frames must have
+     * a granularity of the window overlap to be accurately exploited */
+    if (ebur128->metadata)
+        inlink->min_samples =
+        inlink->max_samples =
+        inlink->partial_buf_size = inlink->sample_rate / 10;
+    return 0;
+}
+
 static int config_audio_output(AVFilterLink *outlink)
 {
     int i;
@@ -367,11 +391,28 @@ static struct hist_entry *get_histogram(void)
     int i;
     struct hist_entry *h = av_calloc(HIST_SIZE, sizeof(*h));
 
+    if (!h)
+        return NULL;
     for (i = 0; i < HIST_SIZE; i++) {
         h[i].loudness = i / (double)HIST_GRAIN + ABS_THRES;
         h[i].energy   = ENERGY(h[i].loudness);
     }
     return h;
+}
+
+/* This is currently necessary for the min/max samples to work properly.
+ * FIXME: remove me when possible */
+static int audio_request_frame(AVFilterLink *outlink)
+{
+    int ret;
+    AVFilterContext *ctx = outlink->src;
+    EBUR128Context *ebur128 = ctx->priv;
+
+    ebur128->request_fulfilled = 0;
+    do {
+        ret = ff_request_frame(ctx->inputs[0]);
+    } while (!ebur128->request_fulfilled && ret >= 0);
+    return ret;
 }
 
 static av_cold int init(AVFilterContext *ctx, const char *args)
@@ -386,12 +427,22 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     if ((ret = av_set_options_string(ebur128, args, "=", ":")) < 0)
         return ret;
 
+    if (ebur128->loglevel != AV_LOG_INFO &&
+        ebur128->loglevel != AV_LOG_VERBOSE) {
+        if (ebur128->do_video || ebur128->metadata)
+            ebur128->loglevel = AV_LOG_VERBOSE;
+        else
+            ebur128->loglevel = AV_LOG_INFO;
+    }
+
     // if meter is  +9 scale, scale range is from -18 LU to  +9 LU (or 3*9)
     // if meter is +18 scale, scale range is from -36 LU to +18 LU (or 3*18)
     ebur128->scale_range = 3 * ebur128->meter;
 
     ebur128->i400.histogram  = get_histogram();
     ebur128->i3000.histogram = get_histogram();
+    if (!ebur128->i400.histogram || !ebur128->i3000.histogram)
+        return AVERROR(ENOMEM);
 
     ebur128->integrated_loudness = ABS_THRES;
     ebur128->loudness_range = 0;
@@ -412,6 +463,8 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_audio_output,
     };
+    if (ebur128->metadata)
+        pad.request_frame = audio_request_frame;
     if (!pad.name)
         return AVERROR(ENOMEM);
     ff_insert_outpad(ctx, ebur128->do_video, &pad);
@@ -643,13 +696,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
                     return ret;
             }
 
-            av_log(ctx, ebur128->do_video ? AV_LOG_VERBOSE : AV_LOG_INFO,
-                   "t: %-10s " LOG_FMT "\n", av_ts2timestr(pts, &outlink->time_base),
+            if (ebur128->metadata) { /* happens only once per filter_frame call */
+                char metabuf[128];
+#define SET_META(name, var) do {                                            \
+    snprintf(metabuf, sizeof(metabuf), "%.3f", var);                        \
+    av_dict_set(&insamples->metadata, "lavfi.r128." name, metabuf, 0);      \
+} while (0)
+                SET_META("M",        loudness_400);
+                SET_META("S",        loudness_3000);
+                SET_META("I",        ebur128->integrated_loudness);
+                SET_META("LRA",      ebur128->loudness_range);
+                SET_META("LRA.low",  ebur128->lra_low);
+                SET_META("LRA.high", ebur128->lra_high);
+            }
+
+            av_log(ctx, ebur128->loglevel, "t: %-10s " LOG_FMT "\n",
+                   av_ts2timestr(pts, &outlink->time_base),
                    loudness_400, loudness_3000,
                    ebur128->integrated_loudness, ebur128->loudness_range);
         }
     }
 
+    ebur128->request_fulfilled = 1;
     return ff_filter_frame(ctx->outputs[ebur128->do_video], insamples);
 }
 
@@ -665,22 +733,6 @@ static int query_formats(AVFilterContext *ctx)
     static const int input_srate[] = {48000, -1}; // ITU-R BS.1770 provides coeff only for 48kHz
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_RGB24, AV_PIX_FMT_NONE };
 
-    /* set input audio formats */
-    formats = ff_make_format_list(sample_fmts);
-    if (!formats)
-        return AVERROR(ENOMEM);
-    ff_formats_ref(formats, &inlink->out_formats);
-
-    layouts = ff_all_channel_layouts();
-    if (!layouts)
-        return AVERROR(ENOMEM);
-    ff_channel_layouts_ref(layouts, &inlink->out_channel_layouts);
-
-    formats = ff_make_format_list(input_srate);
-    if (!formats)
-        return AVERROR(ENOMEM);
-    ff_formats_ref(formats, &inlink->out_samplerates);
-
     /* set optional output video format */
     if (ebur128->do_video) {
         formats = ff_make_format_list(pix_fmts);
@@ -690,20 +742,25 @@ static int query_formats(AVFilterContext *ctx)
         outlink = ctx->outputs[1];
     }
 
-    /* set audio output formats (same as input since it's just a passthrough) */
+    /* set input and output audio formats
+     * Note: ff_set_common_* functions are not used because they affect all the
+     * links, and thus break the video format negociation */
     formats = ff_make_format_list(sample_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
+    ff_formats_ref(formats, &inlink->out_formats);
     ff_formats_ref(formats, &outlink->in_formats);
 
     layouts = ff_all_channel_layouts();
     if (!layouts)
         return AVERROR(ENOMEM);
+    ff_channel_layouts_ref(layouts, &inlink->out_channel_layouts);
     ff_channel_layouts_ref(layouts, &outlink->in_channel_layouts);
 
     formats = ff_make_format_list(input_srate);
     if (!formats)
         return AVERROR(ENOMEM);
+    ff_formats_ref(formats, &inlink->out_samplerates);
     ff_formats_ref(formats, &outlink->in_samplerates);
 
     return 0;
@@ -738,6 +795,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     for (i = 0; i < ctx->nb_outputs; i++)
         av_freep(&ctx->output_pads[i].name);
     av_frame_free(&ebur128->outpicref);
+    av_opt_free(ebur128);
 }
 
 static const AVFilterPad ebur128_inputs[] = {
@@ -746,6 +804,7 @@ static const AVFilterPad ebur128_inputs[] = {
         .type             = AVMEDIA_TYPE_AUDIO,
         .get_audio_buffer = ff_null_get_audio_buffer,
         .filter_frame     = filter_frame,
+        .config_props     = config_audio_input,
     },
     { NULL }
 };

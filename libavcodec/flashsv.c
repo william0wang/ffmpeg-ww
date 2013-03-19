@@ -269,11 +269,11 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
     if (s->ver == 2) {
         skip_bits(&gb, 6);
         if (get_bits1(&gb)) {
-            av_log_missing_feature(avctx, "iframe", 1);
+            avpriv_request_sample(avctx, "iframe");
             return AVERROR_PATCHWELCOME;
         }
         if (get_bits1(&gb)) {
-            av_log_missing_feature(avctx, "Custom palette", 1);
+            avpriv_request_sample(avctx, "Custom palette");
             return AVERROR_PATCHWELCOME;
         }
     }
@@ -337,10 +337,8 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
             s->image_width, s->image_height, s->block_width, s->block_height,
             h_blocks, v_blocks, h_part, v_part);
 
-    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
+    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0)
         return ret;
-    }
 
     /* loop over all block columns */
     for (j = 0; j < v_blocks + (v_part ? 1 : 0); j++) {
@@ -403,7 +401,7 @@ static int flashsv_decode_frame(AVCodecContext *avctx, void *data,
                     int row = get_bits(&gb, 8);
                     av_log(avctx, AV_LOG_DEBUG, "%dx%d zlibprime_curr %dx%d\n", i, j, col, row);
                     size -= 2;
-                    av_log_missing_feature(avctx, "zlibprime_curr", 1);
+                    avpriv_request_sample(avctx, "zlibprime_curr");
                     return AVERROR_PATCHWELCOME;
                 }
                 if (!s->blocks && (s->zlibprime_curr || s->zlibprime_prev)) {

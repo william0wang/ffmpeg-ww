@@ -188,7 +188,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamplesref)
 
     av_frame_copy_props(outsamplesref, insamplesref);
     outsamplesref->format                = outlink->format;
-    outsamplesref->channels              = outlink->channels;
+    av_frame_set_channels(outsamplesref, outlink->channels);
     outsamplesref->channel_layout        = outlink->channel_layout;
     outsamplesref->sample_rate           = outlink->sample_rate;
 
@@ -252,8 +252,7 @@ static int request_frame(AVFilterLink *outlink)
         outsamplesref->pts = ROUNDED_DIV(outsamplesref->pts, inlink->sample_rate);
 #endif
 
-        ff_filter_frame(outlink, outsamplesref);
-        return 0;
+        return ff_filter_frame(outlink, outsamplesref);
     }
     return ret;
 }

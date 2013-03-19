@@ -392,7 +392,7 @@ static int mimic_decode_frame(AVCodecContext *avctx, void *data,
             ctx->num_hblocks[i] =     width   >> (3 + !!i);
         }
     } else if (width != ctx->avctx->width || height != ctx->avctx->height) {
-        av_log_missing_feature(avctx, "resolution changing", 1);
+        avpriv_request_sample(avctx, "Resolution changing");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -405,10 +405,8 @@ static int mimic_decode_frame(AVCodecContext *avctx, void *data,
     ctx->frames[ctx->cur_index].f->pict_type = is_pframe ? AV_PICTURE_TYPE_P :
                                                            AV_PICTURE_TYPE_I;
     if ((res = ff_thread_get_buffer(avctx, &ctx->frames[ctx->cur_index],
-                                    AV_GET_BUFFER_FLAG_REF)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+                                    AV_GET_BUFFER_FLAG_REF)) < 0)
         return res;
-    }
 
     ctx->next_prev_index = ctx->cur_index;
     ctx->next_cur_index  = (ctx->cur_index - 1) & 15;

@@ -332,7 +332,7 @@ static int cinepak_decode (CinepakContext *s)
     /* if this is the first frame, check for deviant Sega FILM data */
     if (s->sega_film_skip_bytes == -1) {
         if (!encoded_buf_size) {
-            av_log_ask_for_sample(s->avctx, "encoded_buf_size is 0");
+            avpriv_request_sample(s->avctx, "encoded_buf_size 0");
             return AVERROR_PATCHWELCOME;
         }
         if (encoded_buf_size != s->size && (s->size % encoded_buf_size) != 0) {
@@ -439,10 +439,8 @@ static int cinepak_decode_frame(AVCodecContext *avctx,
     s->data = buf;
     s->size = buf_size;
 
-    if ((ret = ff_reget_buffer(avctx, s->frame)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
+    if ((ret = ff_reget_buffer(avctx, s->frame)) < 0)
         return ret;
-    }
 
     if (s->palette_video) {
         const uint8_t *pal = av_packet_get_side_data(avpkt, AV_PKT_DATA_PALETTE, NULL);

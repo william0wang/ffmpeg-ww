@@ -149,6 +149,7 @@ typedef struct {
     int frame_layout; /* See MXFFrameLayout enum */
     int channels;
     int bits_per_sample;
+    int field_dominance;
     unsigned int component_depth;
     unsigned int horiz_subsampling;
     unsigned int vert_subsampling;
@@ -411,8 +412,7 @@ static int mxf_read_primer_pack(void *arg, AVIOContext *pb, int tag, int size, U
     int item_len = avio_rb32(pb);
 
     if (item_len != 18) {
-        av_log_ask_for_sample(pb, "unsupported primer pack item length %d\n",
-                              item_len);
+        avpriv_request_sample(pb, "Primer pack item length %d", item_len);
         return AVERROR_PATCHWELCOME;
     }
     if (item_num > 65536) {
@@ -838,6 +838,9 @@ static int mxf_read_generic_descriptor(void *arg, AVIOContext *pb, int tag, int 
     case 0x320E:
         descriptor->aspect_ratio.num = avio_rb32(pb);
         descriptor->aspect_ratio.den = avio_rb32(pb);
+        break;
+    case 0x3212:
+        descriptor->field_dominance = avio_r8(pb);
         break;
     case 0x3301:
         descriptor->component_depth = avio_rb32(pb);
@@ -2127,9 +2130,11 @@ static int mxf_read_packet_old(AVFormatContext *s, AVPacket *pkt)
             if (next_ofs >= 0 && next_klv > next_ofs) {
                 /* if this check is hit then it's possible OPAtom was treated as OP1a
                  * truncate the packet since it's probably very large (>2 GiB is common) */
-                av_log_ask_for_sample(s,
-                    "KLV for edit unit %i extends into next edit unit - OPAtom misinterpreted as OP1a?\n",
-                    mxf->current_edit_unit);
+                avpriv_request_sample(s,
+                                      "OPAtom misinterpreted as OP1a?"
+                                      "KLV for edit unit %i extending into "
+                                      "next edit unit",
+                                      mxf->current_edit_unit);
                 klv.length = next_ofs - avio_tell(s->pb);
             }
 

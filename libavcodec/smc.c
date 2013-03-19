@@ -402,7 +402,7 @@ static void smc_decode_stream(SmcContext *s)
             break;
 
         case 0xF0:
-            av_log_missing_feature(s->avctx, "0xF0 opcode", 1);
+            avpriv_request_sample(s->avctx, "0xF0 opcode");
             break;
         }
     }
@@ -434,10 +434,8 @@ static int smc_decode_frame(AVCodecContext *avctx,
 
     bytestream2_init(&s->gb, buf, buf_size);
 
-    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0) {
-        av_log(s->avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
+    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0)
         return ret;
-    }
 
     if (pal) {
         s->frame.palette_has_changed = 1;

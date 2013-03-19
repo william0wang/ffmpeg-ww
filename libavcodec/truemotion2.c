@@ -231,7 +231,7 @@ static inline int tm2_read_header(TM2Context *ctx, const uint8_t *buf)
 
     switch (magic) {
     case TM2_OLD_HEADER_MAGIC:
-        av_log_missing_feature(ctx->avctx, "TM2 old header", 1);
+        avpriv_request_sample(ctx->avctx, "Old TM2 header");
         return 0;
     case TM2_NEW_HEADER_MAGIC:
         return 0;
@@ -868,10 +868,8 @@ static int decode_frame(AVCodecContext *avctx,
         return AVERROR(ENOMEM);
     }
 
-    if ((ret = ff_reget_buffer(avctx, p)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_reget_buffer(avctx, p)) < 0)
         return ret;
-    }
 
     l->dsp.bswap_buf((uint32_t*)l->buffer, (const uint32_t*)buf, buf_size >> 2);
 

@@ -750,10 +750,12 @@ intrax8_decoded:
         if ((ret = av_frame_ref(pict, &s->current_picture_ptr->f)) < 0)
             return ret;
         ff_print_debug_info(s, s->current_picture_ptr, pict);
+        ff_mpv_export_qp_table(s, pict, s->current_picture_ptr, FF_QSCALE_TYPE_MPEG1);
     } else if (s->last_picture_ptr != NULL) {
         if ((ret = av_frame_ref(pict, &s->last_picture_ptr->f)) < 0)
             return ret;
         ff_print_debug_info(s, s->last_picture_ptr, pict);
+        ff_mpv_export_qp_table(s, pict, s->last_picture_ptr, FF_QSCALE_TYPE_MPEG1);
     }
 
     if(s->last_picture_ptr || s->low_delay){

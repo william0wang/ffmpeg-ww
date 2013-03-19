@@ -235,7 +235,7 @@ static int cdxl_decode_frame(AVCodecContext *avctx, void *data,
     if (c->bpp < 1)
         return AVERROR_INVALIDDATA;
     if (c->format != BIT_PLANAR && c->format != BIT_LINE) {
-        av_log_ask_for_sample(avctx, "unsupported pixel format: 0x%0x\n", c->format);
+        avpriv_request_sample(avctx, "Pixel format 0x%0x", c->format);
         return AVERROR_PATCHWELCOME;
     }
 
@@ -255,15 +255,13 @@ static int cdxl_decode_frame(AVCodecContext *avctx, void *data,
             return AVERROR_INVALIDDATA;
         avctx->pix_fmt = AV_PIX_FMT_BGR24;
     } else {
-        av_log_ask_for_sample(avctx, "unsupported encoding %d and bpp %d\n",
+        avpriv_request_sample(avctx, "Encoding %d and bpp %d",
                               encoding, c->bpp);
         return AVERROR_PATCHWELCOME;
     }
 
-    if ((ret = ff_get_buffer(avctx, p, 0)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_get_buffer(avctx, p, 0)) < 0)
         return ret;
-    }
     p->pict_type = AV_PICTURE_TYPE_I;
 
     if (encoding) {

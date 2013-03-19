@@ -68,9 +68,9 @@ typedef struct {
         av_log(s, AV_LOG_INFO, "Changing frame properties on the fly is not supported by all filters.\n");\
     }
 
-#define CHECK_AUDIO_PARAM_CHANGE(s, c, srate, ch_layout, format)\
+#define CHECK_AUDIO_PARAM_CHANGE(s, c, srate, ch_layout, ch_count, format)\
     if (c->sample_fmt != format || c->sample_rate != srate ||\
-        c->channel_layout != ch_layout) {\
+        c->channel_layout != ch_layout || c->channels != ch_count) {\
         av_log(s, AV_LOG_ERROR, "Changing frame properties on the fly is not supported.\n");\
         return AVERROR(EINVAL);\
     }
@@ -113,8 +113,8 @@ int av_buffersrc_add_frame_flags(AVFilterContext *ctx, AVFrame *frame, int flags
     return ret;
 }
 
-static int av_buffersrc_add_frame_internal(AVFilterContext *ctx,
-                                           AVFrame *frame, int flags)
+static int attribute_align_arg av_buffersrc_add_frame_internal(AVFilterContext *ctx,
+                                                               AVFrame *frame, int flags)
 {
     BufferSourceContext *s = ctx->priv;
     AVFrame *copy;
@@ -134,8 +134,11 @@ static int av_buffersrc_add_frame_internal(AVFilterContext *ctx,
                                  frame->format);
         break;
     case AVMEDIA_TYPE_AUDIO:
+        /* For layouts unknown on input but known on link after negotiation. */
+        if (!frame->channel_layout)
+            frame->channel_layout = s->channel_layout;
         CHECK_AUDIO_PARAM_CHANGE(ctx, s, frame->sample_rate, frame->channel_layout,
-                                 frame->format);
+                                 av_frame_get_channels(frame), frame->format);
         break;
     default:
         return AVERROR(EINVAL);
@@ -169,13 +172,17 @@ static int av_buffersrc_add_frame_internal(AVFilterContext *ctx,
 static void compat_free_buffer(void *opaque, uint8_t *data)
 {
     AVFilterBufferRef *buf = opaque;
+    AV_NOWARN_DEPRECATED(
     avfilter_unref_buffer(buf);
+    )
 }
 
 static void compat_unref_buffer(void *opaque, uint8_t *data)
 {
     AVBufferRef *buf = opaque;
+    AV_NOWARN_DEPRECATED(
     av_buffer_unref(&buf);
+    )
 }
 
 int av_buffersrc_add_ref(AVFilterContext *ctx, AVFilterBufferRef *buf,
@@ -203,8 +210,10 @@ int av_buffersrc_add_ref(AVFilterContext *ctx, AVFilterBufferRef *buf,
         goto fail;
     }
 
+    AV_NOWARN_DEPRECATED(
     if ((ret = avfilter_copy_buf_props(frame, buf)) < 0)
         goto fail;
+    )
 
 #define WRAP_PLANE(ref_out, data, data_size)                            \
 do {                                                                    \
@@ -232,8 +241,8 @@ do {                                                                    \
         planes = (desc->flags & PIX_FMT_PLANAR) ? desc->nb_components : 1;
 
         for (i = 0; i < planes; i++) {
-            int h_shift    = (i == 1 || i == 2) ? desc->log2_chroma_h : 0;
-            int plane_size = (frame->width >> h_shift) * frame->linesize[i];
+            int v_shift    = (i == 1 || i == 2) ? desc->log2_chroma_h : 0;
+            int plane_size = (frame->height >> v_shift) * frame->linesize[i];
 
             WRAP_PLANE(frame->buf[i], frame->data[i], plane_size);
         }
@@ -500,7 +509,6 @@ static int request_frame(AVFilterLink *link)
 {
     BufferSourceContext *c = link->src->priv;
     AVFrame *frame;
-    int ret = 0;
 
     if (!av_fifo_size(c->fifo)) {
         if (c->eof)
@@ -510,10 +518,7 @@ static int request_frame(AVFilterLink *link)
     }
     av_fifo_generic_read(c->fifo, &frame, sizeof(frame), NULL);
 
-    /* CIG TODO do not ignore error */
-    ff_filter_frame(link, frame);
-
-    return ret;
+    return ff_filter_frame(link, frame);
 }
 
 static int poll_frame(AVFilterLink *link)

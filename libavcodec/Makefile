@@ -27,6 +27,8 @@ OBJS = allcodecs.o                                                      \
        parser.o                                                         \
        raw.o                                                            \
        rawdec.o                                                         \
+       resample.o                                                       \
+       resample2.o                                                      \
        utils.o                                                          \
 
 # parts needed for many different codecs
@@ -721,6 +723,7 @@ OBJS-$(CONFIG_DCA_PARSER)              += dca_parser.o dca.o
 OBJS-$(CONFIG_DIRAC_PARSER)            += dirac_parser.o
 OBJS-$(CONFIG_DNXHD_PARSER)            += dnxhd_parser.o
 OBJS-$(CONFIG_DVBSUB_PARSER)           += dvbsub_parser.o
+OBJS-$(CONFIG_DVD_NAV_PARSER)          += dvd_nav_parser.o
 OBJS-$(CONFIG_DVDSUB_PARSER)           += dvdsub_parser.o
 OBJS-$(CONFIG_FLAC_PARSER)             += flac_parser.o flacdata.o flac.o \
                                           vorbis_data.o
@@ -771,9 +774,11 @@ OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += remove_extradata_bsf.o
 OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
 
 # thread libraries
-OBJS-$(HAVE_PTHREADS)                  += pthread.o frame_thread_encoder.o
-OBJS-$(HAVE_W32THREADS)                += pthread.o frame_thread_encoder.o
-OBJS-$(HAVE_OS2THREADS)                += pthread.o frame_thread_encoder.o
+OBJS-$(HAVE_PTHREADS)                  += pthread.o
+OBJS-$(HAVE_W32THREADS)                += pthread.o
+OBJS-$(HAVE_OS2THREADS)                += pthread.o
+
+OBJS-$(CONFIG_FRAME_THREAD_ENCODER)    += frame_thread_encoder.o
 
 SKIPHEADERS                            += %_tablegen.h                  \
                                           %_tables.h                    \

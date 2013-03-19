@@ -241,16 +241,14 @@ static int execute_code(AVCodecContext * avctx, int c)
             height = 60<<4;
             break;
         default:
-            av_log_ask_for_sample(avctx, "unsupported screen mode\n");
+            avpriv_request_sample(avctx, "Unsupported screen mode");
         }
         if (width != avctx->width || height != avctx->height) {
             av_frame_unref(s->frame);
             avcodec_set_dimensions(avctx, width, height);
-            ret = ff_get_buffer(avctx, s->frame, AV_GET_BUFFER_FLAG_REF);
-            if (ret < 0) {
-                av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+            if ((ret = ff_get_buffer(avctx, s->frame,
+                                     AV_GET_BUFFER_FLAG_REF)) < 0)
                 return ret;
-            }
             s->frame->pict_type           = AV_PICTURE_TYPE_I;
             s->frame->palette_has_changed = 1;
             set_palette((uint32_t *)s->frame->data[1]);
@@ -318,7 +316,7 @@ static int execute_code(AVCodecContext * avctx, int c)
             } else if (m == 49) {
                 s->fg = ansi_to_cga[DEFAULT_BG_COLOR];
             } else {
-                av_log_ask_for_sample(avctx, "unsupported rendition parameter\n");
+                avpriv_request_sample(avctx, "Unsupported rendition parameter");
             }
         }
         break;
@@ -335,7 +333,7 @@ static int execute_code(AVCodecContext * avctx, int c)
         s->y = av_clip(s->sy, 0, avctx->height - s->font_height);
         break;
     default:
-        av_log_ask_for_sample(avctx, "unsupported escape code\n");
+        avpriv_request_sample(avctx, "Unknown escape code");
         break;
     }
     return 0;
@@ -351,11 +349,8 @@ static int decode_frame(AVCodecContext *avctx,
     const uint8_t *buf_end   = buf+buf_size;
     int ret, i, count;
 
-    ret = ff_reget_buffer(avctx, s->frame);
-    if (ret < 0){
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_reget_buffer(avctx, s->frame)) < 0)
         return ret;
-    }
     if (!avctx->frame_number) {
         for (i=0; i<avctx->height; i++)
             memset(s->frame->data[0]+ i*s->frame->linesize[0], 0, avctx->width);

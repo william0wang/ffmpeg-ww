@@ -82,7 +82,6 @@ static int decode_frame(AVCodecContext *avctx,
     }
 
     if ((ret = ff_get_buffer(avctx, p, 0)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         av_free(rbuf);
         return ret;
     }
@@ -97,12 +96,14 @@ static int decode_frame(AVCodecContext *avctx,
     else {
         l->shift = 8 - (buf[2] >> 4);
         if (l->shift > 4) {
-            av_log_ask_for_sample(avctx, "Unknown WNV1 frame header value %i\n",
+            avpriv_request_sample(avctx,
+                                  "Unknown WNV1 frame header value %i",
                                   buf[2] >> 4);
             l->shift = 4;
         }
         if (l->shift < 1) {
-            av_log_ask_for_sample(avctx, "Unknown WNV1 frame header value %i\n",
+            avpriv_request_sample(avctx,
+                                  "Unknown WNV1 frame header value %i",
                                   buf[2] >> 4);
             l->shift = 1;
         }

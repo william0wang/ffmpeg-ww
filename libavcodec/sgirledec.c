@@ -101,7 +101,7 @@ static int decode_sgirle8(AVCodecContext *avctx, uint8_t *dst, const uint8_t *sr
                 v   -= length;
             } while (v > 0);
         } else {
-            av_log_ask_for_sample(avctx, "unknown opcode\n");
+            avpriv_request_sample(avctx, "opcode %d", v);
             return AVERROR_PATCHWELCOME;
         }
     }
@@ -115,11 +115,8 @@ static int sgirle_decode_frame(AVCodecContext *avctx,
     SGIRLEContext *s = avctx->priv_data;
     int ret;
 
-    ret = ff_reget_buffer(avctx, s->frame);
-    if (ret < 0) {
-        av_log (avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
+    if ((ret = ff_reget_buffer(avctx, s->frame)) < 0)
         return ret;
-    }
 
     ret = decode_sgirle8(avctx, s->frame->data[0], avpkt->data, avpkt->size, avctx->width, avctx->height, s->frame->linesize[0]);
     if (ret < 0)

@@ -52,7 +52,6 @@ enum OutputFormat {
     FMT_H261,
     FMT_H263,
     FMT_MJPEG,
-    FMT_H264,
 };
 
 #define MPEG_BUF_SIZE (16 * 1024)
@@ -813,6 +812,8 @@ void ff_print_debug_info(MpegEncContext *s, Picture *p, AVFrame *pict);
 void ff_print_debug_info2(AVCodecContext *avctx, Picture *p, AVFrame *pict, uint8_t *mbskip_table,
                          int *low_delay,
                          int mb_width, int mb_height, int mb_stride, int quarter_sample);
+
+int ff_mpv_export_qp_table(MpegEncContext *s, AVFrame *f, Picture *p, int qp_type);
 
 void ff_write_quant_matrix(PutBitContext *pb, uint16_t *matrix);
 void ff_release_unused_pictures(MpegEncContext *s, int remove_current);

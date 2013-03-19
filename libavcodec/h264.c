@@ -1421,7 +1421,6 @@ static av_cold void common_init(H264Context *h)
     h->dequant_coeff_pps = -1;
 
     if (CONFIG_ERROR_RESILIENCE) {
-        h->dsp.dct_bits = 16;
         /* needed so that IDCT permutation is known early */
         ff_dsputil_init(&h->dsp, h->avctx);
     }
@@ -1882,11 +1881,8 @@ int ff_h264_frame_start(H264Context *h)
     /* We mark the current picture as non-reference after allocating it, so
      * that if we break out due to an error it can be released automatically
      * in the next ff_MPV_frame_start().
-     * SVQ3 as well as most other codecs have only last/next/current and thus
-     * get released even with set reference, besides SVQ3 and others do not
-     * mark frames as reference later "naturally". */
-    if (h->avctx->codec_id != AV_CODEC_ID_SVQ3)
-        h->cur_pic_ptr->reference = 0;
+     */
+    h->cur_pic_ptr->reference = 0;
 
     h->cur_pic_ptr->field_poc[0] = h->cur_pic_ptr->field_poc[1] = INT_MAX;
 
@@ -2688,8 +2684,9 @@ static void flush_dpb(AVCodecContext *avctx)
 
     flush_change(h);
 
-    for (i = 0; i < MAX_PICTURE_COUNT; i++)
-        unref_picture(h, &h->DPB[i]);
+    if (h->DPB)
+        for (i = 0; i < MAX_PICTURE_COUNT; i++)
+            unref_picture(h, &h->DPB[i]);
     h->cur_pic_ptr = NULL;
     unref_picture(h, &h->cur_pic);
 
@@ -2947,8 +2944,8 @@ static int h264_set_parameter_from_sps(H264Context *h)
         h->avctx->has_b_frames = !h->low_delay;
 
     if (h->sps.bit_depth_luma != h->sps.bit_depth_chroma) {
-        av_log_missing_feature(h->avctx,
-            "Different bit depth between chroma and luma", 1);
+        avpriv_request_sample(h->avctx,
+                              "Different chroma and luma bit depth");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -2975,7 +2972,6 @@ static int h264_set_parameter_from_sps(H264Context *h)
             ff_h264_pred_init(&h->hpc, h->avctx->codec_id, h->sps.bit_depth_luma,
                               h->sps.chroma_format_idc);
             if (CONFIG_ERROR_RESILIENCE) {
-                h->dsp.dct_bits = h->sps.bit_depth_luma > 8 ? 32 : 16;
                 ff_dsputil_init(&h->dsp, h->avctx);
             }
             ff_videodsp_init(&h->vdsp, h->sps.bit_depth_luma);
@@ -3486,9 +3482,8 @@ static int decode_slice_header(H264Context *h, H264Context *h0)
                         h->droppable         = last_pic_droppable;
                         return AVERROR_INVALIDDATA;
                     } else if (last_pic_droppable != h->droppable) {
-                        av_log(h->avctx, AV_LOG_ERROR,
-                               "Cannot combine reference and non-reference fields in the same frame\n");
-                        av_log_ask_for_sample(h->avctx, NULL);
+                        avpriv_request_sample(h->avctx,
+                                              "Found reference and non-reference fields in the same frame, which");
                         h->picture_structure = last_pic_structure;
                         h->droppable         = last_pic_droppable;
                         return AVERROR_PATCHWELCOME;

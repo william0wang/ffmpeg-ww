@@ -355,7 +355,7 @@ static int truemotion1_decode_header(TrueMotion1Context *s)
         s->flags = FLAG_KEYFRAME;
 
     if (s->flags & FLAG_SPRITE) {
-        av_log_ask_for_sample(s->avctx, "SPRITE frame found.\n");
+        avpriv_request_sample(s->avctx, "Frame with sprite");
         /* FIXME header.width, height, xoffset and yoffset aren't initialized */
         return AVERROR_PATCHWELCOME;
     } else {
@@ -365,7 +365,7 @@ static int truemotion1_decode_header(TrueMotion1Context *s)
             if ((s->w < 213) && (s->h >= 176))
             {
                 s->flags |= FLAG_INTERPOLATED;
-                av_log_ask_for_sample(s->avctx, "INTERPOLATION selected.\n");
+                avpriv_request_sample(s->avctx, "Interpolated frame");
             }
         }
     }
@@ -868,10 +868,8 @@ static int truemotion1_decode_frame(AVCodecContext *avctx,
     if ((ret = truemotion1_decode_header(s)) < 0)
         return ret;
 
-    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0) {
-        av_log(s->avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_reget_buffer(avctx, &s->frame)) < 0)
         return ret;
-    }
 
     if (compression_types[s->compression].algorithm == ALGO_RGB24H) {
         truemotion1_decode_24bit(s);

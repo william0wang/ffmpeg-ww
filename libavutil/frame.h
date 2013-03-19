@@ -78,6 +78,11 @@ typedef struct AVFrame {
     /**
      * pointer to the picture/channel planes.
      * This might be different from the first allocated byte
+     *
+     * Some decoders access areas outside 0,0 - width,height, please
+     * see avcodec_align_dimensions2(). Some filters and swscale can read
+     * up to 16 bytes beyond the planes, if these filters are to be used,
+     * then 16 extra bytes must be allocated.
      */
     uint8_t *data[AV_NUM_DATA_POINTERS];
 
@@ -87,6 +92,11 @@ typedef struct AVFrame {
      *
      * For audio, only linesize[0] may be set. For planar audio, each channel
      * plane must be the same size.
+     *
+     * For video the linesizes should be multiplies of the CPUs alignment
+     * preference, this is 16 or 32 for modern desktop CPUs.
+     * Some code requires such alignment other code can be slower without
+     * correct alignment, for yet other it makes no difference.
      */
     int linesize[AV_NUM_DATA_POINTERS];
 
@@ -154,7 +164,9 @@ typedef struct AVFrame {
     int64_t pkt_pts;
 
     /**
-     * DTS copied from the AVPacket that triggered returning this frame.
+     * DTS copied from the AVPacket that triggered returning this frame. (if frame threading isnt used)
+     * This is also the Presentation time of this AVFrame calculated from
+     * only AVPacket.dts values without pts values.
      */
     int64_t pkt_dts;
 
@@ -419,6 +431,11 @@ typedef struct AVFrame {
      * - decoding: set by libavcodec, read by user.
      */
     int pkt_size;
+
+    /**
+     * Not to be accessed directly from outside libavutil
+     */
+    AVBufferRef *qp_table_buf;
 } AVFrame;
 
 /**
@@ -445,6 +462,8 @@ void    av_frame_set_decode_error_flags   (AVFrame *frame, int     val);
 int     av_frame_get_pkt_size(const AVFrame *frame);
 void    av_frame_set_pkt_size(AVFrame *frame, int val);
 AVDictionary **avpriv_frame_get_metadatap(AVFrame *frame);
+int8_t *av_frame_get_qp_table(AVFrame *f, int *stride, int *type);
+int av_frame_set_qp_table(AVFrame *f, AVBufferRef *buf, int stride, int type);
 
 /**
  * Allocate an AVFrame and set its fields to default values.  The resulting

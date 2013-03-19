@@ -178,10 +178,8 @@ static int decode_frame(AVCodecContext *avctx,
     AVFrame * const p     = data;
     int decoded, ret;
 
-    if ((ret = ff_get_buffer(avctx, p, 0)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_get_buffer(avctx, p, 0)) < 0)
         return ret;
-    }
     p->key_frame = 1;
 
 #define ADVANCE_BY_DECODED do { \
@@ -270,7 +268,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
         break;
     default:
         l->lossy = AV_RL32(avctx->extradata + 8);
-        av_log_ask_for_sample(avctx, "This is LOCO codec version %i.\n", version);
+        avpriv_request_sample(avctx, "LOCO codec version %i", version);
     }
 
     l->mode = AV_RL32(avctx->extradata + 4);

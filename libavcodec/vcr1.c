@@ -38,7 +38,7 @@ static av_cold int vcr1_decode_init(AVCodecContext *avctx)
     avctx->pix_fmt = AV_PIX_FMT_YUV410P;
 
     if (avctx->width % 8 || avctx->height%4) {
-        av_log_ask_for_sample(avctx, "odd dimensions are not supported\n");
+        avpriv_request_sample(avctx, "odd dimensions support");
         return AVERROR_PATCHWELCOME;
     }
     return 0;
@@ -59,10 +59,8 @@ static int vcr1_decode_frame(AVCodecContext *avctx, void *data,
         return AVERROR(EINVAL);
     }
 
-    if ((ret = ff_get_buffer(avctx, p, 0)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_get_buffer(avctx, p, 0)) < 0)
         return ret;
-    }
     p->pict_type = AV_PICTURE_TYPE_I;
     p->key_frame = 1;
 

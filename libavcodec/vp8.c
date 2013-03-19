@@ -337,7 +337,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         buf_size -= 7;
 
         if (hscale || vscale)
-            av_log_missing_feature(s->avctx, "Upscaling", 1);
+            avpriv_request_sample(s->avctx, "Upscaling");
 
         s->update_golden = s->update_altref = VP56_FRAME_CURRENT;
         for (i = 0; i < 4; i++)
@@ -1909,10 +1909,8 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
 
     curframe->tf.f->key_frame = s->keyframe;
     curframe->tf.f->pict_type = s->keyframe ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_P;
-    if ((ret = vp8_alloc_frame(s, curframe, referenced))) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed!\n");
+    if ((ret = vp8_alloc_frame(s, curframe, referenced)) < 0)
         goto err;
-    }
 
     // check if golden and altref are swapped
     if (s->update_altref != VP56_FRAME_NONE) {

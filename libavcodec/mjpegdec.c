@@ -260,9 +260,9 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
         }
     }
     if (s->ls && !(s->bits <= 8 || nb_components == 1)) {
-        av_log_missing_feature(s->avctx,
-                               "For JPEG-LS anything except <= 8 bits/component"
-                               " or 16-bit gray", 0);
+        avpriv_report_missing_feature(s->avctx,
+                                      "JPEG-LS that is not <= 8 "
+                                      "bits/component or 16-bit gray");
         return AVERROR_PATCHWELCOME;
     }
     s->nb_components = nb_components;
@@ -295,7 +295,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     }
 
     if (s->ls && (s->h_max > 1 || s->v_max > 1)) {
-        av_log_missing_feature(s->avctx, "Subsampling in JPEG-LS", 0);
+        avpriv_report_missing_feature(s->avctx, "Subsampling in JPEG-LS");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -330,7 +330,7 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
 
     if (s->interlaced && (s->bottom_field == !s->interlace_polarity)) {
         if (s->progressive) {
-            av_log_ask_for_sample(s->avctx, "progressively coded interlaced pictures not supported\n");
+            avpriv_request_sample(s->avctx, "progressively coded interlaced picture");
             return AVERROR_INVALIDDATA;
         }
     } else{
@@ -443,10 +443,8 @@ int ff_mjpeg_decode_sof(MJpegDecodeContext *s)
     }
 
     av_frame_unref(s->picture_ptr);
-    if (ff_get_buffer(s->avctx, s->picture_ptr, AV_GET_BUFFER_FLAG_REF) < 0) {
-        av_log(s->avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if (ff_get_buffer(s->avctx, s->picture_ptr, AV_GET_BUFFER_FLAG_REF) < 0)
         return -1;
-    }
     s->picture_ptr->pict_type = AV_PICTURE_TYPE_I;
     s->picture_ptr->key_frame = 1;
     s->got_picture            = 1;
@@ -744,16 +742,19 @@ static void handle_rstn(MJpegDecodeContext *s, int nb_components)
 
         i = 8 + ((-get_bits_count(&s->gb)) & 7);
         /* skip RSTn */
-        if (s->restart_count == 0 && show_bits(&s->gb, i) == (1 << i) - 1) {
-            int pos = get_bits_count(&s->gb);
-            align_get_bits(&s->gb);
-            while (get_bits_left(&s->gb) >= 8 && show_bits(&s->gb, 8) == 0xFF)
-                skip_bits(&s->gb, 8);
-            if (get_bits_left(&s->gb) >= 8 && (get_bits(&s->gb, 8) & 0xF8) == 0xD0) {
-                for (i = 0; i < nb_components; i++) /* reset dc */
-                    s->last_dc[i] = 1024;
-            } else
-                skip_bits_long(&s->gb, pos - get_bits_count(&s->gb));
+        if (s->restart_count == 0) {
+            if(   show_bits(&s->gb, i) == (1 << i) - 1
+               || show_bits(&s->gb, i) == 0xFF) {
+                int pos = get_bits_count(&s->gb);
+                align_get_bits(&s->gb);
+                while (get_bits_left(&s->gb) >= 8 && show_bits(&s->gb, 8) == 0xFF)
+                    skip_bits(&s->gb, 8);
+                if (get_bits_left(&s->gb) >= 8 && (get_bits(&s->gb, 8) & 0xF8) == 0xD0) {
+                    for (i = 0; i < nb_components; i++) /* reset dc */
+                        s->last_dc[i] = 1024;
+                } else
+                    skip_bits_long(&s->gb, pos - get_bits_count(&s->gb));
+            }
         }
     }
 }
@@ -1742,12 +1743,19 @@ eoi_parser:
                 *got_frame = 1;
                 s->got_picture = 0;
 
-                if (!s->lossless &&
-                    avctx->debug & FF_DEBUG_QP) {
-                    av_log(avctx, AV_LOG_DEBUG,
-                           "QP: %d\n", FFMAX3(s->qscale[0],
-                                              s->qscale[1],
-                                              s->qscale[2]));
+                if (!s->lossless) {
+                    int qp = FFMAX3(s->qscale[0],
+                                    s->qscale[1],
+                                    s->qscale[2]);
+                    int qpw = (s->width + 15) / 16;
+                    AVBufferRef *qp_table_buf = av_buffer_alloc(qpw);
+                    if (qp_table_buf) {
+                        memset(qp_table_buf->data, qp, qpw);
+                        av_frame_set_qp_table(data, qp_table_buf, 0, FF_QSCALE_TYPE_MPEG1);
+                    }
+
+                    if(avctx->debug & FF_DEBUG_QP)
+                        av_log(avctx, AV_LOG_DEBUG, "QP: %d\n", qp);
                 }
 
                 goto the_end;

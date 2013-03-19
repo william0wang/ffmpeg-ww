@@ -45,6 +45,7 @@
 #include "frame_thread_encoder.h"
 #include "internal.h"
 #include "bytestream.h"
+#include "version.h"
 #include <stdlib.h>
 #include <stdarg.h>
 #include <limits.h>
@@ -669,7 +670,8 @@ typedef struct CompatReleaseBufPriv {
 static void compat_free_buffer(void *opaque, uint8_t *data)
 {
     CompatReleaseBufPriv *priv = opaque;
-    priv->avctx.release_buffer(&priv->avctx, &priv->frame);
+    if (priv->avctx.release_buffer)
+        priv->avctx.release_buffer(&priv->avctx, &priv->frame);
     av_freep(&priv);
 }
 
@@ -680,7 +682,7 @@ static void compat_release_buffer(void *opaque, uint8_t *data)
 }
 #endif
 
-int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags)
+static int get_buffer_internal(AVCodecContext *avctx, AVFrame *frame, int flags)
 {
     int ret;
 
@@ -760,8 +762,8 @@ do {                                                                    \
             planes = (desc->flags & PIX_FMT_PLANAR) ? desc->nb_components : 1;
 
             for (i = 0; i < planes; i++) {
-                int h_shift    = (i == 1 || i == 2) ? desc->log2_chroma_h : 0;
-                int plane_size = (frame->width >> h_shift) * frame->linesize[i];
+                int v_shift    = (i == 1 || i == 2) ? desc->log2_chroma_h : 0;
+                int plane_size = (frame->height >> v_shift) * frame->linesize[i];
 
                 WRAP_PLANE(frame->buf[i], frame->data[i], plane_size);
             }
@@ -803,7 +805,15 @@ fail:
     return avctx->get_buffer2(avctx, frame, flags);
 }
 
-int ff_reget_buffer(AVCodecContext *avctx, AVFrame *frame)
+int ff_get_buffer(AVCodecContext *avctx, AVFrame *frame, int flags)
+{
+    int ret = get_buffer_internal(avctx, frame, flags);
+    if (ret < 0)
+        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    return ret;
+}
+
+static int reget_buffer_internal(AVCodecContext *avctx, AVFrame *frame)
 {
     AVFrame tmp;
     int ret;
@@ -838,6 +848,14 @@ int ff_reget_buffer(AVCodecContext *avctx, AVFrame *frame)
     av_frame_unref(&tmp);
 
     return 0;
+}
+
+int ff_reget_buffer(AVCodecContext *avctx, AVFrame *frame)
+{
+    int ret = reget_buffer_internal(avctx, frame);
+    if (ret < 0)
+        av_log(avctx, AV_LOG_ERROR, "reget_buffer() failed\n");
+    return ret;
 }
 
 #if FF_API_GET_BUFFER
@@ -1126,7 +1144,7 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     if (!HAVE_THREADS)
         av_log(avctx, AV_LOG_WARNING, "Warning: not compiled with thread support, using thread emulation\n");
 
-    if (HAVE_THREADS) {
+    if (CONFIG_FRAME_THREAD_ENCODER) {
         ff_unlock_avcodec(); //we will instanciate a few encoders thus kick the counter to prevent false detection of a problem
         ret = ff_frame_thread_encoder_init(avctx, options ? *options : NULL);
         ff_lock_avcodec(avctx);
@@ -1688,7 +1706,8 @@ int attribute_align_arg avcodec_encode_video2(AVCodecContext *avctx,
 
     *got_packet_ptr = 0;
 
-    if(HAVE_THREADS && avctx->internal->frame_thread_encoder && (avctx->active_thread_type&FF_THREAD_FRAME))
+    if(CONFIG_FRAME_THREAD_ENCODER &&
+       avctx->internal->frame_thread_encoder && (avctx->active_thread_type&FF_THREAD_FRAME))
         return ff_thread_video_encode_frame(avctx, avpkt, frame, got_packet_ptr);
 
     if ((avctx->flags&CODEC_FLAG_PASS1) && avctx->stats_out)
@@ -1845,7 +1864,6 @@ static int add_metadata_from_side_data(AVCodecContext *avctx, AVFrame *frame)
     const uint8_t *side_metadata;
     const uint8_t *end;
 
-    av_dict_free(&avctx->metadata);
     side_metadata = av_packet_get_side_data(avctx->pkt,
                                             AV_PKT_DATA_STRINGS_METADATA, &size);
     if (!side_metadata)
@@ -1860,7 +1878,6 @@ static int add_metadata_from_side_data(AVCodecContext *avctx, AVFrame *frame)
         side_metadata = val + strlen(val) + 1;
     }
 end:
-    avctx->metadata = av_frame_get_metadata(frame);
     return ret;
 }
 
@@ -2145,6 +2162,7 @@ static int recode_subtitle(AVCodecContext *avctx,
     ret = av_new_packet(&tmp, inl * UTF8_MAX_BYTES);
     if (ret < 0)
         goto end;
+    outpkt->buf  = tmp.buf;
     outpkt->data = tmp.data;
     outpkt->size = tmp.size;
     outb = outpkt->data;
@@ -2204,8 +2222,13 @@ int avcodec_decode_subtitle2(AVCodecContext *avctx, AVSubtitle *sub,
             ret = avctx->codec->decode(avctx, sub, got_sub_ptr, &pkt_recoded);
             av_assert1((ret >= 0) >= !!*got_sub_ptr &&
                        !!*got_sub_ptr >= !!sub->num_rects);
-            if (tmp.data != pkt_recoded.data)
-                av_free(pkt_recoded.data);
+            if (tmp.data != pkt_recoded.data) { // did we recode?
+                /* prevent from destroying side data from original packet */
+                pkt_recoded.side_data = NULL;
+                pkt_recoded.side_data_elems = 0;
+
+                av_free_packet(&pkt_recoded);
+            }
             sub->format = !(avctx->codec_descriptor->props & AV_CODEC_PROP_BITMAP_SUB);
             avctx->pkt = NULL;
         }
@@ -2263,7 +2286,8 @@ av_cold int avcodec_close(AVCodecContext *avctx)
     if (avcodec_is_open(avctx)) {
         FramePool *pool = avctx->internal->pool;
         int i;
-        if (HAVE_THREADS && avctx->internal->frame_thread_encoder && avctx->thread_count > 1) {
+        if (CONFIG_FRAME_THREAD_ENCODER &&
+            avctx->internal->frame_thread_encoder && avctx->thread_count > 1) {
             ff_unlock_avcodec();
             ff_frame_thread_encoder_free(avctx);
             ff_lock_avcodec(avctx);
@@ -2281,7 +2305,6 @@ av_cold int avcodec_close(AVCodecContext *avctx)
             av_buffer_pool_uninit(&pool->pools[i]);
         av_freep(&avctx->internal->pool);
         av_freep(&avctx->internal);
-        av_dict_free(&avctx->metadata);
     }
 
     if (avctx->priv_data && avctx->codec && avctx->codec->priv_class)
@@ -2845,6 +2868,7 @@ int ff_match_2uint16(const uint16_t(*tab)[2], int size, int a, int b)
     return i;
 }
 
+#if FF_API_MISSING_SAMPLE
 void av_log_missing_feature(void *avc, const char *feature, int want_sample)
 {
     av_log(avc, AV_LOG_WARNING, "%s is not implemented. Update your FFmpeg "
@@ -2869,6 +2893,7 @@ void av_log_ask_for_sample(void *avc, const char *msg, ...)
 
     va_end(argument_list);
 }
+#endif /* FF_API_MISSING_SAMPLE */
 
 static AVHWAccel *first_hwaccel = NULL;
 

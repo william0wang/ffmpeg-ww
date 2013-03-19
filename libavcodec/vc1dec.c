@@ -345,7 +345,6 @@ static void vc1_smooth_overlap_filter_iblk(VC1Context *v)
 static void vc1_mc_1mv(VC1Context *v, int dir)
 {
     MpegEncContext *s = &v->s;
-    DSPContext *dsp   = &v->s.dsp;
     H264ChromaContext *h264chroma = &v->h264chroma;
     uint8_t *srcY, *srcU, *srcV;
     int dxy, mx, my, uvmx, uvmy, src_x, src_y, uvsrc_x, uvsrc_y;
@@ -1852,7 +1851,6 @@ static inline void vc1_pred_mv_intfr(VC1Context *v, int n, int dmv_x, int dmv_y,
 static void vc1_interp_mc(VC1Context *v)
 {
     MpegEncContext *s = &v->s;
-    DSPContext *dsp = &v->s.dsp;
     H264ChromaContext *h264chroma = &v->h264chroma;
     uint8_t *srcY, *srcU, *srcV;
     int dxy, mx, my, uvmx, uvmy, src_x, src_y, uvsrc_x, uvsrc_y;
@@ -4865,7 +4863,7 @@ static void vc1_parse_sprites(VC1Context *v, GetBitContext* gb, SpriteData* sd)
     for (sprite = 0; sprite <= v->two_sprites; sprite++) {
         vc1_sprite_parse_transform(gb, sd->coefs[sprite]);
         if (sd->coefs[sprite][1] || sd->coefs[sprite][3])
-            av_log_ask_for_sample(avctx, "Rotation coefficients are not zero");
+            avpriv_request_sample(avctx, "Non-zero rotation coefficients");
         av_log(avctx, AV_LOG_DEBUG, sprite ? "S2:" : "S1:");
         for (i = 0; i < 7; i++)
             av_log(avctx, AV_LOG_DEBUG, " %d.%.3d",
@@ -5023,6 +5021,7 @@ static void vc1_draw_sprites(VC1Context *v, SpriteData* sd)
 
 static int vc1_decode_sprites(VC1Context *v, GetBitContext* gb)
 {
+    int ret;
     MpegEncContext *s     = &v->s;
     AVCodecContext *avctx = s->avctx;
     SpriteData sd;
@@ -5040,10 +5039,8 @@ static int vc1_decode_sprites(VC1Context *v, GetBitContext* gb)
     }
 
     av_frame_unref(&v->sprite_output_frame);
-    if (ff_get_buffer(avctx, &v->sprite_output_frame, 0) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
-    }
+    if ((ret = ff_get_buffer(avctx, &v->sprite_output_frame, 0)) < 0)
+        return ret;
 
     vc1_draw_sprites(v, &sd);
 
@@ -5290,7 +5287,7 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
             v->output_height > 1 << 14) return -1;
 
         if ((v->sprite_width&1) || (v->sprite_height&1)) {
-            av_log_ask_for_sample(avctx, "odd sprites are not supported\n");
+            avpriv_request_sample(avctx, "odd sprites support");
             return AVERROR_PATCHWELCOME;
         }
     }

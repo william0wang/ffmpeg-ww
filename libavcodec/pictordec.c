@@ -123,7 +123,7 @@ static int decode_frame(AVCodecContext *avctx,
     s->nb_planes   = (tmp >> 4) + 1;
     bpp            = bits_per_plane * s->nb_planes;
     if (bits_per_plane > 8 || bpp < 1 || bpp > 32) {
-        av_log_ask_for_sample(avctx, "unsupported bit depth\n");
+        avpriv_request_sample(avctx, "Unsupported bit depth");
         return AVERROR_PATCHWELCOME;
     }
 
@@ -146,10 +146,8 @@ static int decode_frame(AVCodecContext *avctx,
         avcodec_set_dimensions(avctx, s->width, s->height);
     }
 
-    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+    if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
-    }
     memset(frame->data[0], 0, s->height * frame->linesize[0]);
     frame->pict_type           = AV_PICTURE_TYPE_I;
     frame->palette_has_changed = 1;

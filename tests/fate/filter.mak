@@ -32,9 +32,9 @@ fate-filter-aresample: CMD = pcm -i $(SRC) -af aresample=min_comp=0.001:min_hard
 fate-filter-aresample: CMP = oneoff
 fate-filter-aresample: REF = $(SAMPLES)/nellymoser/nellymoser-discont.pcm
 
-fate-filter-delogo: CMD = framecrc -i $(SAMPLES)/real/rv30.rm -vf delogo=show=0:x=290:y=25:w=26:h=16 -an
+fate-filter-delogo: CMD = framecrc -i $(SAMPLES)/real/rv30.rm -vf perms=random,delogo=show=0:x=290:y=25:w=26:h=16 -an
 
-FATE_FILTER-$(CONFIG_DELOGO_FILTER) += fate-filter-delogo
+FATE_FILTER-$(call ALLYES, PERMS_FILTER DELOGO_FILTER) += fate-filter-delogo
 
 FATE_YADIF += fate-filter-yadif-mode0
 fate-filter-yadif-mode0: CMD = framecrc -flags bitexact -idct simple -i $(SAMPLES)/mpeg2/mpeg2_field_encoding.ts -vf yadif=0
@@ -45,12 +45,12 @@ fate-filter-yadif-mode1: CMD = framecrc -flags bitexact -idct simple -i $(SAMPLE
 FATE_FILTER-$(CONFIG_YADIF_FILTER) += $(FATE_YADIF)
 
 FATE_HQDN3D += fate-filter-hqdn3d
-fate-filter-hqdn3d: CMD = framecrc -idct simple -i $(SAMPLES)/smjpeg/scenwin.mjpg -vf hqdn3d -an
-FATE_FILTER-$(call ALLYES, SMJPEG_DEMUXER MJPEG_DECODER HQDN3D_FILTER) += $(FATE_HQDN3D)
+fate-filter-hqdn3d: CMD = framecrc -idct simple -i $(SAMPLES)/smjpeg/scenwin.mjpg -vf perms=random,hqdn3d -an
+FATE_FILTER-$(call ALLYES, SMJPEG_DEMUXER MJPEG_DECODER PERMS_FILTER HQDN3D_FILTER) += $(FATE_HQDN3D)
 
 FATE_GRADFUN += fate-filter-gradfun
-fate-filter-gradfun: CMD = framecrc -i $(SAMPLES)/vmd/12.vmd -vf "sws_flags=+accurate_rnd+bitexact;gradfun=10:8" -an -frames:v 20
-FATE_FILTER-$(call ALLYES, VMD_DEMUXER VMDVIDEO_DECODER GRADFUN_FILTER) += $(FATE_GRADFUN)
+fate-filter-gradfun: CMD = framecrc -i $(SAMPLES)/vmd/12.vmd -vf "sws_flags=+accurate_rnd+bitexact;format=gray,perms=random,gradfun=10:8" -an -frames:v 20
+FATE_FILTER-$(call ALLYES, VMD_DEMUXER VMDVIDEO_DECODER FORMAT_FILTER PERMS_FILTER GRADFUN_FILTER) += $(FATE_GRADFUN)
 
 FATE_SAMPLES_AVCONV += $(FATE_FILTER-yes)
 
