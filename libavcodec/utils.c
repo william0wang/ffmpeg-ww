@@ -478,8 +478,10 @@ static int audio_get_buffer(AVCodecContext *avctx, AVFrame *frame)
             av_freep(&frame->extended_buf);
             return AVERROR(ENOMEM);
         }
-    } else
+    } else {
         frame->extended_data = frame->data;
+        av_assert0(frame->nb_extended_buf == 0);
+    }
 
     for (i = 0; i < FFMIN(planes, AV_NUM_DATA_POINTERS); i++) {
         frame->buf[i] = av_buffer_pool_get(pool->pools[0]);
@@ -1078,9 +1080,9 @@ int attribute_align_arg avcodec_open2(AVCodecContext *avctx, const AVCodec *code
     if ((ret = av_opt_set_dict(avctx, &tmp)) < 0)
         goto free_and_end;
 
-    //We only call avcodec_set_dimensions() for non h264 codecs so as not to overwrite previously setup dimensions
-    if (!( avctx->coded_width && avctx->coded_height && avctx->width && avctx->height && avctx->codec_id == AV_CODEC_ID_H264)){
-
+    // only call avcodec_set_dimensions() for non H.264/VP6F codecs so as not to overwrite previously setup dimensions
+    if (!(avctx->coded_width && avctx->coded_height && avctx->width && avctx->height &&
+          (avctx->codec_id == AV_CODEC_ID_H264 || avctx->codec_id == AV_CODEC_ID_VP6F))) {
     if (avctx->coded_width && avctx->coded_height)
         avcodec_set_dimensions(avctx, avctx->coded_width, avctx->coded_height);
     else if (avctx->width && avctx->height)
