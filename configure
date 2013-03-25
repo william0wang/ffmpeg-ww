@@ -1709,7 +1709,7 @@ dca_decoder_select="mdct"
 dirac_decoder_select="dsputil dwt golomb videodsp"
 dnxhd_decoder_select="dsputil"
 dnxhd_encoder_select="aandcttables dsputil mpegvideoenc"
-dv_decoder_select="dsputil"
+dvvideo_decoder_select="dsputil"
 dxa_decoder_select="zlib"
 eac3_decoder_select="ac3_decoder"
 eac3_encoder_select="ac3_encoder"
@@ -1912,7 +1912,7 @@ wmv3_vdpau_decoder_select="vc1_vdpau_decoder"
 wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
 
 # parsers
-h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
+h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel mpegvideo videodsp"
 mpeg4video_parser_select="error_resilience mpegvideo"
 mpegvideo_parser_select="error_resilience mpegvideo"
 vc1_parser_select="mpegvideo"
@@ -2198,6 +2198,9 @@ enable runtime_cpudetect
 enable safe_bitstream_reader
 enable static
 enable swscale_alpha
+
+# By default, enable only those hwaccels that have no external dependencies.
+enable dxva2 vdpau
 
 # build settings
 SHFLAGS='-shared -Wl,-soname,$$(@F)'

@@ -67,7 +67,7 @@ static int init(AVFilterContext *ctx, const char *args)
     null->class = &anullsrc_class;
     av_opt_set_defaults(null);
 
-    if ((ret = (av_set_options_string(null, args, "=", ":"))) < 0)
+    if ((ret = av_set_options_string(null, args, "=", ":")) < 0)
         return ret;
 
     if ((ret = ff_parse_sample_rate(&null->sample_rate,
@@ -81,17 +81,25 @@ static int init(AVFilterContext *ctx, const char *args)
     return 0;
 }
 
+static int query_formats(AVFilterContext *ctx)
+{
+    ANullContext *null = ctx->priv;
+    int64_t chlayouts[] = { null->channel_layout, -1 };
+    int sample_rates[] = { null->sample_rate, -1 };
+
+    ff_set_common_formats        (ctx, ff_all_formats(AVMEDIA_TYPE_AUDIO));
+    ff_set_common_channel_layouts(ctx, avfilter_make_format64_list(chlayouts));
+    ff_set_common_samplerates    (ctx, ff_make_format_list(sample_rates));
+
+    return 0;
+}
+
 static int config_props(AVFilterLink *outlink)
 {
     ANullContext *null = outlink->src->priv;
     char buf[128];
-    int chans_nb;
 
-    outlink->sample_rate = null->sample_rate;
-    outlink->channel_layout = null->channel_layout;
-
-    chans_nb = av_get_channel_layout_nb_channels(null->channel_layout);
-    av_get_channel_layout_string(buf, sizeof(buf), chans_nb, null->channel_layout);
+    av_get_channel_layout_string(buf, sizeof(buf), 0, null->channel_layout);
     av_log(outlink->src, AV_LOG_VERBOSE,
            "sample_rate:%d channel_layout:'%s' nb_samples:%d\n",
            null->sample_rate, buf, null->nb_samples);
@@ -106,12 +114,17 @@ static int request_frame(AVFilterLink *outlink)
     AVFrame *samplesref;
 
     samplesref = ff_get_audio_buffer(outlink, null->nb_samples);
+    if (!samplesref)
+        return AVERROR(ENOMEM);
+
     samplesref->pts = null->pts;
     samplesref->channel_layout = null->channel_layout;
     samplesref->sample_rate = outlink->sample_rate;
 
     ret = ff_filter_frame(outlink, av_frame_clone(samplesref));
     av_frame_free(&samplesref);
+    if (ret < 0)
+        return ret;
 
     null->pts += null->nb_samples;
     return ret;
@@ -132,6 +145,7 @@ AVFilter avfilter_asrc_anullsrc = {
     .description = NULL_IF_CONFIG_SMALL("Null audio source, return empty audio frames."),
 
     .init        = init,
+    .query_formats = query_formats,
     .priv_size   = sizeof(ANullContext),
 
     .inputs      = NULL,
