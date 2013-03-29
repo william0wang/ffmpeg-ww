@@ -20,7 +20,7 @@ INSTPROGS   = $(PROGS-yes:%=%$(PROGSSUF)$(EXESUF))
 
 OBJS        = cmdutils.o $(EXEOBJS)
 OBJS-ffmpeg = ffmpeg_opt.o ffmpeg_filter.o
-TESTTOOLS   = audiogen videogen rotozoom tiny_psnr base64
+TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
 TOOLS       = qt-faststart trasher
 TOOLS-$(CONFIG_ZLIB) += cws2fws
@@ -165,7 +165,7 @@ clean::
 
 distclean::
 	$(RM) $(DISTCLEANSUFFIXES)
-	$(RM) config.* .version version.h libavutil/avconfig.h libavcodec/codec_names.h
+	$(RM) config.* .config libavutil/avconfig.h .version version.h libavcodec/codec_names.h
 
 config:
 	$(SRC_PATH)/configure $(value FFMPEG_CONFIGURATION)

@@ -119,6 +119,9 @@ typedef struct Picture{
     AVBufferRef *mc_mb_var_buf;
     uint16_t *mc_mb_var;        ///< Table for motion compensated MB variances
 
+    int alloc_mb_width;         ///< mb_width used to allocate tables
+    int alloc_mb_height;        ///< mb_height used to allocate tables
+
     AVBufferRef *mb_mean_buf;
     uint8_t *mb_mean;           ///< Table for MB luminance
 
@@ -171,7 +174,6 @@ typedef struct Picture{
 
     int b_frame_score;          /* */
     int needs_realloc;          ///< Picture needs to be reallocated (eg due to a frame size change)
-    int period_since_free;      ///< "cycles" since this Picture has been freed
 
     int reference;
     int shared;
@@ -823,7 +825,6 @@ int ff_update_duplicate_context(MpegEncContext *dst, MpegEncContext *src);
 int ff_MPV_lowest_referenced_row(MpegEncContext *s, int dir);
 void ff_MPV_report_decode_progress(MpegEncContext *s);
 int ff_mpeg_update_thread_context(AVCodecContext *dst, const AVCodecContext *src);
-const uint8_t *avpriv_mpv_find_start_code(const uint8_t *p, const uint8_t *end, uint32_t *state);
 void ff_set_qscale(MpegEncContext * s, int qscale);
 
 void ff_mpeg_er_frame_start(MpegEncContext *s);
@@ -915,8 +916,6 @@ void ff_mpeg1_encode_mb(MpegEncContext *s,
                         int motion_x, int motion_y);
 void ff_mpeg1_encode_init(MpegEncContext *s);
 void ff_mpeg1_encode_slice_header(MpegEncContext *s);
-void ff_mpeg1_clean_buffers(MpegEncContext *s);
-int ff_mpeg1_find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size, AVCodecParserContext *s);
 
 extern const uint8_t ff_aic_dc_scale_table[32];
 extern const uint8_t ff_h263_chroma_qscale_table[32];

@@ -761,7 +761,9 @@ do {                                                                    \
             const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frame->format);
 
             planes = av_pix_fmt_count_planes(frame->format);
-            if (!planes)
+            /* workaround for AVHWAccel plane count of 0, buf[0] is used as
+               check for allocated buffers: make libavcodec happy */
+            if (desc && desc->flags & PIX_FMT_HWACCEL)
                 planes = 1;
             if (!desc || planes <= 0) {
                 ret = AVERROR(EINVAL);
@@ -3097,4 +3099,37 @@ int avpriv_bprint_to_extradata(AVCodecContext *avctx, struct AVBPrint *buf)
      * zeros. */
     avctx->extradata_size = buf->len;
     return 0;
+}
+
+const uint8_t *avpriv_find_start_code(const uint8_t *av_restrict p,
+                                      const uint8_t *end,
+                                      uint32_t *av_restrict state)
+{
+    int i;
+
+    assert(p <= end);
+    if (p >= end)
+        return end;
+
+    for (i = 0; i < 3; i++) {
+        uint32_t tmp = *state << 8;
+        *state = tmp + *(p++);
+        if (tmp == 0x100 || p == end)
+            return p;
+    }
+
+    while (p < end) {
+        if      (p[-1] > 1      ) p += 3;
+        else if (p[-2]          ) p += 2;
+        else if (p[-3]|(p[-1]-1)) p++;
+        else {
+            p++;
+            break;
+        }
+    }
+
+    p = FFMIN(p, end) - 4;
+    *state = AV_RB32(p);
+
+    return p + 4;
 }

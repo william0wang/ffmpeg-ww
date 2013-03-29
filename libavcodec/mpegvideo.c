@@ -156,39 +156,6 @@ static void mpeg_er_decode_mb(void *opaque, int ref, int mv_dir, int mv_type,
     ff_MPV_decode_mb(s, s->block);
 }
 
-const uint8_t *avpriv_mpv_find_start_code(const uint8_t *av_restrict p,
-                                          const uint8_t *end,
-                                          uint32_t *av_restrict state)
-{
-    int i;
-
-    assert(p <= end);
-    if (p >= end)
-        return end;
-
-    for (i = 0; i < 3; i++) {
-        uint32_t tmp = *state << 8;
-        *state = tmp + *(p++);
-        if (tmp == 0x100 || p == end)
-            return p;
-    }
-
-    while (p < end) {
-        if      (p[-1] > 1      ) p += 3;
-        else if (p[-2]          ) p += 2;
-        else if (p[-3]|(p[-1]-1)) p++;
-        else {
-            p++;
-            break;
-        }
-    }
-
-    p = FFMIN(p, end) - 4;
-    *state = AV_RB32(p);
-
-    return p + 4;
-}
-
 /* init common dct for both encoder and decoder */
 av_cold int ff_dct_common_init(MpegEncContext *s)
 {
@@ -327,6 +294,9 @@ static void free_picture_tables(Picture *pic)
 {
     int i;
 
+    pic->alloc_mb_width  =
+    pic->alloc_mb_height = 0;
+
     av_buffer_unref(&pic->mb_var_buf);
     av_buffer_unref(&pic->mc_mb_var_buf);
     av_buffer_unref(&pic->mb_mean_buf);
@@ -376,6 +346,9 @@ static int alloc_picture_tables(MpegEncContext *s, Picture *pic)
         }
     }
 
+    pic->alloc_mb_width  = s->mb_width;
+    pic->alloc_mb_height = s->mb_height;
+
     return 0;
 }
 
@@ -413,8 +386,8 @@ int ff_alloc_picture(MpegEncContext *s, Picture *pic, int shared)
     int i, ret;
 
     if (pic->qscale_table_buf)
-        if (pic->mbskip_table_buf->size < s->mb_stride * s->mb_height + 2 ||
-            pic->qscale_table_buf->size < s->mb_stride * (s->mb_height + 1) + 1 + s->mb_stride)
+        if (   pic->alloc_mb_width  != s->mb_width
+            || pic->alloc_mb_height != s->mb_height)
             free_picture_tables(pic);
 
     if (shared) {
@@ -468,7 +441,6 @@ fail:
 void ff_mpeg_unref_picture(MpegEncContext *s, Picture *pic)
 {
     int off = offsetof(Picture, mb_mean) + sizeof(pic->mb_mean);
-    pic->period_since_free = 0;
 
     pic->tf.f = &pic->f;
     /* WM Image / Screen codecs allocate internal buffers with different
@@ -523,6 +495,9 @@ do {\
         dst->motion_val[i] = src->motion_val[i];
         dst->ref_index[i]  = src->ref_index[i];
     }
+
+    dst->alloc_mb_width  = src->alloc_mb_width;
+    dst->alloc_mb_height = src->alloc_mb_height;
 
     return 0;
 }
@@ -729,12 +704,12 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst,
     s->input_picture_number = s1->input_picture_number;
 
     av_assert0(!s->picture || s->picture != s1->picture);
+    if(s->picture)
     for (i = 0; i < MAX_PICTURE_COUNT; i++) {
         ff_mpeg_unref_picture(s, &s->picture[i]);
         if (s1->picture[i].f.data[0] &&
             (ret = ff_mpeg_ref_picture(s, &s->picture[i], &s1->picture[i])) < 0)
             return ret;
-        s->picture[i].period_since_free ++;
     }
 
 #define UPDATE_PICTURE(pic)\
@@ -1433,10 +1408,6 @@ void ff_release_unused_pictures(MpegEncContext*s, int remove_current)
 
 static inline int pic_is_unused(MpegEncContext *s, Picture *pic)
 {
-    if (   (s->avctx->active_thread_type & FF_THREAD_FRAME)
-        && pic->f.qscale_table //check if the frame has anything allocated
-        && pic->period_since_free < s->avctx->thread_count)
-        return 0;
     if (pic == s->last_picture_ptr)
         return 0;
     if (pic->f.data[0] == NULL)

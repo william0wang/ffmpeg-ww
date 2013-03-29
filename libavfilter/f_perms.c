@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2013 Clément Bœsch
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -34,6 +36,7 @@ enum mode {
 typedef struct {
     const AVClass *class;
     AVLFG lfg;
+    int64_t random_seed;
     enum mode mode;
 } PermsContext;
 
@@ -47,16 +50,23 @@ static const AVOption options[] = {
         { "rw",     "set all output frames writable",   0, AV_OPT_TYPE_CONST, {.i64 = MODE_RW},         INT_MIN, INT_MAX, FLAGS, "mode" },
         { "toggle", "switch permissions",               0, AV_OPT_TYPE_CONST, {.i64 = MODE_TOGGLE},     INT_MIN, INT_MAX, FLAGS, "mode" },
         { "random", "set permissions randomly",         0, AV_OPT_TYPE_CONST, {.i64 = MODE_RANDOM},     INT_MIN, INT_MAX, FLAGS, "mode" },
+    { "seed", "set the seed for the random mode", OFFSET(random_seed), AV_OPT_TYPE_INT64, {.i64 = -1}, -1, UINT32_MAX, FLAGS },
     { NULL }
 };
 
-static av_cold int init(AVFilterContext *ctx, const char *args, const AVClass *class)
+static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     PermsContext *perms = ctx->priv;
 
-    // TODO: add a seed option
-    if (perms->mode == MODE_RANDOM)
-        av_lfg_init(&perms->lfg, av_get_random_seed());
+    if (perms->mode == MODE_RANDOM) {
+        uint32_t seed;
+
+        if (perms->random_seed == -1)
+            perms->random_seed = av_get_random_seed();
+        seed = perms->random_seed;
+        av_log(ctx, AV_LOG_INFO, "random seed: 0x%08x\n", seed);
+        av_lfg_init(&perms->lfg, seed);
+    }
 
     return 0;
 }
@@ -108,11 +118,6 @@ static const char *const shorthand[] = { "mode", NULL };
 #define aperms_options options
 AVFILTER_DEFINE_CLASS(aperms);
 
-static av_cold int aperms_init(AVFilterContext *ctx, const char *args)
-{
-    return init(ctx, args, &aperms_class);
-}
-
 static const AVFilterPad aperms_inputs[] = {
     {
         .name         = "default",
@@ -133,7 +138,7 @@ static const AVFilterPad aperms_outputs[] = {
 AVFilter avfilter_af_aperms = {
     .name        = "aperms",
     .description = NULL_IF_CONFIG_SMALL("Set permissions for the output audio frame."),
-    .init        = aperms_init,
+    .init        = init,
     .priv_size   = sizeof(PermsContext),
     .inputs      = aperms_inputs,
     .outputs     = aperms_outputs,
@@ -146,11 +151,6 @@ AVFilter avfilter_af_aperms = {
 
 #define perms_options options
 AVFILTER_DEFINE_CLASS(perms);
-
-static av_cold int perms_init(AVFilterContext *ctx, const char *args)
-{
-    return init(ctx, args, &perms_class);
-}
 
 static const AVFilterPad perms_inputs[] = {
     {
@@ -172,7 +172,7 @@ static const AVFilterPad perms_outputs[] = {
 AVFilter avfilter_vf_perms = {
     .name        = "perms",
     .description = NULL_IF_CONFIG_SMALL("Set permissions for the output video frame."),
-    .init        = perms_init,
+    .init        = init,
     .priv_size   = sizeof(PermsContext),
     .inputs      = perms_inputs,
     .outputs     = perms_outputs,
