@@ -222,6 +222,10 @@ AVOutputFormat *av_guess_format(const char *short_name, const char *filename,
 
 enum AVCodecID av_guess_codec(AVOutputFormat *fmt, const char *short_name,
                             const char *filename, const char *mime_type, enum AVMediaType type){
+    if (!strcmp(fmt->name, "segment") || !strcmp(fmt->name, "ssegment")) {
+        fmt = av_guess_format(NULL, filename, NULL);
+    }
+
     if(type == AVMEDIA_TYPE_VIDEO){
         enum AVCodecID codec_id= AV_CODEC_ID_NONE;
 
@@ -2304,7 +2308,7 @@ static void fill_all_stream_timings(AVFormatContext *ic)
 static void estimate_timings_from_bit_rate(AVFormatContext *ic)
 {
     int64_t filesize, duration;
-    int bit_rate, i;
+    int bit_rate, i, show_warning = 0;
     AVStream *st;
 
     /* if bit_rate is already set, we believe it */
@@ -2329,10 +2333,13 @@ static void estimate_timings_from_bit_rate(AVFormatContext *ic)
                     && st->duration == AV_NOPTS_VALUE) {
                     duration= av_rescale(8*filesize, st->time_base.den, ic->bit_rate*(int64_t)st->time_base.num);
                     st->duration = duration;
+                    show_warning = 1;
                 }
             }
         }
     }
+    if (show_warning)
+        av_log(ic, AV_LOG_WARNING, "Estimating duration from bitrate, this may be inaccurate\n");
 }
 
 #define DURATION_MAX_READ_SIZE 250000LL
@@ -2440,7 +2447,6 @@ static void estimate_timings(AVFormatContext *ic, int64_t old_offset)
         fill_all_stream_timings(ic);
         ic->duration_estimation_method = AVFMT_DURATION_FROM_STREAM;
     } else {
-        av_log(ic, AV_LOG_WARNING, "Estimating duration from bitrate, this may be inaccurate\n");
         /* less precise: use bitrate info */
         estimate_timings_from_bit_rate(ic);
         ic->duration_estimation_method = AVFMT_DURATION_FROM_BITRATE;
@@ -4276,6 +4282,22 @@ AVRational av_guess_sample_aspect_ratio(AVFormatContext *format, AVStream *strea
         return stream_sample_aspect_ratio;
     else
         return frame_sample_aspect_ratio;
+}
+
+AVRational av_guess_frame_rate(AVFormatContext *format, AVStream *st, AVFrame *frame)
+{
+    AVRational fr = st->r_frame_rate;
+
+    if (st->codec->ticks_per_frame > 1) {
+        AVRational codec_fr = av_inv_q(st->codec->time_base);
+        AVRational   avg_fr = st->avg_frame_rate;
+        codec_fr.den *= st->codec->ticks_per_frame;
+        if (   codec_fr.num > 0 && codec_fr.den > 0 && av_q2d(codec_fr) < av_q2d(fr)*0.7
+            && fabs(1.0 - av_q2d(av_div_q(avg_fr, fr))) > 0.1)
+            fr = codec_fr;
+    }
+
+    return fr;
 }
 
 int avformat_match_stream_specifier(AVFormatContext *s, AVStream *st,

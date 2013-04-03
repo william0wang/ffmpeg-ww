@@ -80,8 +80,7 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterFormats *formats = NULL;
     AVFilterChannelLayouts *layouts;
     static const enum AVSampleFormat sample_fmts[][7] = {
-        /* PRECISION_FIXED */
-        {
+        [PRECISION_FIXED] = {
             AV_SAMPLE_FMT_U8,
             AV_SAMPLE_FMT_U8P,
             AV_SAMPLE_FMT_S16,
@@ -90,14 +89,12 @@ static int query_formats(AVFilterContext *ctx)
             AV_SAMPLE_FMT_S32P,
             AV_SAMPLE_FMT_NONE
         },
-        /* PRECISION_FLOAT */
-        {
+        [PRECISION_FLOAT] = {
             AV_SAMPLE_FMT_FLT,
             AV_SAMPLE_FMT_FLTP,
             AV_SAMPLE_FMT_NONE
         },
-        /* PRECISION_DOUBLE */
-        {
+        [PRECISION_DOUBLE] = {
             AV_SAMPLE_FMT_DBL,
             AV_SAMPLE_FMT_DBLP,
             AV_SAMPLE_FMT_NONE
@@ -234,7 +231,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
         out_buf = ff_get_audio_buffer(inlink, nb_samples);
         if (!out_buf)
             return AVERROR(ENOMEM);
-        out_buf->pts = buf->pts;
+        av_frame_copy_props(out_buf, buf);
     }
 
     if (vol->precision != PRECISION_FIXED || vol->volume_i > 0) {

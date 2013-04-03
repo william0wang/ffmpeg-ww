@@ -6,7 +6,7 @@ Filtering in FFmpeg is enabled through the libavfilter library.
 In libavfilter, it is possible for filters to have multiple inputs and
 multiple outputs.
 To illustrate the sorts of things that are possible, we can
-use a complex filter graph. For example, the following one:
+use a complex filtergraph. For example, the following one:
 
 @example
 input --> split ---------------------> overlay --> output
@@ -49,7 +49,7 @@ output.
 @c man begin GRAPH2DOT
 
 The @file{graph2dot} program included in the FFmpeg @file{tools}
-directory can be used to parse a filter graph description and issue a
+directory can be used to parse a filtergraph description and issue a
 corresponding textual representation in the dot language.
 
 Invoke the command:
@@ -61,7 +61,7 @@ to see how to use @file{graph2dot}.
 
 You can then pass the dot description to the @file{dot} program (from
 the graphviz suite of programs) and obtain a graphical representation
-of the filter graph.
+of the filtergraph.
 
 For example the sequence of commands:
 @example
@@ -2113,7 +2113,7 @@ This expression is evaluated only once during the filter
 configuration.
 
 @item h, out_h
-Set the crop area width. It defaults to @code{ih}.
+Set the crop area height. It defaults to @code{ih}.
 This expression is evaluated only once during the filter
 configuration.
 
@@ -2404,7 +2404,7 @@ curves=vintage
 @section decimate
 
 Drop frames that do not differ greatly from the previous frame in
-order to reduce framerate.
+order to reduce frame rate.
 
 The main use of this filter is for very-low-bitrate encoding
 (e.g. streaming over dialup modem), but it could in theory be used for
@@ -2504,7 +2504,7 @@ tripod, moving on a vehicle, etc.
 The filter accepts parameters as a list of @var{key}=@var{value}
 pairs, separated by ":". If the key of the first options is omitted,
 the arguments are interpreted according to the syntax
-@var{x}:@var{y}:@var{w}:@var{h}:@var{rx}:@var{ry}:@var{edge}:@var{blocksize}:@var{contrast}:@var{search}:@var{filename}.
+@var{x}:@var{y}:@var{w}:@var{h}:@var{rx}:@var{ry}:@var{edge}:@var{blocksize}:@var{contrast}:@var{search}:@var{filename}:@var{opencl}.
 
 A description of the accepted parameters follows.
 
@@ -2569,6 +2569,10 @@ Default value is @samp{exhaustive}.
 @item filename
 If set then a detailed log of the motion search is written to the
 specified file.
+
+@item opencl
+If set to 1, specify using OpenCL capabilities, only available if
+FFmpeg was configured with @code{--enable-opencl}. Default value is 0.
 
 @end table
 
@@ -2865,7 +2869,7 @@ they should be escaped.
 
 Note that they probably must also be escaped as the value for the
 @option{text} option in the filter argument string and as the filter
-argument in the filter graph description, and possibly also for the shell,
+argument in the filtergraph description, and possibly also for the shell,
 that makes up to four levels of escaping; using a text file avoids these
 problems.
 
@@ -3169,14 +3173,14 @@ format=yuv420p:yuv444p:yuv410p
 
 @section fps
 
-Convert the video to specified constant framerate by duplicating or dropping
+Convert the video to specified constant frame rate by duplicating or dropping
 frames as necessary.
 
 This filter accepts the following named parameters:
 @table @option
 
 @item fps
-Desired output framerate. The default is @code{25}.
+Desired output frame rate. The default is @code{25}.
 
 @item round
 Rounding method.
@@ -5387,27 +5391,27 @@ Available values are:
 @table @samp
 @item merge, 0
 Move odd frames into the upper field, even into the lower field,
-generating a double height frame at half framerate.
+generating a double height frame at half frame rate.
 
 @item drop_odd, 1
 Only output even frames, odd frames are dropped, generating a frame with
-unchanged height at half framerate.
+unchanged height at half frame rate.
 
 @item drop_even, 2
 Only output odd frames, even frames are dropped, generating a frame with
-unchanged height at half framerate.
+unchanged height at half frame rate.
 
 @item pad, 3
 Expand each frame to full height, but pad alternate lines with black,
-generating a frame with double height at the same input framerate.
+generating a frame with double height at the same input frame rate.
 
 @item interleave_top, 4
 Interleave the upper field from odd frames with the lower field from
-even frames, generating a frame with unchanged height at half framerate.
+even frames, generating a frame with unchanged height at half frame rate.
 
 @item interleave_bottom, 5
 Interleave the lower field from odd frames with the upper field from
-even frames, generating a frame with unchanged height at half framerate.
+even frames, generating a frame with unchanged height at half frame rate.
 
 @item interlacex2, 6
 Double frame rate with unchanged height. Frames are inserted each
@@ -7003,7 +7007,7 @@ amovie=a.mp3,asplit[out0],showwaves[out1]
 
 @item
 Create a synthetic signal and show it with showwaves, forcing a
-framerate of 30 frames per second:
+frame rate of 30 frames per second:
 @example
 aevalsrc=sin(1*2*PI*t)*sin(880*2*PI*t):cos(2*PI*200*t),asplit[out0],showwaves=r=30[out1]
 @end example

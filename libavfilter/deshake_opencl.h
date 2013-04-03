@@ -1,5 +1,5 @@
 /*
- * Sony OpenMG (OMA) common data
+ * Copyright (C) 2013 Wei Gao <weigao@multicorewareinc.com>
  *
  * This file is part of FFmpeg.
  *
@@ -18,17 +18,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "internal.h"
-#include "oma.h"
-#include "libavcodec/avcodec.h"
+#ifndef AVFILTER_DESHAKE_OPENCL_H
+#define AVFILTER_DESHAKE_OPENCL_H
 
-const uint16_t ff_oma_srate_tab[8] = { 320, 441, 480, 882, 960, 0 };
+#include "deshake.h"
 
-const AVCodecTag ff_oma_codec_tags[] = {
-    { AV_CODEC_ID_ATRAC3,      OMA_CODECID_ATRAC3  },
-    { AV_CODEC_ID_ATRAC3P,     OMA_CODECID_ATRAC3P },
-    { AV_CODEC_ID_MP3,         OMA_CODECID_MP3     },
-    { AV_CODEC_ID_PCM_S16BE,   OMA_CODECID_LPCM    },
-    { 0 },
-};
+int ff_opencl_deshake_init(AVFilterContext *ctx);
 
+void ff_opencl_deshake_uninit(AVFilterContext *ctx);
+
+int ff_opencl_deshake_process_inout_buf(AVFilterContext *ctx, AVFrame *in, AVFrame *out);
+
+int ff_opencl_transform(AVFilterContext *ctx,
+                        int width, int height, int cw, int ch,
+                        const float *matrix_y, const float *matrix_uv,
+                        enum InterpolateMethod interpolate,
+                        enum FillMethod fill, AVFrame *in, AVFrame *out);
+
+#endif /* AVFILTER_DESHAKE_OPENCL_H */

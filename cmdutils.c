@@ -795,6 +795,13 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg)
     int level;
     int i;
 
+    tail = strstr(arg, "repeat");
+    av_log_set_flags(tail ? 0 : AV_LOG_SKIP_REPEATED);
+    if (tail == arg)
+        arg += 6 + (arg[6]=='+');
+    if(tail && !*arg)
+        return 0;
+
     for (i = 0; i < FF_ARRAY_ELEMS(log_levels); i++) {
         if (!strcmp(log_levels[i].name, arg)) {
             av_log_set_level(log_levels[i].level);
@@ -1606,6 +1613,33 @@ static void show_help_muxer(const char *name)
         show_help_children(fmt->priv_class, AV_OPT_FLAG_ENCODING_PARAM);
 }
 
+static void show_help_filter(const char *name)
+{
+#if CONFIG_AVFILTER
+    const AVFilter *filter;
+
+    if (!name) {
+        av_log(NULL, AV_LOG_ERROR, "No filter name specified.\n");
+        return;
+    }
+    filter = avfilter_get_by_name(name);
+    if (!filter) {
+        av_log(NULL, AV_LOG_ERROR, "Filter '%s' not found.\n", name);
+        return;
+    }
+    printf("Filter %s\n", filter->name);
+    if (filter->description)
+        printf("  %s\n", filter->description);
+    if (filter->priv_class)
+        show_help_children(filter->priv_class, AV_OPT_FLAG_FILTERING_PARAM);
+    else
+        printf("No AVOption available\n");
+#else
+    av_log(NULL, AV_LOG_ERROR, "Build without libavfilter; "
+           "can not to satisfy request\n");
+#endif
+}
+
 int show_help(void *optctx, const char *opt, const char *arg)
 {
     char *topic, *par;
@@ -1626,6 +1660,8 @@ int show_help(void *optctx, const char *opt, const char *arg)
         show_help_demuxer(par);
     } else if (!strcmp(topic, "muxer")) {
         show_help_muxer(par);
+    } else if (!strcmp(topic, "filter")) {
+        show_help_filter(par);
     } else {
         show_help_default(topic, par);
     }

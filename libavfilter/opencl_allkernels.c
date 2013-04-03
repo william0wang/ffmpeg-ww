@@ -1,5 +1,5 @@
 /*
- * Sony OpenMG (OMA) common data
+ * Copyright (C) 2013 Wei Gao <weigao@multicorewareinc.com>
  *
  * This file is part of FFmpeg.
  *
@@ -18,17 +18,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "internal.h"
-#include "oma.h"
-#include "libavcodec/avcodec.h"
+#include "opencl_allkernels.h"
+#if CONFIG_OPENCL
+#include "libavutil/opencl.h"
+#include "deshake_kernel.h"
+#endif
 
-const uint16_t ff_oma_srate_tab[8] = { 320, 441, 480, 882, 960, 0 };
+#define OPENCL_REGISTER_KERNEL_CODE(X, x)                                              \
+    {                                                                                  \
+        if (CONFIG_##X##_FILTER) {                                                     \
+            av_opencl_register_kernel_code(ff_kernel_##x##_opencl);                    \
+        }                                                                              \
+    }
 
-const AVCodecTag ff_oma_codec_tags[] = {
-    { AV_CODEC_ID_ATRAC3,      OMA_CODECID_ATRAC3  },
-    { AV_CODEC_ID_ATRAC3P,     OMA_CODECID_ATRAC3P },
-    { AV_CODEC_ID_MP3,         OMA_CODECID_MP3     },
-    { AV_CODEC_ID_PCM_S16BE,   OMA_CODECID_LPCM    },
-    { 0 },
-};
-
+void ff_opencl_register_filter_kernel_code_all(void)
+{
+ #if CONFIG_OPENCL
+   OPENCL_REGISTER_KERNEL_CODE(DESHAKE,     deshake);
+ #endif
+}
