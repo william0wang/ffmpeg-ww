@@ -234,7 +234,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
             break;
     av_assert1(input_number < am->nb_inputs);
     if (ff_bufqueue_is_full(&am->in[input_number].queue)) {
-        av_log(ctx, AV_LOG_ERROR, "Buffer queue overflow\n");
         av_frame_free(&insamples);
         return AVERROR(ENOMEM);
     }
@@ -248,6 +247,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         return 0;
 
     outbuf = ff_get_audio_buffer(ctx->outputs[0], nb_samples);
+    if (!outbuf)
+        return AVERROR(ENOMEM);
     outs = outbuf->data[0];
     for (i = 0; i < am->nb_inputs; i++) {
         inbuf[i] = ff_bufqueue_peek(&am->in[i].queue, 0);

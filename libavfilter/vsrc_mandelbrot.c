@@ -122,13 +122,7 @@ AVFILTER_DEFINE_CLASS(mandelbrot);
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     MBContext *mb = ctx->priv;
-    int err;
 
-    mb->class = &mandelbrot_class;
-    av_opt_set_defaults(mb);
-
-    if ((err = (av_set_options_string(mb, args, "=", ":"))) < 0)
-        return err;
     mb->bailout *= mb->bailout;
 
     mb->start_scale /=mb->h;
@@ -271,21 +265,26 @@ static void draw_mandelbrot(AVFilterContext *ctx, uint32_t *color, int linesize,
         for(x=0; x<mb->w; x++){
             float av_uninit(epsilon);
             const double cr=mb->start_x+scale*(x-mb->w/2);
-            double zr=cr + cos(pts * mb->morphxf) * mb->morphamp;
-            double zi=ci + sin(pts * mb->morphyf) * mb->morphamp;
+            double zr=cr;
+            double zi=ci;
             uint32_t c=0;
             double dv= mb->dither / (double)(1LL<<32);
             mb->dither= mb->dither*1664525+1013904223;
 
             if(color[x + y*linesize] & 0xFF000000)
                 continue;
-            if(!mb->morphamp && interpol(mb, color, x, y, linesize)){
-                if(next_cidx < mb->cache_allocated){
-                    mb->next_cache[next_cidx  ].p[0]= cr;
-                    mb->next_cache[next_cidx  ].p[1]= ci;
-                    mb->next_cache[next_cidx++].val = color[x + y*linesize];
+            if(!mb->morphamp){
+                if(interpol(mb, color, x, y, linesize)){
+                    if(next_cidx < mb->cache_allocated){
+                        mb->next_cache[next_cidx  ].p[0]= cr;
+                        mb->next_cache[next_cidx  ].p[1]= ci;
+                        mb->next_cache[next_cidx++].val = color[x + y*linesize];
+                    }
+                    continue;
                 }
-                continue;
+            }else{
+                zr += cos(pts * mb->morphxf) * mb->morphamp;
+                zi += sin(pts * mb->morphyf) * mb->morphamp;
             }
 
             use_zyklus= (x==0 || mb->inner!=BLACK ||color[x-1 + y*linesize] == 0xFF000000);
@@ -398,6 +397,9 @@ static int request_frame(AVFilterLink *link)
 {
     MBContext *mb = link->src->priv;
     AVFrame *picref = ff_get_video_buffer(link, mb->w, mb->h);
+    if (!picref)
+        return AVERROR(ENOMEM);
+
     picref->sample_aspect_ratio = (AVRational) {1, 1};
     picref->pts = mb->pts++;
 

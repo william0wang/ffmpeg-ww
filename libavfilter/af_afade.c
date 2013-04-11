@@ -80,13 +80,6 @@ AVFILTER_DEFINE_CLASS(afade);
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     AudioFadeContext *afade = ctx->priv;
-    int ret;
-
-    afade->class = &afade_class;
-    av_opt_set_defaults(afade);
-
-    if ((ret = av_set_options_string(afade, args, "=", ":")) < 0)
-        return ret;
 
     if (INT64_MAX - afade->nb_samples < afade->start_sample)
         return AVERROR(EINVAL);
@@ -250,7 +243,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
         out_buf = ff_get_audio_buffer(inlink, nb_samples);
         if (!out_buf)
             return AVERROR(ENOMEM);
-        out_buf->pts = buf->pts;
+        av_frame_copy_props(out_buf, buf);
     }
 
     if ((!afade->type && (cur_sample + nb_samples < afade->start_sample)) ||

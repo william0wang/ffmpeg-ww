@@ -215,6 +215,7 @@ External library support:
   --enable-libopenjpeg     enable JPEG 2000 de/encoding via OpenJPEG [no]
   --enable-libopus         enable Opus decoding via libopus [no]
   --enable-libpulse        enable Pulseaudio input via libpulse [no]
+  --enable-libquvi         enable quvi input via libquvi [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
   --enable-libschroedinger enable Dirac de/encoding via libschroedinger [no]
   --enable-libsoxr         enable Include libsoxr resampling [no]
@@ -316,7 +317,6 @@ Optimization options (experts only):
   --disable-fast-unaligned consider unaligned accesses slow
 
 Developer options (useful when working on FFmpeg itself):
-  --enable-coverage        build with test coverage instrumentation
   --disable-debug          disable debugging symbols
   --enable-debug=LEVEL     set the debug level [$debuglevel]
   --disable-optimizations  disable compiler optimizations
@@ -658,6 +658,12 @@ print_config(){
                 } else if (file ~ /\\.mak\$/) {
                     n = -v ? \"\" : \"!\";
                     printf(\"%s%s=yes\\n\", n, c) >>file;
+                } else if (file ~ /\\.texi\$/) {
+                    pre = -v ? \"\" : \"@c \";
+                    yesno = \$2;
+                    c2 = tolower(c);
+                    gsub(/_/, \"-\", c2);
+                    printf(\"%s@set %s %s\\n\", pre, c2, yesno) >>file;
                 }
             }
         }"
@@ -1163,6 +1169,7 @@ EXTERNAL_LIBRARY_LIST="
     libopenjpeg
     libopus
     libpulse
+    libquvi
     librtmp
     libschroedinger
     libsoxr
@@ -1262,6 +1269,12 @@ THREADS_LIST='
     pthreads
     w32threads
     os2threads
+'
+
+ATOMICS_LIST='
+    atomics_gcc
+    atomics_win32
+    atomics_suncc
 '
 
 ARCH_LIST='
@@ -1374,6 +1387,7 @@ HAVE_LIST="
     $HAVE_LIST_CMDLINE
     $HAVE_LIST_PUB
     $THREADS_LIST
+    $ATOMICS_LIST
     $MATH_FUNCS
     access
     aligned_malloc
@@ -1384,6 +1398,8 @@ HAVE_LIST="
     asm_mod_q
     asm_mod_y
     asm_types_h
+    atomic_cas_ptr
+    atomics_native
     attribute_may_alias
     attribute_packed
     cdio_paranoia_h
@@ -1545,7 +1561,6 @@ CMDLINE_SELECT="
     $HAVE_LIST_CMDLINE
     $THREADS_LIST
     asm
-    coverage
     cross_compile
     debug
     extra_warnings
@@ -1945,6 +1960,7 @@ libopenjpeg_encoder_deps="libopenjpeg"
 libopus_decoder_deps="libopus"
 libopus_encoder_deps="libopus"
 libopus_encoder_select="audio_frame_queue"
+libquvi_demuxer_deps="libquvi"
 libschroedinger_decoder_deps="libschroedinger"
 libschroedinger_encoder_deps="libschroedinger"
 libspeex_decoder_deps="libspeex"
@@ -2451,13 +2467,13 @@ sysinclude_default="${sysroot}/usr/include"
 case "$toolchain" in
     clang-asan)
         cc_default="clang"
-        add_cflags  -faddress-sanitizer
-        add_ldflags -faddress-sanitizer
+        add_cflags  -fsanitize=address
+        add_ldflags -fsanitize=address
     ;;
     clang-tsan)
         cc_default="clang"
-        add_cflags  -fthread-sanitizer
-        add_ldflags -fthread-sanitizer
+        add_cflags  -fsanitize=thread -pie
+        add_ldflags -fsanitize=thread -pie
     ;;
     msvc)
         cc_default="c99wrap cl"
@@ -2465,6 +2481,10 @@ case "$toolchain" in
         nm_default="dumpbin -symbols"
         ar_default="lib"
         target_os_default="win32"
+    ;;
+    gcov)
+        add_cflags  -fprofile-arcs -ftest-coverage
+        add_ldflags -fprofile-arcs -ftest-coverage
     ;;
     ?*)
         die "Unknown toolchain $toolchain"
@@ -3828,6 +3848,7 @@ check_func  strerror_r
 check_func  sched_getaffinity
 check_builtin sync_val_compare_and_swap "" "int *ptr; int oldval, newval; __sync_val_compare_and_swap(ptr, oldval, newval)"
 check_builtin machine_rw_barrier mbarrier.h "__machine_rw_barrier()"
+check_builtin atomic_cas_ptr atomic.h "void **ptr; void *oldval, *newval; atomic_cas_ptr(ptr, oldval, newval)"
 check_builtin MemoryBarrier windows.h "MemoryBarrier()"
 check_func  sysconf
 check_func  sysctl
@@ -3908,6 +3929,10 @@ if enabled pthreads; then
   check_func pthread_cancel
 fi
 
+enabled sync_val_compare_and_swap && enable atomics_gcc
+enabled machine_rw_barrier && enabled atomic_cas_ptr && enable atomics_suncc
+enabled MemoryBarrier && enable atomics_win32
+
 check_lib math.h sin -lm && LIBM="-lm"
 disabled crystalhd || check_lib libcrystalhd/libcrystalhd_if.h DtsCrystalHDVersion -lcrystalhd || disable crystalhd
 enabled vaapi && require vaapi va/va.h vaInitialize -lva
@@ -3955,6 +3980,7 @@ enabled libopenjpeg && { check_lib openjpeg-1.5/openjpeg.h opj_version -lopenjpe
                          die "ERROR: libopenjpeg not found"; }
 enabled libopus    && require_pkg_config opus opus_multistream.h opus_multistream_decoder_create
 enabled libpulse && require_pkg_config libpulse-simple pulse/simple.h pa_simple_new
+enabled libquvi    && require_pkg_config libquvi quvi/quvi.h quvi_init
 enabled librtmp    && require_pkg_config librtmp librtmp/rtmp.h RTMP_Socket
 enabled libschroedinger && require_pkg_config schroedinger-1.0 schroedinger/schro.h schro_init
 enabled libsoxr    && require  libsoxr soxr.h soxr_create -lsoxr
@@ -4096,7 +4122,6 @@ enabled vdpau &&
 disabled iconv || check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || disable iconv
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
-enabled coverage && add_cflags "-fprofile-arcs -ftest-coverage" && add_ldflags "-fprofile-arcs -ftest-coverage"
 test -n "$valgrind" && target_exec="$valgrind --error-exitcode=1 --malloc-fill=0x2a --track-origins=yes --leak-check=full --gen-suppressions=all --suppressions=$source_path/tests/fate-valgrind.supp"
 
 # add some useful compiler flags if supported
@@ -4247,8 +4272,9 @@ case $target_os in
     ;;
 esac
 
-enabled_any $THREADS_LIST      && enable threads
 enable frame_thread_encoder
+enabled_any $THREADS_LIST      && enable threads
+enabled_any $ATOMICS_LIST      && enable atomics_native
 
 enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
@@ -4390,13 +4416,13 @@ fi
 
 echo "License: $license"
 
-echo "Creating config.mak and config.h..."
+echo "Creating config.mak, config.h, and doc/config.texi..."
 
 test -e Makefile || $ln_s "$source_path/Makefile" .
 
 enabled stripping || strip="echo skipping strip"
 
-config_files="$TMPH config.mak"
+config_files="$TMPH config.mak doc/config.texi"
 
 cat > config.mak <<EOF
 # Automatically generated by configure - do not modify!
@@ -4547,6 +4573,9 @@ if enabled yasm; then
     append config_files $TMPASM
     printf '' >$TMPASM
 fi
+
+mkdir -p doc
+echo "@c auto-generated by configure" > doc/config.texi
 
 print_config ARCH_   "$config_files" $ARCH_LIST
 print_config HAVE_   "$config_files" $HAVE_LIST

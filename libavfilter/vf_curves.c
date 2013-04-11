@@ -52,19 +52,15 @@ typedef struct {
     const AVClass *class;
     enum preset preset;
     char *comp_points_str[NB_COMP];
+    char *comp_points_str_all;
     uint8_t graph[NB_COMP][256];
 } CurvesContext;
 
 #define OFFSET(x) offsetof(CurvesContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
 static const AVOption curves_options[] = {
-    { "red",   "set red points coordinates",   OFFSET(comp_points_str[0]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
-    { "r",     "set red points coordinates",   OFFSET(comp_points_str[0]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
-    { "green", "set green points coordinates", OFFSET(comp_points_str[1]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
-    { "g",     "set green points coordinates", OFFSET(comp_points_str[1]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
-    { "blue",  "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
-    { "b",     "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "preset", "select a color curves preset", OFFSET(preset), AV_OPT_TYPE_INT, {.i64=PRESET_NONE}, PRESET_NONE, NB_PRESETS-1, FLAGS, "preset_name" },
+        { "none",               NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_NONE},                 INT_MIN, INT_MAX, FLAGS, "preset_name" },
         { "color_negative",     NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_COLOR_NEGATIVE},       INT_MIN, INT_MAX, FLAGS, "preset_name" },
         { "cross_process",      NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_CROSS_PROCESS},        INT_MIN, INT_MAX, FLAGS, "preset_name" },
         { "darker",             NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_DARKER},               INT_MIN, INT_MAX, FLAGS, "preset_name" },
@@ -75,6 +71,13 @@ static const AVOption curves_options[] = {
         { "negative",           NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_NEGATIVE},             INT_MIN, INT_MAX, FLAGS, "preset_name" },
         { "strong_contrast",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_STRONG_CONTRAST},      INT_MIN, INT_MAX, FLAGS, "preset_name" },
         { "vintage",            NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_VINTAGE},              INT_MIN, INT_MAX, FLAGS, "preset_name" },
+    { "red",   "set red points coordinates",   OFFSET(comp_points_str[0]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "r",     "set red points coordinates",   OFFSET(comp_points_str[0]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "green", "set green points coordinates", OFFSET(comp_points_str[1]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "g",     "set green points coordinates", OFFSET(comp_points_str[1]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "blue",  "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "b",     "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "all",   "set points coordinates for all components",   OFFSET(comp_points_str_all),AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { NULL }
 };
 
@@ -318,9 +321,18 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
     int i, j, ret;
     CurvesContext *curves = ctx->priv;
     struct keypoint *comp_points[NB_COMP] = {0};
+    char **pts = curves->comp_points_str;
+
+    if (curves->comp_points_str_all) {
+        for (i = 0; i < NB_COMP; i++) {
+            if (!pts[i])
+                pts[i] = av_strdup(curves->comp_points_str_all);
+            if (!pts[i])
+                return AVERROR(ENOMEM);
+        }
+    }
 
     if (curves->preset != PRESET_NONE) {
-        char **pts = curves->comp_points_str;
         if (pts[0] || pts[1] || pts[2]) {
             av_log(ctx, AV_LOG_ERROR, "It is not possible to mix a preset "
                    "with explicit points placements\n");
@@ -436,8 +448,6 @@ static const AVFilterPad curves_outputs[] = {
      { NULL }
 };
 
-static const char *const shorthand[] = { "preset", NULL };
-
 AVFilter avfilter_vf_curves = {
     .name          = "curves",
     .description   = NULL_IF_CONFIG_SMALL("Adjust components curves."),
@@ -447,5 +457,4 @@ AVFilter avfilter_vf_curves = {
     .inputs        = curves_inputs,
     .outputs       = curves_outputs,
     .priv_class    = &curves_class,
-    .shorthand     = shorthand,
 };

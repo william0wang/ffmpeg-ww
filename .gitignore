@@ -6,6 +6,8 @@
 *.dylib
 *.exe
 *.exp
+*.gcda
+*.gcno
 *.h.c
 *.ilk
 *.lib
@@ -36,10 +38,13 @@
 /ffserver
 /ffserver_g
 /config.*
+/coverage.info
+/version.h
 /doc/*.1
 /doc/*.3
 /doc/*.html
 /doc/*.pod
+/doc/config.texi
 /doc/avoptions_codec.texi
 /doc/avoptions_format.texi
 /doc/examples/decoding_encoding
@@ -54,6 +59,7 @@
 /doc/fate.txt
 /doc/doxy/html/
 /doc/print_options
+/lcov/
 /libavcodec/*_tablegen
 /libavcodec/*_tables.c
 /libavcodec/*_tables.h
@@ -80,7 +86,6 @@
 /tools/qt-faststart
 /tools/trasher
 /tools/seek_print
-/version.h
 release
 cf
 cla

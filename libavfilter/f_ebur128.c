@@ -128,7 +128,6 @@ typedef struct {
     /* misc */
     int loglevel;                   ///< log level for frame logging
     int metadata;                   ///< whether or not to inject loudness results in frames
-    int request_fulfilled;          ///< 1 if some audio just got pushed, 0 otherwise. FIXME: remove me
 } EBUR128Context;
 
 #define OFFSET(x) offsetof(EBUR128Context, x)
@@ -317,6 +316,8 @@ static int config_video_output(AVFilterLink *outlink)
     DRAW_RECT(ebur128->graph);
     DRAW_RECT(ebur128->gauge);
 
+    outlink->flags |= FF_LINK_FLAG_REQUEST_LOOP;
+
     return 0;
 }
 
@@ -380,6 +381,8 @@ static int config_audio_output(AVFilterLink *outlink)
             return AVERROR(ENOMEM);
     }
 
+    outlink->flags |= FF_LINK_FLAG_REQUEST_LOOP;
+
     return 0;
 }
 
@@ -400,32 +403,10 @@ static struct hist_entry *get_histogram(void)
     return h;
 }
 
-/* This is currently necessary for the min/max samples to work properly.
- * FIXME: remove me when possible */
-static int audio_request_frame(AVFilterLink *outlink)
-{
-    int ret;
-    AVFilterContext *ctx = outlink->src;
-    EBUR128Context *ebur128 = ctx->priv;
-
-    ebur128->request_fulfilled = 0;
-    do {
-        ret = ff_request_frame(ctx->inputs[0]);
-    } while (!ebur128->request_fulfilled && ret >= 0);
-    return ret;
-}
-
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
-    int ret;
     EBUR128Context *ebur128 = ctx->priv;
     AVFilterPad pad;
-
-    ebur128->class = &ebur128_class;
-    av_opt_set_defaults(ebur128);
-
-    if ((ret = av_set_options_string(ebur128, args, "=", ":")) < 0)
-        return ret;
 
     if (ebur128->loglevel != AV_LOG_INFO &&
         ebur128->loglevel != AV_LOG_VERBOSE) {
@@ -463,8 +444,6 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_audio_output,
     };
-    if (ebur128->metadata)
-        pad.request_frame = audio_request_frame;
     if (!pad.name)
         return AVERROR(ENOMEM);
     ff_insert_outpad(ctx, ebur128->do_video, &pad);
@@ -717,7 +696,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
         }
     }
 
-    ebur128->request_fulfilled = 1;
     return ff_filter_frame(ctx->outputs[ebur128->do_video], insamples);
 }
 

@@ -24,6 +24,7 @@
 SECTION_RODATA
 ; mask equivalent for multiply by -1.0 1.0
 ps_mask         times 2 dd 1<<31, 0
+ps_mask2        times 2 dd 0, 1<<31
 ps_neg          times 4 dd 1<<31
 
 SECTION_TEXT
@@ -219,4 +220,97 @@ cglobal sbr_qmf_post_shuffle, 2,3,4,W,z
     add               zq, 16
     cmp               zq, r2q
     jl             .loop
+    REP_RET
+
+INIT_XMM sse
+cglobal sbr_neg_odd_64, 1,2,4,z
+    lea        r1q, [zq+256]
+.loop:
+    mova        m0, [zq+ 0]
+    mova        m1, [zq+16]
+    mova        m2, [zq+32]
+    mova        m3, [zq+48]
+    xorps       m0, [ps_mask2]
+    xorps       m1, [ps_mask2]
+    xorps       m2, [ps_mask2]
+    xorps       m3, [ps_mask2]
+    mova   [zq+ 0], m0
+    mova   [zq+16], m1
+    mova   [zq+32], m2
+    mova   [zq+48], m3
+    add         zq, 64
+    cmp         zq, r1q
+    jne      .loop
+    REP_RET
+
+; sbr_qmf_deint_bfly(float *v, const float *src0, const float *src1)
+%macro SBR_QMF_DEINT_BFLY  0
+cglobal sbr_qmf_deint_bfly, 3,5,8, v,src0,src1,vrev,c
+    mov        cq, 64*4-2*mmsize
+    lea     vrevq, [vq + 64*4]
+.loop:
+    mova       m0, [src0q+cq]
+    mova       m1, [src1q]
+    mova       m4, [src0q+cq+mmsize]
+    mova       m5, [src1q+mmsize]
+%if cpuflag(sse2)
+    pshufd     m2, m0, q0123
+    pshufd     m3, m1, q0123
+    pshufd     m6, m4, q0123
+    pshufd     m7, m5, q0123
+%else
+    shufps     m2, m0, m0, q0123
+    shufps     m3, m1, m1, q0123
+    shufps     m6, m4, m4, q0123
+    shufps     m7, m5, m5, q0123
+%endif
+    addps      m5, m2
+    subps      m0, m7
+    addps      m1, m6
+    subps      m4, m3
+    mova  [vrevq], m1
+    mova  [vrevq+mmsize], m5
+    mova  [vq+cq], m0
+    mova  [vq+cq+mmsize], m4
+    add     src1q, 2*mmsize
+    add     vrevq, 2*mmsize
+    sub        cq, 2*mmsize
+    jge     .loop
+    REP_RET
+%endmacro
+
+INIT_XMM sse
+SBR_QMF_DEINT_BFLY
+
+INIT_XMM sse2
+SBR_QMF_DEINT_BFLY
+
+INIT_XMM sse2
+cglobal sbr_qmf_pre_shuffle, 1,4,7,z
+%define OFFSET  (32*4-2*mmsize)
+    mov       r3q, OFFSET
+    lea       r1q, [zq + (32+1)*4]
+    lea       r2q, [zq + 64*4]
+    mova       m6, [ps_neg]
+.loop:
+    movu       m0, [r1q]
+    movu       m2, [r1q + mmsize]
+    movu       m1, [zq + r3q + 4 + mmsize]
+    movu       m3, [zq + r3q + 4]
+
+    pxor       m2, m6
+    pxor       m0, m6
+    pshufd     m2, m2, q0123
+    pshufd     m0, m0, q0123
+    SBUTTERFLY dq, 2, 3, 5
+    SBUTTERFLY dq, 0, 1, 4
+    mova  [r2q + 2*r3q + 0*mmsize], m2
+    mova  [r2q + 2*r3q + 1*mmsize], m3
+    mova  [r2q + 2*r3q + 2*mmsize], m0
+    mova  [r2q + 2*r3q + 3*mmsize], m1
+    add       r1q, 2*mmsize
+    sub       r3q, 2*mmsize
+    jge      .loop
+    mova       m2, [zq]
+    movq    [r2q], m2
     REP_RET

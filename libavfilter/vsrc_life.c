@@ -225,12 +225,6 @@ static int init(AVFilterContext *ctx, const char *args)
     LifeContext *life = ctx->priv;
     int ret;
 
-    life->class = &life_class;
-    av_opt_set_defaults(life);
-
-    if ((ret = av_set_options_string(life, args, "=", ":")) < 0)
-        return ret;
-
     if (!life->w && !life->filename)
         av_opt_set(life, "size", "320x240", 0);
 
@@ -420,6 +414,8 @@ static int request_frame(AVFilterLink *outlink)
 {
     LifeContext *life = outlink->src->priv;
     AVFrame *picref = ff_get_video_buffer(outlink, life->w, life->h);
+    if (!picref)
+        return AVERROR(ENOMEM);
     picref->sample_aspect_ratio = (AVRational) {1, 1};
     picref->pts = life->pts++;
 

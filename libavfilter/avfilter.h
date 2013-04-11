@@ -431,6 +431,12 @@ typedef struct AVFilter {
     const AVFilterPad *inputs;  ///< NULL terminated list of inputs. NULL if none
     const AVFilterPad *outputs; ///< NULL terminated list of outputs. NULL if none
 
+    /**
+     * A class for the private data, used to access filter private
+     * AVOptions.
+     */
+    const AVClass *priv_class;
+
     /*****************************************************************
      * All fields below this line are not part of the public API. They
      * may not be used outside of libavfilter and can be changed and
@@ -444,6 +450,13 @@ typedef struct AVFilter {
      * parameters. FIXME: maybe an AVOption-based system would be better?
      */
     int (*init)(AVFilterContext *ctx, const char *args);
+
+    /**
+     * Should be set instead of init by the filters that want to pass a
+     * dictionary of AVOptions to nested contexts that are allocated in
+     * init.
+     */
+    int (*init_dict)(AVFilterContext *ctx, AVDictionary **options);
 
     /**
      * Filter uninitialization function. Should deallocate any memory held
@@ -484,8 +497,6 @@ typedef struct AVFilter {
      * used for providing binary data.
      */
     int (*init_opaque)(AVFilterContext *ctx, const char *args, void *opaque);
-
-    const AVClass *priv_class;      ///< private class, containing filter specific options
 
     /**
      * Shorthand syntax for init arguments.
@@ -682,6 +693,17 @@ struct AVFilterLink {
      * Number of channels.
      */
     int channels;
+
+    /**
+     * True if a frame is being requested on the link.
+     * Used internally by the framework.
+     */
+    unsigned frame_requested;
+
+    /**
+     * Link processing flags.
+     */
+    unsigned flags;
 };
 
 /**

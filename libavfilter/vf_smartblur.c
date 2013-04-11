@@ -99,7 +99,7 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 
     av_log(ctx, AV_LOG_VERBOSE,
            "luma_radius:%f luma_strength:%f luma_threshold:%d "
-           "chroma_radius:%f chroma_strength:%f chroma_threshold:%d ",
+           "chroma_radius:%f chroma_strength:%f chroma_threshold:%d\n",
            sblur->luma.radius, sblur->luma.strength, sblur->luma.threshold,
            sblur->chroma.radius, sblur->chroma.strength, sblur->chroma.threshold);
 
@@ -307,5 +307,4 @@ AVFilter avfilter_vf_smartblur = {
     .inputs        = smartblur_inputs,
     .outputs       = smartblur_outputs,
     .priv_class    = &smartblur_class,
-    .shorthand     = shorthand,
 };

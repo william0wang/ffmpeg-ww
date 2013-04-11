@@ -321,8 +321,8 @@ static EbmlSyntax matroska_info[] = {
 
 static EbmlSyntax matroska_track_video[] = {
     { MATROSKA_ID_VIDEOFRAMERATE,     EBML_FLOAT,0, offsetof(MatroskaTrackVideo,frame_rate) },
-    { MATROSKA_ID_VIDEODISPLAYWIDTH,  EBML_UINT, 0, offsetof(MatroskaTrackVideo,display_width) },
-    { MATROSKA_ID_VIDEODISPLAYHEIGHT, EBML_UINT, 0, offsetof(MatroskaTrackVideo,display_height) },
+    { MATROSKA_ID_VIDEODISPLAYWIDTH,  EBML_UINT, 0, offsetof(MatroskaTrackVideo,display_width), {.u=-1} },
+    { MATROSKA_ID_VIDEODISPLAYHEIGHT, EBML_UINT, 0, offsetof(MatroskaTrackVideo,display_height), {.u=-1} },
     { MATROSKA_ID_VIDEOPIXELWIDTH,    EBML_UINT, 0, offsetof(MatroskaTrackVideo,pixel_width) },
     { MATROSKA_ID_VIDEOPIXELHEIGHT,   EBML_UINT, 0, offsetof(MatroskaTrackVideo,pixel_height) },
     { MATROSKA_ID_VIDEOCOLORSPACE,    EBML_BIN,  0, offsetof(MatroskaTrackVideo,color_space) },
@@ -1576,9 +1576,9 @@ static int matroska_read_header(AVFormatContext *s)
         if (track->type == MATROSKA_TRACK_TYPE_VIDEO) {
             if (!track->default_duration && track->video.frame_rate > 0)
                 track->default_duration = 1000000000/track->video.frame_rate;
-            if (!track->video.display_width)
+            if (track->video.display_width == -1)
                 track->video.display_width = track->video.pixel_width;
-            if (!track->video.display_height)
+            if (track->video.display_height == -1)
                 track->video.display_height = track->video.pixel_height;
             if (track->video.color_space.size == 4)
                 fourcc = AV_RL32(track->video.color_space.data);
@@ -1992,18 +1992,18 @@ static int matroska_parse_laces(MatroskaDemuxContext *matroska, uint8_t **buf,
         uint32_t total = 0;
         for (n = 0; res == 0 && n < *laces - 1; n++) {
             while (1) {
-                if (size == 0) {
-                    res = AVERROR_EOF;
+                if (size <= total) {
+                    res = AVERROR_INVALIDDATA;
                     break;
                 }
                 temp = *data;
+                total += temp;
                 lace_size[n] += temp;
                 data += 1;
                 size -= 1;
                 if (temp != 0xff)
                     break;
             }
-            total += lace_size[n];
         }
         if (size <= total) {
             res = AVERROR_INVALIDDATA;
@@ -2025,12 +2025,12 @@ static int matroska_parse_laces(MatroskaDemuxContext *matroska, uint8_t **buf,
 
     case 0x3: /* EBML lacing */ {
         uint64_t num;
-        uint32_t total;
+        uint64_t total;
         n = matroska_ebmlnum_uint(matroska, data, size, &num);
-        if (n < 0) {
+        if (n < 0 || num > INT_MAX) {
             av_log(matroska->ctx, AV_LOG_INFO,
                    "EBML block data error\n");
-            res = n;
+            res = n<0 ? n : AVERROR_INVALIDDATA;
             break;
         }
         data += n;
@@ -2040,10 +2040,10 @@ static int matroska_parse_laces(MatroskaDemuxContext *matroska, uint8_t **buf,
             int64_t snum;
             int r;
             r = matroska_ebmlnum_sint(matroska, data, size, &snum);
-            if (r < 0) {
+            if (r < 0 || lace_size[n - 1] + snum > (uint64_t)INT_MAX) {
                 av_log(matroska->ctx, AV_LOG_INFO,
                        "EBML block data error\n");
-                res = r;
+                res = r<0 ? r : AVERROR_INVALIDDATA;
                 break;
             }
             data += r;
@@ -2327,7 +2327,8 @@ static int matroska_parse_block(MatroskaDemuxContext *matroska, uint8_t *data,
              st->codec->codec_id == AV_CODEC_ID_ATRAC3) &&
              st->codec->block_align && track->audio.sub_packet_size) {
 
-            res = matroska_parse_rm_audio(matroska, track, st, data, size,
+            res = matroska_parse_rm_audio(matroska, track, st, data,
+                                          lace_size[n],
                                           timecode, pos);
             if (res)
                 goto end;

@@ -58,6 +58,7 @@ OBJS-$(CONFIG_AMIX_FILTER)                   += af_amix.o
 OBJS-$(CONFIG_ANULL_FILTER)                  += af_anull.o
 OBJS-$(CONFIG_APAD_FILTER)                   += af_apad.o
 OBJS-$(CONFIG_APERMS_FILTER)                 += f_perms.o
+OBJS-$(CONFIG_APHASER_FILTER)                += af_aphaser.o
 OBJS-$(CONFIG_ARESAMPLE_FILTER)              += af_aresample.o
 OBJS-$(CONFIG_ASELECT_FILTER)                += f_select.o
 OBJS-$(CONFIG_ASENDCMD_FILTER)               += f_sendcmd.o
@@ -147,6 +148,7 @@ OBJS-$(CONFIG_PERMS_FILTER)                  += f_perms.o
 OBJS-$(CONFIG_PIXDESCTEST_FILTER)            += vf_pixdesctest.o
 OBJS-$(CONFIG_PP_FILTER)                     += vf_pp.o
 OBJS-$(CONFIG_REMOVELOGO_FILTER)             += bbox.o lswsutils.o lavfutils.o vf_removelogo.o
+OBJS-$(CONFIG_SEPARATEFIELDS_FILTER)         += vf_separatefields.o
 OBJS-$(CONFIG_SCALE_FILTER)                  += vf_scale.o
 OBJS-$(CONFIG_SELECT_FILTER)                 += f_select.o
 OBJS-$(CONFIG_SENDCMD_FILTER)                += f_sendcmd.o
@@ -197,7 +199,6 @@ OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_fspp.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ilpack.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ivtc.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_mcdeint.o
-OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_noise.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_ow.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_perspective.o
 OBJS-$(CONFIG_MP_FILTER) += libmpcodecs/vf_phase.o
@@ -220,6 +221,8 @@ OBJS-$(CONFIG_SHOWWAVES_FILTER)              += avf_showwaves.o
 # multimedia sources
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
+
+SKIPHEADERS-$(CONFIG_OPENCL)                 += deshake_kernel.h
 
 TOOLS     = graph2dot
 TESTPROGS = drawutils filtfmts formats

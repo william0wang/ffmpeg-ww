@@ -119,12 +119,6 @@ typedef struct {
 static av_cold int init(AVFilterContext *ctx, const char *args)
 {
     BiquadsContext *p = ctx->priv;
-    int ret;
-
-    av_opt_set_defaults(p);
-
-    if ((ret = av_set_options_string(p, args, "=", ":")) < 0)
-        return ret;
 
     if (p->filter_type != biquad) {
         if (p->frequency <= 0 || p->width <= 0) {
@@ -406,7 +400,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
         out_buf = ff_get_audio_buffer(inlink, nb_samples);
         if (!out_buf)
             return AVERROR(ENOMEM);
-        out_buf->pts = buf->pts;
+        av_frame_copy_props(out_buf, buf);
     }
 
     for (ch = 0; ch < av_frame_get_channels(buf); ch++)
@@ -427,7 +421,6 @@ static av_cold void uninit(AVFilterContext *ctx)
     BiquadsContext *p = ctx->priv;
 
     av_freep(&p->cache);
-    av_opt_free(p);
 }
 
 static const AVFilterPad inputs[] = {

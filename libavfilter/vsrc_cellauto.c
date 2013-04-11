@@ -164,12 +164,6 @@ static int init(AVFilterContext *ctx, const char *args)
     CellAutoContext *cellauto = ctx->priv;
     int ret;
 
-    cellauto->class = &cellauto_class;
-    av_opt_set_defaults(cellauto);
-
-    if ((ret = av_set_options_string(cellauto, args, "=", ":")) < 0)
-        return ret;
-
     if (!cellauto->w && !cellauto->filename && !cellauto->pattern)
         av_opt_set(cellauto, "size", "320x518", 0);
 
@@ -294,6 +288,8 @@ static int request_frame(AVFilterLink *outlink)
 {
     CellAutoContext *cellauto = outlink->src->priv;
     AVFrame *picref = ff_get_video_buffer(outlink, cellauto->w, cellauto->h);
+    if (!picref)
+        return AVERROR(ENOMEM);
     picref->sample_aspect_ratio = (AVRational) {1, 1};
     if (cellauto->generation == 0 && cellauto->start_full) {
         int i;
