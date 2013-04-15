@@ -70,7 +70,7 @@ typedef struct {
 } MovieContext;
 
 #define OFFSET(x) offsetof(MovieContext, x)
-#define FLAGS AV_OPT_FLAG_FILTERING_PARAM
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM
 
 static const AVOption movie_options[]= {
     { "filename",     NULL,                      OFFSET(file_name),    AV_OPT_TYPE_STRING,                                    .flags = FLAGS },
@@ -563,7 +563,7 @@ static int movie_request_frame(AVFilterLink *outlink)
 
 AVFILTER_DEFINE_CLASS(movie);
 
-static av_cold int movie_init(AVFilterContext *ctx, const char *args)
+static av_cold int movie_init(AVFilterContext *ctx)
 {
     return movie_common_init(ctx);
 }
@@ -579,6 +579,7 @@ AVFilter avfilter_avsrc_movie = {
 
     .inputs    = NULL,
     .outputs   = NULL,
+    .flags     = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
 
 #endif  /* CONFIG_MOVIE_FILTER */
@@ -588,7 +589,7 @@ AVFilter avfilter_avsrc_movie = {
 #define amovie_options movie_options
 AVFILTER_DEFINE_CLASS(amovie);
 
-static av_cold int amovie_init(AVFilterContext *ctx, const char *args)
+static av_cold int amovie_init(AVFilterContext *ctx)
 {
     return movie_common_init(ctx);
 }
@@ -604,6 +605,7 @@ AVFilter avfilter_avsrc_amovie = {
     .inputs     = NULL,
     .outputs    = NULL,
     .priv_class = &amovie_class,
+    .flags      = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };
 
 #endif /* CONFIG_AMOVIE_FILTER */

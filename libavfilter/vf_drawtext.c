@@ -416,7 +416,7 @@ static int load_textfile(AVFilterContext *ctx)
     return 0;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     int err;
     DrawTextContext *dtext = ctx->priv;
@@ -601,7 +601,7 @@ static int command(AVFilterContext *ctx, const char *cmd, const char *arg, char 
         int ret;
         uninit(ctx);
         dtext->reinit = 1;
-        if ((ret = init(ctx, arg)) < 0)
+        if ((ret = init(ctx)) < 0)
             return ret;
         return config_input(ctx->inputs[0]);
     }

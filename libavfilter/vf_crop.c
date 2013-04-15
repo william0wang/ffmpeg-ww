@@ -70,6 +70,7 @@ enum var_name {
     VAR_X,
     VAR_Y,
     VAR_N,
+    VAR_POS,
     VAR_T,
     VAR_VARS_NB
 };
@@ -169,6 +170,7 @@ static int config_input(AVFilterLink *link)
     crop->var_values[VAR_OUT_H] = crop->var_values[VAR_OH] = NAN;
     crop->var_values[VAR_N]     = 0;
     crop->var_values[VAR_T]     = NAN;
+    crop->var_values[VAR_POS]   = NAN;
 
     av_image_fill_max_pixsteps(crop->max_step, NULL, pix_desc);
     crop->hsub = pix_desc->log2_chroma_w;
@@ -259,6 +261,8 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
 
     crop->var_values[VAR_T] = frame->pts == AV_NOPTS_VALUE ?
         NAN : frame->pts * av_q2d(link->time_base);
+    crop->var_values[VAR_POS] = av_frame_get_pkt_pos(frame) == -1 ?
+        NAN : av_frame_get_pkt_pos(frame);
     crop->var_values[VAR_X] = av_expr_eval(crop->x_pexpr, crop->var_values, NULL);
     crop->var_values[VAR_Y] = av_expr_eval(crop->y_pexpr, crop->var_values, NULL);
     crop->var_values[VAR_X] = av_expr_eval(crop->x_pexpr, crop->var_values, NULL);
@@ -273,9 +277,9 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
     crop->x &= ~((1 << crop->hsub) - 1);
     crop->y &= ~((1 << crop->vsub) - 1);
 
-    av_dlog(ctx, "n:%d t:%f x:%d y:%d x+w:%d y+h:%d\n",
-            (int)crop->var_values[VAR_N], crop->var_values[VAR_T], crop->x,
-            crop->y, crop->x+crop->w, crop->y+crop->h);
+    av_dlog(ctx, "n:%d t:%f pos:%f x:%d y:%d x+w:%d y+h:%d\n",
+            (int)crop->var_values[VAR_N], crop->var_values[VAR_T], crop->var_values[VAR_POS],
+            crop->x, crop->y, crop->x+crop->w, crop->y+crop->h);
 
     frame->data[0] += crop->y * frame->linesize[0];
     frame->data[0] += crop->x * crop->max_step[0];
@@ -348,5 +352,4 @@ AVFilter avfilter_vf_crop = {
 
     .inputs    = avfilter_vf_crop_inputs,
     .outputs   = avfilter_vf_crop_outputs,
-    .priv_class = &crop_class,
 };

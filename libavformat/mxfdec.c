@@ -1662,16 +1662,20 @@ static int mxf_timestamp_to_str(uint64_t timestamp, char **str)
 {
     struct tm time;
     time.tm_year = (timestamp >> 48) - 1900;
-    time.tm_mon  = (timestamp >> 48 & 0xF) - 1;
-    time.tm_mday = (timestamp >> 32 & 0xF);
-    time.tm_hour = (timestamp >> 24 & 0XF);
-    time.tm_min  = (timestamp >> 16 & 0xF);
-    time.tm_sec  = (timestamp >> 8  & 0xF);
+    time.tm_mon  = (timestamp >> 40 & 0xFF) - 1;
+    time.tm_mday = (timestamp >> 32 & 0xFF);
+    time.tm_hour = (timestamp >> 24 & 0xFF);
+    time.tm_min  = (timestamp >> 16 & 0xFF);
+    time.tm_sec  = (timestamp >> 8  & 0xFF);
+
+    /* ensure month/day are valid */
+    time.tm_mon  = FFMAX(time.tm_mon, 0);
+    time.tm_mday = FFMAX(time.tm_mday, 1);
 
     *str = av_mallocz(32);
     if (!*str)
         return AVERROR(ENOMEM);
-    strftime(*str, 32, "%F %T", &time);
+    strftime(*str, 32, "%Y-%m-%d %H:%M:%S", &time);
 
     return 0;
 }
@@ -2454,6 +2458,7 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
     if ((ret = avio_seek(s->pb, (s->bit_rate * seconds) >> 3, SEEK_SET)) < 0)
         return ret;
     ff_update_cur_dts(s, st, sample_time);
+    mxf->current_edit_unit = sample_time;
     } else {
         t = &mxf->index_tables[0];
 

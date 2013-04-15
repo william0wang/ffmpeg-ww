@@ -139,7 +139,7 @@ typedef struct {
 } SelectContext;
 
 
-static av_cold int init(AVFilterContext *ctx, const char *args, const AVClass *class)
+static av_cold int init(AVFilterContext *ctx)
 {
     SelectContext *select = ctx->priv;
     int ret;
@@ -199,7 +199,7 @@ static int config_input(AVFilterLink *inlink)
         select->avctx = avcodec_alloc_context3(NULL);
         if (!select->avctx)
             return AVERROR(ENOMEM);
-        dsputil_init(&select->c, select->avctx);
+        avpriv_dsputil_init(&select->c, select->avctx);
     }
 #endif
     return 0;
@@ -278,7 +278,7 @@ static int select_frame(AVFilterContext *ctx, AVFrame *frame)
             select->var_values[VAR_SCENE] = get_scene_score(ctx, frame);
             // TODO: document metadata
             snprintf(buf, sizeof(buf), "%f", select->var_values[VAR_SCENE]);
-            av_dict_set(&frame->metadata, "lavfi.scene_score", buf, 0);
+            av_dict_set(avpriv_frame_get_metadatap(frame), "lavfi.scene_score", buf, 0);
         }
 #endif
         break;
@@ -388,8 +388,6 @@ static int query_formats(AVFilterContext *ctx)
     return 0;
 }
 
-static const char *const shorthand[] = { "expr", NULL };
-
 #if CONFIG_ASELECT_FILTER
 
 #define OFFSET(x) offsetof(SelectContext, x)
@@ -401,12 +399,12 @@ static const AVOption aselect_options[] = {
 };
 AVFILTER_DEFINE_CLASS(aselect);
 
-static av_cold int aselect_init(AVFilterContext *ctx, const char *args)
+static av_cold int aselect_init(AVFilterContext *ctx)
 {
     SelectContext *select = ctx->priv;
     int ret;
 
-    if ((ret = init(ctx, args, &aselect_class)) < 0)
+    if ((ret = init(ctx)) < 0)
         return ret;
 
     if (select->do_scene_detect) {
@@ -445,7 +443,6 @@ AVFilter avfilter_af_aselect = {
     .inputs    = avfilter_af_aselect_inputs,
     .outputs   = avfilter_af_aselect_outputs,
     .priv_class = &aselect_class,
-    .shorthand  = shorthand,
 };
 #endif /* CONFIG_ASELECT_FILTER */
 
@@ -461,12 +458,12 @@ static const AVOption select_options[] = {
 
 AVFILTER_DEFINE_CLASS(select);
 
-static av_cold int select_init(AVFilterContext *ctx, const char *args)
+static av_cold int select_init(AVFilterContext *ctx)
 {
     SelectContext *select = ctx->priv;
     int ret;
 
-    if ((ret = init(ctx, args, &select_class)) < 0)
+    if ((ret = init(ctx)) < 0)
         return ret;
 
     if (select->do_scene_detect && !CONFIG_AVCODEC) {

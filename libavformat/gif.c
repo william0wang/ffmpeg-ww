@@ -2,6 +2,8 @@
  * Animated GIF muxer
  * Copyright (c) 2000 Fabrice Bellard
  *
+ * first version by Francois Revol <revol@free.fr>
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -20,8 +22,6 @@
  */
 
 /*
- * First version by Francois Revol revol@free.fr
- *
  * Features and limitations:
  * - currently no compression is performed,
  *   in fact the size of the data is 9/8 the size of the image in 8bpp
@@ -329,7 +329,6 @@ static int gif_write_video(AVFormatContext *s, AVCodecContext *enc,
     gif_image_write_image(pb, 0, 0, enc->width, enc->height,
                           buf, enc->width * 3, AV_PIX_FMT_RGB24);
 
-    avio_flush(s->pb);
     return 0;
 }
 

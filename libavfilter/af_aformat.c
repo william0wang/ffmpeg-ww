@@ -90,7 +90,7 @@ static int get_sample_rate(const char *samplerate)
     return FFMAX(ret, 0);
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     AFormatContext *s = ctx->priv;
 
@@ -145,5 +145,4 @@ AVFilter avfilter_af_aformat = {
 
     .inputs        = avfilter_af_aformat_inputs,
     .outputs       = avfilter_af_aformat_outputs,
-    .priv_class    = &aformat_class,
 };

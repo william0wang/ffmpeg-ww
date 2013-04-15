@@ -86,7 +86,7 @@ typedef struct {
     enum AVMediaType type;
 } SetPTSContext;
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     SetPTSContext *setpts = ctx->priv;
     int ret;
@@ -208,6 +208,21 @@ static av_cold void uninit(AVFilterContext *ctx)
 }
 
 #if CONFIG_ASETPTS_FILTER
+
+#define OFFSET(x) offsetof(SetPTSContext, x)
+#define AFLAGS AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
+static const AVOption aoptions[] = {
+    { "expr", "Expression determining the frame timestamp", OFFSET(expr_str), AV_OPT_TYPE_STRING, { .str = "PTS" }, .flags = AFLAGS },
+    { NULL },
+};
+
+static const AVClass asetpts_class = {
+    .class_name = "asetpts",
+    .item_name  = av_default_item_name,
+    .option     = aoptions,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 static const AVFilterPad avfilter_af_asetpts_inputs[] = {
     {
         .name             = "default",
@@ -233,6 +248,7 @@ AVFilter avfilter_af_asetpts = {
     .init      = init,
     .uninit    = uninit,
     .priv_size = sizeof(SetPTSContext),
+    .priv_class= &asetpts_class,
     .inputs    = avfilter_af_asetpts_inputs,
     .outputs   = avfilter_af_asetpts_outputs,
 };
@@ -241,7 +257,7 @@ AVFilter avfilter_af_asetpts = {
 #if CONFIG_SETPTS_FILTER
 
 #define OFFSET(x) offsetof(SetPTSContext, x)
-#define FLAGS AV_OPT_FLAG_VIDEO_PARAM
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption options[] = {
     { "expr", "Expression determining the frame timestamp", OFFSET(expr_str), AV_OPT_TYPE_STRING, { .str = "PTS" }, .flags = FLAGS },
     { NULL },

@@ -82,7 +82,7 @@ static const AVOption smartblur_options[] = {
 
 AVFILTER_DEFINE_CLASS(smartblur);
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     SmartblurContext *sblur = ctx->priv;
 
@@ -287,12 +287,6 @@ static const AVFilterPad smartblur_outputs[] = {
         .type = AVMEDIA_TYPE_VIDEO,
     },
     { NULL }
-};
-
-static const char *const shorthand[] = {
-    "luma_radius", "luma_strength", "luma_threshold",
-    "chroma_radius", "chroma_strength", "chroma_threshold",
-    NULL
 };
 
 AVFilter avfilter_vf_smartblur = {

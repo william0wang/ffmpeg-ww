@@ -90,6 +90,8 @@ int opt_cpuflags(void *optctx, const char *opt, const char *arg);
 
 int opt_codec_debug(void *optctx, const char *opt, const char *arg);
 
+int opt_opencl(void *optctx, const char *opt, const char *arg);
+
 /**
  * Limit the execution time.
  */
@@ -523,6 +525,8 @@ FILE *get_preset_file(char *filename, size_t filename_size,
  * @return reallocated array
  */
 void *grow_array(void *array, int elem_size, int *size, int new_size);
+
+#define media_type_string av_get_media_type_string
 
 #define GROW_ARRAY(array, nb_elems)\
     array = grow_array(array, sizeof(*array), &nb_elems, nb_elems + 1)

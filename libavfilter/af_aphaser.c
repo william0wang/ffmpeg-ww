@@ -76,7 +76,7 @@ static const AVOption aphaser_options[] = {
 
 AVFILTER_DEFINE_CLASS(aphaser);
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     AudioPhaserContext *p = ctx->priv;
 
@@ -186,6 +186,7 @@ static void phaser_## name ##p(AudioPhaserContext *p,                  \
 {                                                                      \
     int i, c, delay_pos, modulation_pos;                               \
                                                                        \
+    av_assert0(channels > 0);                                          \
     for (c = 0; c < channels; c++) {                                   \
         type *s = (type *)src[c];                                      \
         type *d = (type *)dst[c];                                      \

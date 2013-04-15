@@ -328,7 +328,7 @@ static av_cold int frei0r_init(AVFilterContext *ctx,
     return 0;
 }
 
-static av_cold int filter_init(AVFilterContext *ctx, const char *args)
+static av_cold int filter_init(AVFilterContext *ctx)
 {
     Frei0rContext *frei0r = ctx->priv;
 
@@ -406,7 +406,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 }
 
 #define OFFSET(x) offsetof(Frei0rContext, x)
-#define FLAGS AV_OPT_FLAG_VIDEO_PARAM
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption filter_options[] = {
     { "filter_name",   NULL, OFFSET(dl_name), AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "filter_params", NULL, OFFSET(params),  AV_OPT_TYPE_STRING, .flags = FLAGS },
@@ -454,7 +454,7 @@ AVFilter avfilter_vf_frei0r = {
     .outputs   = avfilter_vf_frei0r_outputs,
 };
 
-static av_cold int source_init(AVFilterContext *ctx, const char *args)
+static av_cold int source_init(AVFilterContext *ctx)
 {
     Frei0rContext *frei0r = ctx->priv;
     AVRational frame_rate_q;

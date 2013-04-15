@@ -344,7 +344,7 @@ static int deshake_transform_c(AVFilterContext *ctx,
     return ret;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     int ret;
     DeshakeContext *deshake = ctx->priv;
@@ -407,7 +407,7 @@ static int config_props(AVFilterLink *link)
     deshake->last.zoom = 0;
 
     deshake->avctx = avcodec_alloc_context3(NULL);
-    dsputil_init(&deshake->c, deshake->avctx);
+    avpriv_dsputil_init(&deshake->c, deshake->avctx);
 
     return 0;
 }
@@ -560,12 +560,6 @@ static const AVFilterPad deshake_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = {
-    "x", "y", "w", "h", "rx", "ry", "edge",
-    "blocksize", "contrast", "search", "filename",
-    NULL
-};
-
 AVFilter avfilter_vf_deshake = {
     .name          = "deshake",
     .description   = NULL_IF_CONFIG_SMALL("Stabilize shaky video."),
@@ -576,5 +570,4 @@ AVFilter avfilter_vf_deshake = {
     .inputs        = deshake_inputs,
     .outputs       = deshake_outputs,
     .priv_class    = &deshake_class,
-    .shorthand     = shorthand,
 };

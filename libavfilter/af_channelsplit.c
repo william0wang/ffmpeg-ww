@@ -49,7 +49,7 @@ static const AVOption channelsplit_options[] = {
 
 AVFILTER_DEFINE_CLASS(channelsplit);
 
-static int init(AVFilterContext *ctx, const char *arg)
+static int init(AVFilterContext *ctx)
 {
     ChannelSplitContext *s = ctx->priv;
     int nb_channels;
@@ -137,7 +137,7 @@ static const AVFilterPad avfilter_af_channelsplit_inputs[] = {
 
 AVFilter avfilter_af_channelsplit = {
     .name           = "channelsplit",
-    .description    = NULL_IF_CONFIG_SMALL("Split audio into per-channel streams"),
+    .description    = NULL_IF_CONFIG_SMALL("Split audio into per-channel streams."),
     .priv_size      = sizeof(ChannelSplitContext),
     .priv_class     = &channelsplit_class,
 
@@ -146,4 +146,6 @@ AVFilter avfilter_af_channelsplit = {
 
     .inputs  = avfilter_af_channelsplit_inputs,
     .outputs = NULL,
+
+    .flags   = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
 };

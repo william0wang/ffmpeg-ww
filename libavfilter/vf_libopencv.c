@@ -261,17 +261,18 @@ static av_cold int dilate_init(AVFilterContext *ctx, const char *args)
     const char *buf = args;
     int ret;
 
-    dilate->nb_iterations = 1;
-
     if (args)
         kernel_str = av_get_token(&buf, "|");
-    if ((ret = parse_iplconvkernel(&dilate->kernel,
-                                   *kernel_str ? kernel_str : default_kernel_str,
-                                   ctx)) < 0)
+    else
+        kernel_str = av_strdup(default_kernel_str);
+    if (!kernel_str)
+        return AVERROR(ENOMEM);
+    if ((ret = parse_iplconvkernel(&dilate->kernel, kernel_str, ctx)) < 0)
         return ret;
     av_free(kernel_str);
 
-    sscanf(buf, "|%d", &dilate->nb_iterations);
+    if (!buf || sscanf(buf, "|%d", &dilate->nb_iterations) != 1)
+        dilate->nb_iterations = 1;
     av_log(ctx, AV_LOG_VERBOSE, "iterations_nb:%d\n", dilate->nb_iterations);
     if (dilate->nb_iterations <= 0) {
         av_log(ctx, AV_LOG_ERROR, "Invalid non-positive value '%d' for nb_iterations\n",
@@ -317,11 +318,15 @@ static OCVFilterEntry ocv_filter_entries[] = {
     { "smooth", sizeof(SmoothContext), smooth_init, NULL, smooth_end_frame_filter },
 };
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     OCVContext *ocv = ctx->priv;
     int i;
 
+    if (!ocv->name) {
+        av_log(ctx, AV_LOG_ERROR, "No libopencv filter name specified\n");
+        return AVERROR(EINVAL);
+    }
     for (i = 0; i < FF_ARRAY_ELEMS(ocv_filter_entries); i++) {
         OCVFilterEntry *entry = &ocv_filter_entries[i];
         if (!strcmp(ocv->name, entry->name)) {
@@ -374,7 +379,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 }
 
 #define OFFSET(x) offsetof(OCVContext, x)
-#define FLAGS AV_OPT_FLAG_VIDEO_PARAM
+#define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption options[] = {
     { "filter_name",   NULL, OFFSET(name),   AV_OPT_TYPE_STRING, .flags = FLAGS },
     { "filter_params", NULL, OFFSET(params), AV_OPT_TYPE_STRING, .flags = FLAGS },

@@ -131,16 +131,10 @@ static int select_voice(struct voice_entry **entry_ret, const char *voice_name, 
     return AVERROR(EINVAL);
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     FliteContext *flite = ctx->priv;
     int ret = 0;
-
-    flite->class = &flite_class;
-    av_opt_set_defaults(flite);
-
-    if ((ret = av_set_options_string(flite, args, "=", ":")) < 0)
-        return ret;
 
     if (flite->list_voices) {
         list_voices(ctx, "\n");
@@ -199,8 +193,6 @@ static av_cold int init(AVFilterContext *ctx, const char *args)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     FliteContext *flite = ctx->priv;
-
-    av_opt_free(flite);
 
     if (!--flite->voice_entry->usage_count)
         flite->voice_entry->unregister_fn(flite->voice);

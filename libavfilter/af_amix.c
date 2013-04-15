@@ -483,7 +483,7 @@ fail:
     return ret;
 }
 
-static int init(AVFilterContext *ctx, const char *args)
+static int init(AVFilterContext *ctx)
 {
     MixContext *s = ctx->priv;
     int i;
@@ -557,4 +557,6 @@ AVFilter avfilter_af_amix = {
 
     .inputs    = NULL,
     .outputs   = avfilter_af_amix_outputs,
+
+    .flags     = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

@@ -41,7 +41,7 @@ typedef struct {
 } PermsContext;
 
 #define OFFSET(x) offsetof(PermsContext, x)
-#define FLAGS AV_OPT_FLAG_FILTERING_PARAM
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM
 
 static const AVOption options[] = {
     { "mode", "select permissions mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64 = MODE_NONE}, MODE_NONE, NB_MODES-1, FLAGS, "mode" },
@@ -54,7 +54,7 @@ static const AVOption options[] = {
     { NULL }
 };
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     PermsContext *perms = ctx->priv;
 

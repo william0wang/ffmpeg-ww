@@ -45,7 +45,9 @@ void avfilter_register_all(void)
         return;
     initialized = 1;
 
+#if FF_API_ACONVERT_FILTER
     REGISTER_FILTER(ACONVERT,       aconvert,       af);
+#endif
     REGISTER_FILTER(AFADE,          afade,          af);
     REGISTER_FILTER(AFORMAT,        aformat,        af);
     REGISTER_FILTER(ALLPASS,        allpass,        af);
@@ -113,6 +115,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(EDGEDETECT,     edgedetect,     vf);
     REGISTER_FILTER(FADE,           fade,           vf);
     REGISTER_FILTER(FIELD,          field,          vf);
+    REGISTER_FILTER(FIELDMATCH,     fieldmatch,     vf);
     REGISTER_FILTER(FIELDORDER,     fieldorder,     vf);
     REGISTER_FILTER(FORMAT,         format,         vf);
     REGISTER_FILTER(FPS,            fps,            vf);
@@ -127,11 +130,13 @@ void avfilter_register_all(void)
     REGISTER_FILTER(HUE,            hue,            vf);
     REGISTER_FILTER(IDET,           idet,           vf);
     REGISTER_FILTER(IL,             il,             vf);
+    REGISTER_FILTER(INTERLACE,      interlace,      vf);
     REGISTER_FILTER(KERNDEINT,      kerndeint,      vf);
     REGISTER_FILTER(LUT,            lut,            vf);
     REGISTER_FILTER(LUTRGB,         lutrgb,         vf);
     REGISTER_FILTER(LUTYUV,         lutyuv,         vf);
     REGISTER_FILTER(MP,             mp,             vf);
+    REGISTER_FILTER(MPDECIMATE,     mpdecimate,     vf);
     REGISTER_FILTER(NEGATE,         negate,         vf);
     REGISTER_FILTER(NOFORMAT,       noformat,       vf);
     REGISTER_FILTER(NOISE,          noise,          vf);
@@ -159,6 +164,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(SUBTITLES,      subtitles,      vf);
     REGISTER_FILTER(SUPER2XSAI,     super2xsai,     vf);
     REGISTER_FILTER(SWAPUV,         swapuv,         vf);
+    REGISTER_FILTER(TELECINE,       telecine,       vf);
     REGISTER_FILTER(THUMBNAIL,      thumbnail,      vf);
     REGISTER_FILTER(TILE,           tile,           vf);
     REGISTER_FILTER(TINTERLACE,     tinterlace,     vf);
@@ -176,6 +182,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(NULLSRC,        nullsrc,        vsrc);
     REGISTER_FILTER(RGBTESTSRC,     rgbtestsrc,     vsrc);
     REGISTER_FILTER(SMPTEBARS,      smptebars,      vsrc);
+    REGISTER_FILTER(SMPTEHDBARS,    smptehdbars,    vsrc);
     REGISTER_FILTER(TESTSRC,        testsrc,        vsrc);
 
     REGISTER_FILTER(NULLSINK,       nullsink,       vsink);

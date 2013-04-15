@@ -59,16 +59,10 @@ static const AVOption anullsrc_options[]= {
 
 AVFILTER_DEFINE_CLASS(anullsrc);
 
-static int init(AVFilterContext *ctx, const char *args)
+static int init(AVFilterContext *ctx)
 {
     ANullContext *null = ctx->priv;
     int ret;
-
-    null->class = &anullsrc_class;
-    av_opt_set_defaults(null);
-
-    if ((ret = av_set_options_string(null, args, "=", ":")) < 0)
-        return ret;
 
     if ((ret = ff_parse_sample_rate(&null->sample_rate,
                                      null->sample_rate_str, ctx)) < 0)

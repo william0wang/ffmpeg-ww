@@ -36,12 +36,6 @@
 #include "internal.h"
 #include "video.h"
 
-#define HUE_DEFAULT_VAL 0
-#define SAT_DEFAULT_VAL 1
-
-#define HUE_DEFAULT_VAL_STRING AV_STRINGIFY(HUE_DEFAULT_VAL)
-#define SAT_DEFAULT_VAL_STRING AV_STRINGIFY(SAT_DEFAULT_VAL)
-
 #define SAT_MIN_VAL -10
 #define SAT_MAX_VAL 10
 
@@ -78,7 +72,6 @@ typedef struct {
     int      vsub;
     int32_t hue_sin;
     int32_t hue_cos;
-    int      flat_syntax;
     double   var_values[VAR_NB];
 } HueContext;
 
@@ -87,9 +80,9 @@ typedef struct {
 static const AVOption hue_options[] = {
     { "h", "set the hue angle degrees expression", OFFSET(hue_deg_expr), AV_OPT_TYPE_STRING,
       { .str = NULL }, .flags = FLAGS },
-    { "H", "set the hue angle radians expression", OFFSET(hue_expr), AV_OPT_TYPE_STRING,
-      { .str = NULL }, .flags = FLAGS },
     { "s", "set the saturation expression", OFFSET(saturation_expr), AV_OPT_TYPE_STRING,
+      { .str = "1" }, .flags = FLAGS },
+    { "H", "set the hue angle radians expression", OFFSET(hue_expr), AV_OPT_TYPE_STRING,
       { .str = NULL }, .flags = FLAGS },
     { NULL }
 };
@@ -107,99 +100,62 @@ static inline void compute_sin_and_cos(HueContext *hue)
     hue->hue_cos = rint(cos(hue->hue) * (1 << 16) * hue->saturation);
 }
 
-#define SET_EXPRESSION(attr, name) do {                                           \
-    if (hue->attr##_expr) {                                                       \
-        if ((ret = av_expr_parse(&hue->attr##_pexpr, hue->attr##_expr, var_names, \
-                                 NULL, NULL, NULL, NULL, 0, ctx)) < 0) {          \
-            av_log(ctx, AV_LOG_ERROR,                                             \
-                   "Parsing failed for expression " #name "='%s'",                \
-                   hue->attr##_expr);                                             \
-            hue->attr##_expr  = old_##attr##_expr;                                \
-            hue->attr##_pexpr = old_##attr##_pexpr;                               \
-            return AVERROR(EINVAL);                                               \
-        } else if (old_##attr##_pexpr) {                                          \
-            av_freep(&old_##attr##_expr);                                         \
-            av_expr_free(old_##attr##_pexpr);                                     \
-            old_##attr##_pexpr = NULL;                                            \
-        }                                                                         \
-    } else {                                                                      \
-        hue->attr##_expr = old_##attr##_expr;                                     \
-    }                                                                             \
-} while (0)
+static int set_expr(AVExpr **pexpr, const char *expr, const char *option, void *log_ctx)
+{
+    int ret;
+    AVExpr *old = NULL;
 
-static inline int set_options(AVFilterContext *ctx, const char *args)
+    if (*pexpr)
+        old = *pexpr;
+    ret = av_expr_parse(pexpr, expr, var_names,
+                        NULL, NULL, NULL, NULL, 0, log_ctx);
+    if (ret < 0) {
+        av_log(log_ctx, AV_LOG_ERROR,
+               "Error when evaluating the expression '%s' for %s\n",
+               expr, option);
+        *pexpr = old;
+        return ret;
+    }
+    av_expr_free(old);
+    return 0;
+}
+
+static av_cold int init(AVFilterContext *ctx)
 {
     HueContext *hue = ctx->priv;
     int ret;
-    char   *old_hue_expr,  *old_hue_deg_expr,  *old_saturation_expr;
-    AVExpr *old_hue_pexpr, *old_hue_deg_pexpr, *old_saturation_pexpr;
-    static const char *shorthand[] = { "h", "s", NULL };
-    old_hue_expr        = hue->hue_expr;
-    old_hue_deg_expr    = hue->hue_deg_expr;
-    old_saturation_expr = hue->saturation_expr;
 
-    old_hue_pexpr        = hue->hue_pexpr;
-    old_hue_deg_pexpr    = hue->hue_deg_pexpr;
-    old_saturation_pexpr = hue->saturation_pexpr;
-
-    hue->hue_expr     = NULL;
-    hue->hue_deg_expr = NULL;
-    hue->saturation_expr = NULL;
-
-    if ((ret = av_opt_set_from_string(hue, args, shorthand, "=", ":")) < 0)
-        return ret;
     if (hue->hue_expr && hue->hue_deg_expr) {
         av_log(ctx, AV_LOG_ERROR,
                "H and h options are incompatible and cannot be specified "
                "at the same time\n");
-        hue->hue_expr     = old_hue_expr;
-        hue->hue_deg_expr = old_hue_deg_expr;
-
         return AVERROR(EINVAL);
     }
 
-    SET_EXPRESSION(hue_deg, h);
-    SET_EXPRESSION(hue, H);
-    SET_EXPRESSION(saturation, s);
-
-    hue->flat_syntax = 0;
+#define SET_EXPR(expr, option)                                          \
+    if (hue->expr##_expr) do {                                          \
+        ret = set_expr(&hue->expr##_pexpr, hue->expr##_expr, option, ctx); \
+        if (ret < 0)                                                    \
+            return ret;                                                 \
+    } while (0)
+    SET_EXPR(saturation, "s");
+    SET_EXPR(hue_deg,    "h");
+    SET_EXPR(hue,        "H");
 
     av_log(ctx, AV_LOG_VERBOSE,
            "H_expr:%s h_deg_expr:%s s_expr:%s\n",
            hue->hue_expr, hue->hue_deg_expr, hue->saturation_expr);
-
     compute_sin_and_cos(hue);
 
     return 0;
-}
-
-static av_cold int init(AVFilterContext *ctx, const char *args)
-{
-    HueContext *hue = ctx->priv;
-
-    hue->class = &hue_class;
-    av_opt_set_defaults(hue);
-
-    hue->saturation    = SAT_DEFAULT_VAL;
-    hue->hue           = HUE_DEFAULT_VAL;
-    hue->hue_deg_pexpr = NULL;
-    hue->hue_pexpr     = NULL;
-    hue->flat_syntax   = 1;
-
-    return set_options(ctx, args);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
     HueContext *hue = ctx->priv;
 
-    av_opt_free(hue);
-
-    av_free(hue->hue_deg_expr);
     av_expr_free(hue->hue_deg_pexpr);
-    av_free(hue->hue_expr);
     av_expr_free(hue->hue_pexpr);
-    av_free(hue->saturation_expr);
     av_expr_free(hue->saturation_pexpr);
 }
 
@@ -209,6 +165,7 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_YUV444P,      AV_PIX_FMT_YUV422P,
         AV_PIX_FMT_YUV420P,      AV_PIX_FMT_YUV411P,
         AV_PIX_FMT_YUV410P,      AV_PIX_FMT_YUV440P,
+        AV_PIX_FMT_YUVA444P,     AV_PIX_FMT_YUVA422P,
         AV_PIX_FMT_YUVA420P,
         AV_PIX_FMT_NONE
     };
@@ -295,42 +252,46 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
         av_frame_copy_props(outpic, inpic);
     }
 
-    if (!hue->flat_syntax) {
-        hue->var_values[VAR_T]   = TS2T(inpic->pts, inlink->time_base);
-        hue->var_values[VAR_PTS] = TS2D(inpic->pts);
+    hue->var_values[VAR_T]   = TS2T(inpic->pts, inlink->time_base);
+    hue->var_values[VAR_PTS] = TS2D(inpic->pts);
 
-        if (hue->saturation_expr) {
-            hue->saturation = av_expr_eval(hue->saturation_pexpr, hue->var_values, NULL);
+    if (hue->saturation_expr) {
+        hue->saturation = av_expr_eval(hue->saturation_pexpr, hue->var_values, NULL);
 
-            if (hue->saturation < SAT_MIN_VAL || hue->saturation > SAT_MAX_VAL) {
-                hue->saturation = av_clip(hue->saturation, SAT_MIN_VAL, SAT_MAX_VAL);
-                av_log(inlink->dst, AV_LOG_WARNING,
-                       "Saturation value not in range [%d,%d]: clipping value to %0.1f\n",
-                       SAT_MIN_VAL, SAT_MAX_VAL, hue->saturation);
-            }
+        if (hue->saturation < SAT_MIN_VAL || hue->saturation > SAT_MAX_VAL) {
+            hue->saturation = av_clip(hue->saturation, SAT_MIN_VAL, SAT_MAX_VAL);
+            av_log(inlink->dst, AV_LOG_WARNING,
+                   "Saturation value not in range [%d,%d]: clipping value to %0.1f\n",
+                   SAT_MIN_VAL, SAT_MAX_VAL, hue->saturation);
         }
-
-        if (hue->hue_deg_expr) {
-            hue->hue_deg = av_expr_eval(hue->hue_deg_pexpr, hue->var_values, NULL);
-            hue->hue = hue->hue_deg * M_PI / 180;
-        } else if (hue->hue_expr) {
-            hue->hue = av_expr_eval(hue->hue_pexpr, hue->var_values, NULL);
-        }
-
-        av_log(inlink->dst, AV_LOG_DEBUG,
-               "H:%0.1f s:%0.f t:%0.1f n:%d\n",
-               hue->hue, hue->saturation,
-               hue->var_values[VAR_T], (int)hue->var_values[VAR_N]);
-
-        compute_sin_and_cos(hue);
     }
+
+    if (hue->hue_deg_expr) {
+        hue->hue_deg = av_expr_eval(hue->hue_deg_pexpr, hue->var_values, NULL);
+        hue->hue = hue->hue_deg * M_PI / 180;
+    } else if (hue->hue_expr) {
+        hue->hue = av_expr_eval(hue->hue_pexpr, hue->var_values, NULL);
+        hue->hue_deg = hue->hue * 180 / M_PI;
+    }
+
+    av_log(inlink->dst, AV_LOG_DEBUG,
+           "H:%0.1f*PI h:%0.1f s:%0.f t:%0.1f n:%d\n",
+           hue->hue/M_PI, hue->hue_deg, hue->saturation,
+           hue->var_values[VAR_T], (int)hue->var_values[VAR_N]);
+
+    compute_sin_and_cos(hue);
 
     hue->var_values[VAR_N] += 1;
 
-    if (!direct)
+    if (!direct) {
         av_image_copy_plane(outpic->data[0], outpic->linesize[0],
                             inpic->data[0],  inpic->linesize[0],
                             inlink->w, inlink->h);
+        if (inpic->data[3])
+            av_image_copy_plane(outpic->data[3], outpic->linesize[3],
+                                inpic->data[3],  inpic->linesize[3],
+                                inlink->w, inlink->h);
+    }
 
     process_chrominance(outpic->data[1], outpic->data[2], outpic->linesize[1],
                         inpic->data[1],  inpic->data[2],  inpic->linesize[1],
@@ -345,10 +306,17 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpic)
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
                            char *res, int res_len, int flags)
 {
-    if (!strcmp(cmd, "reinit"))
-        return set_options(ctx, args);
-    else
-        return AVERROR(ENOSYS);
+    HueContext *hue = ctx->priv;
+
+#define SET_CMD(expr, option) do {                                 \
+    if (!strcmp(cmd, option))                                      \
+        return set_expr(&hue->expr##_pexpr, args, cmd, ctx);       \
+} while (0)
+    SET_CMD(hue_deg,    "h");
+    SET_CMD(hue,        "H");
+    SET_CMD(saturation, "s");
+
+    return AVERROR(ENOSYS);
 }
 
 static const AVFilterPad hue_inputs[] = {

@@ -303,18 +303,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
     return ff_filter_frame(ctx->outputs[0], outbuf);
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     AMergeContext *am = ctx->priv;
-    int ret, i;
+    int i;
 
-    am->class = &amerge_class;
-    av_opt_set_defaults(am);
-    ret = av_set_options_string(am, args, "=", ":");
-    if (ret < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Error parsing options: '%s'\n", args);
-        return ret;
-    }
     am->in = av_calloc(am->nb_inputs, sizeof(*am->in));
     if (!am->in)
         return AVERROR(ENOMEM);
@@ -353,4 +346,5 @@ AVFilter avfilter_af_amerge = {
     .inputs        = NULL,
     .outputs       = amerge_outputs,
     .priv_class    = &amerge_class,
+    .flags         = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

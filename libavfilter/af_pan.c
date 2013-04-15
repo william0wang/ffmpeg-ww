@@ -40,6 +40,8 @@
 #define MAX_CHANNELS 63
 
 typedef struct PanContext {
+    const AVClass *class;
+    char *args;
     int64_t out_channel_layout;
     double gain[MAX_CHANNELS][MAX_CHANNELS];
     int64_t need_renorm;
@@ -53,12 +55,21 @@ typedef struct PanContext {
     struct SwrContext *swr;
 } PanContext;
 
+static void skip_spaces(char **arg)
+{
+    int len = 0;
+
+    sscanf(*arg, " %n", &len);
+    *arg += len;
+}
+
 static int parse_channel_name(char **arg, int *rchannel, int *rnamed)
 {
     char buf[8];
     int len, i, channel_id = 0;
     int64_t layout, layout0;
 
+    skip_spaces(arg);
     /* try to parse a channel name, e.g. "FL" */
     if (sscanf(*arg, "%7[A-Z]%n", buf, &len)) {
         layout0 = layout = av_get_channel_layout(buf);
@@ -88,23 +99,15 @@ static int parse_channel_name(char **arg, int *rchannel, int *rnamed)
     return AVERROR(EINVAL);
 }
 
-static void skip_spaces(char **arg)
-{
-    int len = 0;
-
-    sscanf(*arg, " %n", &len);
-    *arg += len;
-}
-
-static av_cold int init(AVFilterContext *ctx, const char *args0)
+static av_cold int init(AVFilterContext *ctx)
 {
     PanContext *const pan = ctx->priv;
-    char *arg, *arg0, *tokenizer, *args = av_strdup(args0);
+    char *arg, *arg0, *tokenizer, *args = av_strdup(pan->args);
     int out_ch_id, in_ch_id, len, named, ret;
     int nb_in_channels[2] = { 0, 0 }; // number of unnamed and named input channels
     double gain;
 
-    if (!args0) {
+    if (!pan->args) {
         av_log(ctx, AV_LOG_ERROR,
                "pan filter needs a channel layout and a set "
                "of channels definitions as parameter\n");
@@ -112,14 +115,14 @@ static av_cold int init(AVFilterContext *ctx, const char *args0)
     }
     if (!args)
         return AVERROR(ENOMEM);
-    arg = av_strtok(args, ":", &tokenizer);
+    arg = av_strtok(args, "|", &tokenizer);
     ret = ff_parse_channel_layout(&pan->out_channel_layout, arg, ctx);
     if (ret < 0)
         goto fail;
     pan->nb_output_channels = av_get_channel_layout_nb_channels(pan->out_channel_layout);
 
     /* parse channel specifications */
-    while ((arg = arg0 = av_strtok(NULL, ":", &tokenizer))) {
+    while ((arg = arg0 = av_strtok(NULL, "|", &tokenizer))) {
         /* channel name */
         if (parse_channel_name(&arg, &out_ch_id, &named)) {
             av_log(ctx, AV_LOG_ERROR,
@@ -379,6 +382,16 @@ static av_cold void uninit(AVFilterContext *ctx)
     swr_free(&pan->swr);
 }
 
+#define OFFSET(x) offsetof(PanContext, x)
+
+static const AVOption pan_options[] = {
+    { "args", NULL, OFFSET(args), AV_OPT_TYPE_STRING, { .str = NULL }, CHAR_MIN, CHAR_MAX, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_FILTERING_PARAM },
+    { NULL }
+};
+
+AVFILTER_DEFINE_CLASS(pan);
+
+
 static const AVFilterPad pan_inputs[] = {
     {
         .name         = "default",
@@ -401,6 +414,7 @@ AVFilter avfilter_af_pan = {
     .name          = "pan",
     .description   = NULL_IF_CONFIG_SMALL("Remix channels with coefficients (panning)."),
     .priv_size     = sizeof(PanContext),
+    .priv_class    = &pan_class,
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,

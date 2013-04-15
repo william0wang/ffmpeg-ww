@@ -120,7 +120,7 @@ static void make_sin_table(int16_t *sin)
         sin[i + 2 * half_pi] = -sin[i];
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     SineContext *sine = ctx->priv;
 
@@ -210,8 +210,6 @@ static const AVFilterPad sine_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "frequency", "beep_factor", NULL };
-
 AVFilter avfilter_asrc_sine = {
     .name          = "sine",
     .description   = NULL_IF_CONFIG_SMALL("Generate sine wave audio signal."),
@@ -222,5 +220,4 @@ AVFilter avfilter_asrc_sine = {
     .inputs        = NULL,
     .outputs       = sine_outputs,
     .priv_class    = &sine_class,
-    .shorthand     = shorthand,
 };

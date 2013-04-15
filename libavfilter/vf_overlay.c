@@ -110,6 +110,7 @@ typedef struct {
     int overlay_pix_step[4];    ///< steps per pixel for each plane of the overlay
     int hsub, vsub;             ///< chroma subsampling values
     int shortest;               ///< terminate stream when the shortest input terminates
+    int repeatlast;             ///< repeat last overlay frame
 
     double var_values[VAR_VARS_NB];
     char *x_expr, *y_expr;
@@ -117,7 +118,7 @@ typedef struct {
     AVExpr *x_pexpr, *y_pexpr, *enable_pexpr;
 } OverlayContext;
 
-static av_cold int init(AVFilterContext *ctx, const char *args)
+static av_cold int init(AVFilterContext *ctx)
 {
     OverlayContext *over = ctx->priv;
 
@@ -166,19 +167,25 @@ static void eval_expr(AVFilterContext *ctx, enum EvalTarget eval_tgt)
     }
 }
 
-static int set_expr(AVExpr **pexpr, const char *expr, void *log_ctx)
+static int set_expr(AVExpr **pexpr, const char *expr, const char *option, void *log_ctx)
 {
     int ret;
+    AVExpr *old = NULL;
 
     if (*pexpr)
-        av_expr_free(*pexpr);
-    *pexpr = NULL;
+        old = *pexpr;
     ret = av_expr_parse(pexpr, expr, var_names,
                         NULL, NULL, NULL, NULL, 0, log_ctx);
-    if (ret < 0)
+    if (ret < 0) {
         av_log(log_ctx, AV_LOG_ERROR,
-               "Error when evaluating the expression '%s'\n", expr);
-    return ret;
+               "Error when evaluating the expression '%s' for %s\n",
+               expr, option);
+        *pexpr = old;
+        return ret;
+    }
+
+    av_expr_free(old);
+    return 0;
 }
 
 static int process_command(AVFilterContext *ctx, const char *cmd, const char *args,
@@ -188,11 +195,11 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     int ret;
 
     if      (!strcmp(cmd, "x"))
-        ret = set_expr(&over->x_pexpr, args, ctx);
+        ret = set_expr(&over->x_pexpr, args, cmd, ctx);
     else if (!strcmp(cmd, "y"))
-        ret = set_expr(&over->y_pexpr, args, ctx);
+        ret = set_expr(&over->y_pexpr, args, cmd, ctx);
     else if (!strcmp(cmd, "enable"))
-        ret = set_expr(&over->enable_pexpr, args, ctx);
+        ret = set_expr(&over->enable_pexpr, args, cmd, ctx);
     else
         ret = AVERROR(ENOSYS);
 
@@ -312,9 +319,9 @@ static int config_input_overlay(AVFilterLink *inlink)
     over->var_values[VAR_T]     = NAN;
     over->var_values[VAR_POS]   = NAN;
 
-    if ((ret = set_expr(&over->x_pexpr,      over->x_expr,      ctx)) < 0 ||
-        (ret = set_expr(&over->y_pexpr,      over->y_expr,      ctx)) < 0 ||
-        (ret = set_expr(&over->enable_pexpr, over->enable_expr, ctx)) < 0)
+    if ((ret = set_expr(&over->x_pexpr,      over->x_expr,      "x",      ctx)) < 0 ||
+        (ret = set_expr(&over->y_pexpr,      over->y_expr,      "y",      ctx)) < 0 ||
+        (ret = set_expr(&over->enable_pexpr, over->enable_expr, "enable", ctx)) < 0)
         return ret;
 
     over->overlay_is_packed_rgb =
@@ -561,6 +568,10 @@ static int try_filter_frame(AVFilterContext *ctx, AVFrame *mainpic)
      * before the main frame, we can drop the current overlay. */
     while (1) {
         next_overpic = ff_bufqueue_peek(&over->queue_over, 0);
+        if (!next_overpic && over->overlay_eof && !over->repeatlast) {
+            av_frame_free(&over->overpicref);
+            break;
+        }
         if (!next_overpic || av_compare_ts(next_overpic->pts, ctx->inputs[OVERLAY]->time_base,
                                            mainpic->pts     , ctx->inputs[MAIN]->time_base) > 0)
             break;
@@ -704,19 +715,16 @@ static const AVOption overlay_options[] = {
     { "x", "set the x expression", OFFSET(x_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "y", "set the y expression", OFFSET(y_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "enable", "set expression which enables overlay", OFFSET(enable_expr), AV_OPT_TYPE_STRING, {.str = "1"}, .flags = FLAGS },
-
     { "eval", "specify when to evaluate expressions", OFFSET(eval_mode), AV_OPT_TYPE_INT, {.i64 = EVAL_MODE_FRAME}, 0, EVAL_MODE_NB-1, FLAGS, "eval" },
-    { "init",  "eval expressions once during initialization", 0, AV_OPT_TYPE_CONST, {.i64=EVAL_MODE_INIT}, .flags = FLAGS, .unit = "eval" },
-    { "frame", "eval expressions per-frame",   0, AV_OPT_TYPE_CONST, {.i64=EVAL_MODE_FRAME}, .flags = FLAGS, .unit = "eval" },
-
+         { "init",  "eval expressions once during initialization", 0, AV_OPT_TYPE_CONST, {.i64=EVAL_MODE_INIT},  .flags = FLAGS, .unit = "eval" },
+         { "frame", "eval expressions per-frame",                  0, AV_OPT_TYPE_CONST, {.i64=EVAL_MODE_FRAME}, .flags = FLAGS, .unit = "eval" },
     { "rgb", "force packed RGB in input and output (deprecated)", OFFSET(allow_packed_rgb), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS },
     { "shortest", "force termination when the shortest input terminates", OFFSET(shortest), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, FLAGS },
-
     { "format", "set output format", OFFSET(format), AV_OPT_TYPE_INT, {.i64=OVERLAY_FORMAT_YUV420}, 0, OVERLAY_FORMAT_NB-1, FLAGS, "format" },
-    { "yuv420", "", 0, AV_OPT_TYPE_CONST, {.i64=OVERLAY_FORMAT_YUV420}, .flags = FLAGS, .unit = "format" },
-    { "yuv444", "", 0, AV_OPT_TYPE_CONST, {.i64=OVERLAY_FORMAT_YUV444}, .flags = FLAGS, .unit = "format" },
-    { "rgb",    "", 0, AV_OPT_TYPE_CONST, {.i64=OVERLAY_FORMAT_RGB},    .flags = FLAGS, .unit = "format" },
-
+        { "yuv420", "", 0, AV_OPT_TYPE_CONST, {.i64=OVERLAY_FORMAT_YUV420}, .flags = FLAGS, .unit = "format" },
+        { "yuv444", "", 0, AV_OPT_TYPE_CONST, {.i64=OVERLAY_FORMAT_YUV444}, .flags = FLAGS, .unit = "format" },
+        { "rgb",    "", 0, AV_OPT_TYPE_CONST, {.i64=OVERLAY_FORMAT_RGB},    .flags = FLAGS, .unit = "format" },
+    { "repeatlast", "repeat overlay of the last overlay frame", OFFSET(repeatlast), AV_OPT_TYPE_INT, {.i64=1}, 0, 1, FLAGS },
     { NULL }
 };
 
@@ -750,8 +758,6 @@ static const AVFilterPad avfilter_vf_overlay_outputs[] = {
     { NULL }
 };
 
-static const char *const shorthand[] = { "x", "y", NULL };
-
 AVFilter avfilter_vf_overlay = {
     .name      = "overlay",
     .description = NULL_IF_CONFIG_SMALL("Overlay a video source on top of the input."),
@@ -767,5 +773,4 @@ AVFilter avfilter_vf_overlay = {
 
     .inputs    = avfilter_vf_overlay_inputs,
     .outputs   = avfilter_vf_overlay_outputs,
-    .shorthand  = shorthand,
 };

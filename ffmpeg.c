@@ -64,7 +64,6 @@
 
 # include "libavfilter/avcodec.h"
 # include "libavfilter/avfilter.h"
-# include "libavfilter/avfiltergraph.h"
 # include "libavfilter/buffersrc.h"
 # include "libavfilter/buffersink.h"
 
@@ -500,7 +499,6 @@ static void exit_program(void)
 
     uninit_opts();
 
-    avfilter_uninit();
     avformat_network_deinit();
 
     if (received_sigterm) {
@@ -1717,12 +1715,12 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
                 break;
         } else
             f = decoded_frame;
-        if(av_buffersrc_add_frame_flags(ist->filters[i]->filter, f,
-                                        AV_BUFFERSRC_FLAG_PUSH)<0) {
-            av_log(NULL, AV_LOG_FATAL, "Failed to inject frame into filter network\n");
+        ret = av_buffersrc_add_frame_flags(ist->filters[i]->filter, f, AV_BUFFERSRC_FLAG_PUSH);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_FATAL,
+                   "Failed to inject frame into filter network: %s\n", av_err2str(ret));
             exit(1);
         }
-
     }
 
     av_frame_unref(ist->filter_frame);

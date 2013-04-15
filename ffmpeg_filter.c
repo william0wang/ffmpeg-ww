@@ -21,7 +21,6 @@
 #include "ffmpeg.h"
 
 #include "libavfilter/avfilter.h"
-#include "libavfilter/avfiltergraph.h"
 #include "libavfilter/buffersink.h"
 
 #include "libavresample/avresample.h"
@@ -124,7 +123,7 @@ static char *choose_pix_fmts(OutputStream *ost)
 
         for (; *p != AV_PIX_FMT_NONE; p++) {
             const char *name = av_get_pix_fmt_name(*p);
-            avio_printf(s, "%s:", name);
+            avio_printf(s, "%s|", name);
         }
         len = avio_close_dyn_buf(s, &ret);
         ret[len - 1] = 0;
@@ -135,7 +134,7 @@ static char *choose_pix_fmts(OutputStream *ost)
 
 /* Define a function for building a string containing a list of
  * allowed formats. */
-#define DEF_CHOOSE_FORMAT(type, var, supported_list, none, get_name, separator)\
+#define DEF_CHOOSE_FORMAT(type, var, supported_list, none, get_name)           \
 static char *choose_ ## var ## s(OutputStream *ost)                            \
 {                                                                              \
     if (ost->st->codec->var != none) {                                         \
@@ -152,7 +151,7 @@ static char *choose_ ## var ## s(OutputStream *ost)                            \
                                                                                \
         for (p = ost->enc->supported_list; *p != none; p++) {                  \
             get_name(*p);                                                      \
-            avio_printf(s, "%s" separator, name);                              \
+            avio_printf(s, "%s|", name);                                       \
         }                                                                      \
         len = avio_close_dyn_buf(s, &ret);                                     \
         ret[len - 1] = 0;                                                      \
@@ -162,16 +161,16 @@ static char *choose_ ## var ## s(OutputStream *ost)                            \
 }
 
 // DEF_CHOOSE_FORMAT(enum AVPixelFormat, pix_fmt, pix_fmts, AV_PIX_FMT_NONE,
-//                   GET_PIX_FMT_NAME, ":")
+//                   GET_PIX_FMT_NAME)
 
 DEF_CHOOSE_FORMAT(enum AVSampleFormat, sample_fmt, sample_fmts,
-                  AV_SAMPLE_FMT_NONE, GET_SAMPLE_FMT_NAME, ",")
+                  AV_SAMPLE_FMT_NONE, GET_SAMPLE_FMT_NAME)
 
 DEF_CHOOSE_FORMAT(int, sample_rate, supported_samplerates, 0,
-                  GET_SAMPLE_RATE_NAME, ",")
+                  GET_SAMPLE_RATE_NAME)
 
 DEF_CHOOSE_FORMAT(uint64_t, channel_layout, channel_layouts, 0,
-                  GET_CH_LAYOUT_NAME, ",")
+                  GET_CH_LAYOUT_NAME)
 
 FilterGraph *init_simple_filtergraph(InputStream *ist, OutputStream *ost)
 {
@@ -286,13 +285,11 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     int pad_idx = out->pad_idx;
     int ret;
     char name[255];
-    AVBufferSinkParams *buffersink_params = av_buffersink_params_alloc();
 
     snprintf(name, sizeof(name), "output stream %d:%d", ost->file_index, ost->index);
     ret = avfilter_graph_create_filter(&ofilter->filter,
                                        avfilter_get_by_name("buffersink"),
                                        name, NULL, NULL, fg->graph);
-    av_freep(&buffersink_params);
 
     if (ret < 0)
         return ret;
@@ -369,17 +366,14 @@ static int configure_output_audio_filter(FilterGraph *fg, OutputFilter *ofilter,
     char *sample_fmts, *sample_rates, *channel_layouts;
     char name[255];
     int ret;
-    AVABufferSinkParams *params = av_abuffersink_params_alloc();
 
-    if (!params)
-        return AVERROR(ENOMEM);
-    params->all_channel_counts = 1;
     snprintf(name, sizeof(name), "output stream %d:%d", ost->file_index, ost->index);
     ret = avfilter_graph_create_filter(&ofilter->filter,
                                        avfilter_get_by_name("abuffersink"),
-                                       name, NULL, params, fg->graph);
-    av_freep(&params);
+                                       name, NULL, NULL, fg->graph);
     if (ret < 0)
+        return ret;
+    if ((ret = av_opt_set_int(ofilter->filter, "all_channel_counts", 1, AV_OPT_SEARCH_CHILDREN)) < 0)
         return ret;
 
 #define AUTO_INSERT_FILTER(opt_name, filter_name, arg) do {                 \

@@ -80,7 +80,7 @@ typedef struct {
 } SendCmdContext;
 
 #define OFFSET(x) offsetof(SendCmdContext, x)
-#define FLAGS AV_OPT_FLAG_FILTERING_PARAM
+#define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM
 static const AVOption options[] = {
     { "commands", "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
     { "c",        "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
@@ -368,16 +368,10 @@ static int cmp_intervals(const void *a, const void *b)
     return ret == 0 ? i1->index - i2->index : ret;
 }
 
-static av_cold int init(AVFilterContext *ctx, const char *args, const AVClass *class)
+static av_cold int init(AVFilterContext *ctx)
 {
     SendCmdContext *sendcmd = ctx->priv;
     int ret, i, j;
-
-    sendcmd->class = class;
-    av_opt_set_defaults(sendcmd);
-
-    if ((ret = av_set_options_string(sendcmd, args, "=", ":")) < 0)
-        return ret;
 
     if (sendcmd->commands_filename && sendcmd->commands_str) {
         av_log(ctx, AV_LOG_ERROR,
@@ -432,8 +426,6 @@ static void av_cold uninit(AVFilterContext *ctx)
 {
     SendCmdContext *sendcmd = ctx->priv;
     int i, j;
-
-    av_opt_free(sendcmd);
 
     for (i = 0; i < sendcmd->nb_intervals; i++) {
         Interval *interval = &sendcmd->intervals[i];
@@ -518,9 +510,9 @@ end:
 #define sendcmd_options options
 AVFILTER_DEFINE_CLASS(sendcmd);
 
-static av_cold int sendcmd_init(AVFilterContext *ctx, const char *args)
+static av_cold int sendcmd_init(AVFilterContext *ctx)
 {
-    return init(ctx, args, &sendcmd_class);
+    return init(ctx);
 }
 
 static const AVFilterPad sendcmd_inputs[] = {
@@ -560,9 +552,9 @@ AVFilter avfilter_vf_sendcmd = {
 #define asendcmd_options options
 AVFILTER_DEFINE_CLASS(asendcmd);
 
-static av_cold int asendcmd_init(AVFilterContext *ctx, const char *args)
+static av_cold int asendcmd_init(AVFilterContext *ctx)
 {
-    return init(ctx, args, &asendcmd_class);
+    return init(ctx);
 }
 
 static const AVFilterPad asendcmd_inputs[] = {
