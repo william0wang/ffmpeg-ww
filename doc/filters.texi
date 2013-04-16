@@ -792,6 +792,40 @@ Pass the audio source unchanged to the output.
 Pad the end of a audio stream with silence, this can be used together with
 -shortest to extend audio streams to the same length as the video stream.
 
+@section aphaser
+Add a phasing effect to the input audio.
+
+A phaser filter creates series of peaks and troughs in the frequency spectrum.
+The position of the peaks and troughs are modulated so that they vary over time, creating a sweeping effect.
+
+A description of the accepted parameters follows.
+
+@table @option
+@item in_gain
+Set input gain. Default is 0.4.
+
+@item out_gain
+Set output gain. Default is 0.74
+
+@item delay
+Set delay in milliseconds. Default is 3.0.
+
+@item decay
+Set decay. Default is 0.4.
+
+@item speed
+Set modulation speed in Hz. Default is 0.5.
+
+@item type
+Set modulation type. Default is triangular.
+
+It accepts the following values:
+@table @samp
+@item triangular, t
+@item sinusoidal, s
+@end table
+@end table
+
 @anchor{aresample}
 @section aresample
 
@@ -899,32 +933,6 @@ the data is treated as if all the planes were concatenated.
 @item plane_checksums
 A list of Adler-32 checksums for each data plane.
 @end table
-
-@section asplit
-
-Split input audio into several identical outputs.
-
-The filter accepts a single parameter which specifies the number of outputs. If
-unspecified, it defaults to 2.
-
-For example:
-@example
-[in] asplit [out0][out1]
-@end example
-
-will create two separate outputs from the same input.
-
-To create 3 or more outputs, you need to specify the number of
-outputs, like in:
-@example
-[in] asplit=3 [out0][out1][out2]
-@end example
-
-@example
-ffmpeg -i INPUT -filter_complex asplit=5 OUTPUT
-@end example
-will create 5 copies of the input audio.
-
 
 @section astreamsync
 
@@ -2330,6 +2338,11 @@ Available presets are:
 @item vintage
 @end table
 Default is @code{none}.
+@item master, m
+Set the master key points. These points will define a second pass mapping. It
+is sometimes called a "luminance" or "value" mapping. It can be used with
+@option{r}, @option{g}, @option{b} or @option{all} since it acts like a
+post-processing LUT.
 @item red, r
 Set the key points for the red component.
 @item green, g
@@ -2337,10 +2350,12 @@ Set the key points for the green component.
 @item blue, b
 Set the key points for the blue component.
 @item all
-Set the key points for all components.
+Set the key points for all components (not including master).
 Can be used in addition to the other key points component
 options. In this case, the unset component(s) will fallback on this
 @option{all} setting.
+@item psfile
+Specify a Photoshop curves file (@code{.asv}) to import the settings from.
 @end table
 
 To avoid some filtergraph syntax conflicts, each key points list need to be
@@ -2380,6 +2395,12 @@ curves=preset=vintage
 Or simply:
 @example
 curves=vintage
+@end example
+
+@item
+Use a Photoshop preset and redefine the points of the green component:
+@example
+curves=psfile='MyCurvesPresets/purple.asv':green='0.45/0.53'
 @end example
 @end itemize
 
@@ -5676,29 +5697,6 @@ which is equivalent to:
 subtitles=filename=sub.srt
 @end example
 
-@section split
-
-Split input video into several identical outputs.
-
-The filter accepts a single parameter which specifies the number of outputs. If
-unspecified, it defaults to 2.
-
-For example
-@example
-ffmpeg -i INPUT -filter_complex split=5 OUTPUT
-@end example
-will create 5 copies of the input video.
-
-For example:
-@example
-[in] split [splitout1][splitout2];
-[splitout1] crop=100:100:0:0    [cropout];
-[splitout2] pad=200:200:100:100 [padout];
-@end example
-
-will create two separate outputs from the same input, one cropped and
-one padded.
-
 @section super2xsai
 
 Scale the input by 2x and smooth using the Super2xSaI (Scale and
@@ -6718,40 +6716,6 @@ following one, the permission might not be received as expected in that
 following filter. Inserting a @ref{format} or @ref{aformat} filter before the
 perms/aperms filter can avoid this problem.
 
-@section aphaser
-Add a phasing effect to the input audio.
-
-A phaser filter creates series of peaks and troughs in the frequency spectrum.
-The position of the peaks and troughs are modulated so that they vary over time, creating a sweeping effect.
-
-A description of the accepted parameters follows.
-
-@table @option
-@item in_gain
-Set input gain. Default is 0.4.
-
-@item out_gain
-Set output gain. Default is 0.74
-
-@item delay
-Set delay in milliseconds. Default is 3.0.
-
-@item decay
-Set decay. Default is 0.4.
-
-@item speed
-Set modulation speed in Hz. Default is 0.5.
-
-@item type
-Set modulation type. Default is triangular.
-
-It accepts the following values:
-@table @samp
-@item triangular, t
-@item sinusoidal, s
-@end table
-@end table
-
 @section aselect, select
 Select frames to pass in output.
 
@@ -7516,6 +7480,47 @@ Create a synthetic signal and show it with showwaves, forcing a
 frame rate of 30 frames per second:
 @example
 aevalsrc=sin(1*2*PI*t)*sin(880*2*PI*t):cos(2*PI*200*t),asplit[out0],showwaves=r=30[out1]
+@end example
+@end itemize
+
+@section split, asplit
+
+Split input into several identical outputs.
+
+@code{asplit} works with audio input, @code{split} with video.
+
+The filter accepts a single parameter which specifies the number of outputs. If
+unspecified, it defaults to 2.
+
+@subsection Examples
+
+@itemize
+@item
+Create two separate outputs from the same input:
+@example
+[in] split [out0][out1]
+@end example
+
+@item
+To create 3 or more outputs, you need to specify the number of
+outputs, like in:
+@example
+[in] asplit=3 [out0][out1][out2]
+@end example
+
+@item
+Create two separate outputs from the same input, one cropped and
+one padded:
+@example
+[in] split [splitout1][splitout2];
+[splitout1] crop=100:100:0:0    [cropout];
+[splitout2] pad=200:200:100:100 [padout];
+@end example
+
+@item
+Create 5 copies of the input audio with @command{ffmpeg}:
+@example
+ffmpeg -i INPUT -filter_complex asplit=5 OUTPUT
 @end example
 @end itemize
 

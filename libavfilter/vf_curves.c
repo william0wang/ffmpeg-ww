@@ -19,7 +19,10 @@
  */
 
 #include "libavutil/opt.h"
+#include "libavutil/bprint.h"
 #include "libavutil/eval.h"
+#include "libavutil/file.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/avassert.h"
 #include "avfilter.h"
 #include "formats.h"
@@ -51,9 +54,10 @@ enum preset {
 typedef struct {
     const AVClass *class;
     enum preset preset;
-    char *comp_points_str[NB_COMP];
+    char *comp_points_str[NB_COMP + 1];
     char *comp_points_str_all;
-    uint8_t graph[NB_COMP][256];
+    uint8_t graph[NB_COMP + 1][256];
+    char *psfile;
 } CurvesContext;
 
 #define OFFSET(x) offsetof(CurvesContext, x)
@@ -71,6 +75,8 @@ static const AVOption curves_options[] = {
         { "negative",           NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_NEGATIVE},             INT_MIN, INT_MAX, FLAGS, "preset_name" },
         { "strong_contrast",    NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_STRONG_CONTRAST},      INT_MIN, INT_MAX, FLAGS, "preset_name" },
         { "vintage",            NULL, 0, AV_OPT_TYPE_CONST, {.i64=PRESET_VINTAGE},              INT_MIN, INT_MAX, FLAGS, "preset_name" },
+    { "master","set master points coordinates",OFFSET(comp_points_str[NB_COMP]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "m",     "set master points coordinates",OFFSET(comp_points_str[NB_COMP]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "red",   "set red points coordinates",   OFFSET(comp_points_str[0]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "r",     "set red points coordinates",   OFFSET(comp_points_str[0]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "green", "set green points coordinates", OFFSET(comp_points_str[1]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
@@ -78,6 +84,7 @@ static const AVOption curves_options[] = {
     { "blue",  "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "b",     "set blue points coordinates",  OFFSET(comp_points_str[2]), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { "all",   "set points coordinates for all components", OFFSET(comp_points_str_all), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
+    { "psfile", "set Photoshop curves file name", OFFSET(psfile), AV_OPT_TYPE_STRING, {.str=NULL}, .flags = FLAGS },
     { NULL }
 };
 
@@ -87,7 +94,7 @@ static const struct {
     const char *r;
     const char *g;
     const char *b;
-    const char *all;
+    const char *master;
 } curves_presets[] = {
     [PRESET_COLOR_NEGATIVE] = {
         "0/1 0.129/1 0.466/0.498 0.725/0 1/0",
@@ -99,13 +106,13 @@ static const struct {
         "0.25/0.188 0.38/0.501 0.745/0.815 1/0.815",
         "0.231/0.094 0.709/0.874",
     },
-    [PRESET_DARKER]             = { .all = "0.5/0.4" },
-    [PRESET_INCREASE_CONTRAST]  = { .all = "0.149/0.066 0.831/0.905 0.905/0.98" },
-    [PRESET_LIGHTER]            = { .all = "0.4/0.5" },
-    [PRESET_LINEAR_CONTRAST]    = { .all = "0.305/0.286 0.694/0.713" },
-    [PRESET_MEDIUM_CONTRAST]    = { .all = "0.286/0.219 0.639/0.643" },
-    [PRESET_NEGATIVE]           = { .all = "0/1 1/0" },
-    [PRESET_STRONG_CONTRAST]    = { .all = "0.301/0.196 0.592/0.6 0.686/0.737" },
+    [PRESET_DARKER]             = { .master = "0.5/0.4" },
+    [PRESET_INCREASE_CONTRAST]  = { .master = "0.149/0.066 0.831/0.905 0.905/0.98" },
+    [PRESET_LIGHTER]            = { .master = "0.4/0.5" },
+    [PRESET_LINEAR_CONTRAST]    = { .master = "0.305/0.286 0.694/0.713" },
+    [PRESET_MEDIUM_CONTRAST]    = { .master = "0.286/0.219 0.639/0.643" },
+    [PRESET_NEGATIVE]           = { .master = "0/1 1/0" },
+    [PRESET_STRONG_CONTRAST]    = { .master = "0.301/0.196 0.592/0.6 0.686/0.737" },
     [PRESET_VINTAGE] = {
         "0/0.11 0.42/0.51 1/0.95",
         "0.50/0.48",
@@ -295,16 +302,70 @@ end:
     return ret;
 }
 
+static int parse_psfile(AVFilterContext *ctx, const char *fname)
+{
+    CurvesContext *curves = ctx->priv;
+    uint8_t *buf;
+    size_t size;
+    int i, ret, av_unused(version), nb_curves;
+    AVBPrint ptstr;
+    static const int comp_ids[] = {3, 0, 1, 2};
+
+    av_bprint_init(&ptstr, 0, AV_BPRINT_SIZE_AUTOMATIC);
+
+    ret = av_file_map(fname, &buf, &size, 0, NULL);
+    if (ret < 0)
+        return ret;
+
+#define READ16(dst) do {                \
+    if (size < 2)                       \
+        return AVERROR_INVALIDDATA;     \
+    dst = AV_RB16(buf);                 \
+    buf  += 2;                          \
+    size -= 2;                          \
+} while (0)
+
+    READ16(version);
+    READ16(nb_curves);
+    for (i = 0; i < FFMIN(nb_curves, FF_ARRAY_ELEMS(comp_ids)); i++) {
+        int nb_points, n;
+        av_bprint_clear(&ptstr);
+        READ16(nb_points);
+        for (n = 0; n < nb_points; n++) {
+            int y, x;
+            READ16(y);
+            READ16(x);
+            av_bprintf(&ptstr, "%f/%f ", x / 255., y / 255.);
+        }
+        if (*ptstr.str) {
+            char **pts = &curves->comp_points_str[comp_ids[i]];
+            if (!*pts) {
+                *pts = av_strdup(ptstr.str);
+                av_log(ctx, AV_LOG_DEBUG, "curves %d (intid=%d) [%d points]: [%s]\n",
+                       i, comp_ids[i], nb_points, *pts);
+                if (!*pts) {
+                    ret = AVERROR(ENOMEM);
+                    goto end;
+                }
+            }
+        }
+    }
+end:
+    av_bprint_finalize(&ptstr, NULL);
+    av_file_unmap(buf, size);
+    return ret;
+}
+
 static av_cold int init(AVFilterContext *ctx)
 {
     int i, j, ret;
     CurvesContext *curves = ctx->priv;
-    struct keypoint *comp_points[NB_COMP] = {0};
+    struct keypoint *comp_points[NB_COMP + 1] = {0};
     char **pts = curves->comp_points_str;
     const char *allp = curves->comp_points_str_all;
 
-    if (!allp && curves->preset != PRESET_NONE && curves_presets[curves->preset].all)
-        allp = curves_presets[curves->preset].all;
+    //if (!allp && curves->preset != PRESET_NONE && curves_presets[curves->preset].all)
+    //    allp = curves_presets[curves->preset].all;
 
     if (allp) {
         for (i = 0; i < NB_COMP; i++) {
@@ -315,21 +376,39 @@ static av_cold int init(AVFilterContext *ctx)
         }
     }
 
-    if (curves->preset != PRESET_NONE) {
-        if (!pts[0]) pts[0] = av_strdup(curves_presets[curves->preset].r);
-        if (!pts[1]) pts[1] = av_strdup(curves_presets[curves->preset].g);
-        if (!pts[2]) pts[2] = av_strdup(curves_presets[curves->preset].b);
-        if (!pts[0] || !pts[1] || !pts[2])
-            return AVERROR(ENOMEM);
+    if (curves->psfile) {
+        ret = parse_psfile(ctx, curves->psfile);
+        if (ret < 0)
+            return ret;
     }
 
-    for (i = 0; i < NB_COMP; i++) {
+    if (curves->preset != PRESET_NONE) {
+#define SET_COMP_IF_NOT_SET(n, name) do {                           \
+    if (!pts[n] && curves_presets[curves->preset].name) {           \
+        pts[n] = av_strdup(curves_presets[curves->preset].name);    \
+        if (!pts[n])                                                \
+            return AVERROR(ENOMEM);                                 \
+    }                                                               \
+} while (0)
+        SET_COMP_IF_NOT_SET(0, r);
+        SET_COMP_IF_NOT_SET(1, g);
+        SET_COMP_IF_NOT_SET(2, b);
+        SET_COMP_IF_NOT_SET(3, master);
+    }
+
+    for (i = 0; i < NB_COMP + 1; i++) {
         ret = parse_points_str(ctx, comp_points + i, curves->comp_points_str[i]);
         if (ret < 0)
             return ret;
         ret = interpolate(ctx, curves->graph[i], comp_points[i]);
         if (ret < 0)
             return ret;
+    }
+
+    if (pts[NB_COMP]) {
+        for (i = 0; i < NB_COMP; i++)
+            for (j = 0; j < 256; j++)
+                curves->graph[i][j] = curves->graph[NB_COMP][curves->graph[i][j]];
     }
 
     if (av_log_get_level() >= AV_LOG_VERBOSE) {
@@ -348,7 +427,7 @@ static av_cold int init(AVFilterContext *ctx)
         }
     }
 
-    for (i = 0; i < NB_COMP; i++) {
+    for (i = 0; i < NB_COMP + 1; i++) {
         struct keypoint *point = comp_points[i];
         while (point) {
             struct keypoint *next = point->next;

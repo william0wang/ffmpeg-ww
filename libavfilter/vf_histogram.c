@@ -168,7 +168,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     const uint8_t *src;
     uint8_t *dst;
-    int i, j, k, l, ret;
+    int i, j, k, l;
 
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
@@ -197,7 +197,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                 h->max_hval = FFMAX(h->max_hval, h->histogram[i]);
 
             for (i = 0; i < outlink->w; i++) {
-                int col_height = h->level_height - (float)h->histogram[i] / h->max_hval * h->level_height;
+                int col_height = h->level_height - (h->histogram[i] * (int64_t)h->level_height + h->max_hval - 1) / h->max_hval;
 
                 for (j = h->level_height - 1; j >= col_height; j--) {
                     if (h->display_mode) {
@@ -285,11 +285,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_assert0(0);
     }
 
-    ret = ff_filter_frame(outlink, out);
     av_frame_free(&in);
-    if (ret < 0)
-        return ret;
-    return 0;
+    return ff_filter_frame(outlink, out);
 }
 
 static const AVFilterPad inputs[] = {
