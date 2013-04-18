@@ -63,6 +63,7 @@ typedef struct StereoComponent {
     enum StereoCode format;
     int width, height;
     int off_left, off_right;
+    int off_lstep, off_rstep;
     int row_left, row_right;
 } StereoComponent;
 
@@ -196,11 +197,41 @@ static int config_output(AVFilterLink *outlink)
     Stereo3DContext *s = ctx->priv;
     AVRational aspect = inlink->sample_aspect_ratio;
 
+    switch (s->in.format) {
+    case SIDE_BY_SIDE_2_LR:
+    case SIDE_BY_SIDE_LR:
+    case SIDE_BY_SIDE_2_RL:
+    case SIDE_BY_SIDE_RL:
+        if (inlink->w & 1) {
+            av_log(ctx, AV_LOG_ERROR, "width must be even\n");
+            return AVERROR_INVALIDDATA;
+        }
+        break;
+    case ABOVE_BELOW_2_LR:
+    case ABOVE_BELOW_LR:
+    case ABOVE_BELOW_2_RL:
+    case ABOVE_BELOW_RL:
+        if (s->out.format == INTERLEAVE_ROWS_LR ||
+            s->out.format == INTERLEAVE_ROWS_RL) {
+            if (inlink->h & 3) {
+                av_log(ctx, AV_LOG_ERROR, "height must be multiple of 4\n");
+                return AVERROR_INVALIDDATA;
+            }
+        }
+        if (inlink->h & 1) {
+            av_log(ctx, AV_LOG_ERROR, "height must be even\n");
+            return AVERROR_INVALIDDATA;
+        }
+        break;
+    }
+
     s->in.width     =
     s->width        = inlink->w;
     s->in.height    =
     s->height       = inlink->h;
     s->row_step     = 1;
+    s->in.off_lstep =
+    s->in.off_rstep =
     s->in.off_left  =
     s->in.off_right =
     s->in.row_left  =
@@ -238,6 +269,8 @@ static int config_output(AVFilterLink *outlink)
 
     s->out.width     = s->width;
     s->out.height    = s->height;
+    s->out.off_lstep =
+    s->out.off_rstep =
     s->out.off_left  =
     s->out.off_right =
     s->out.row_left  =
@@ -263,7 +296,7 @@ static int config_output(AVFilterLink *outlink)
     case SIDE_BY_SIDE_2_LR:
         aspect.num      /= 2;
     case SIDE_BY_SIDE_LR:
-        s->out.width     =
+        s->out.width     = s->width * 2;
         s->out.off_right = s->width * 3;
         break;
     case SIDE_BY_SIDE_2_RL:
@@ -287,14 +320,14 @@ static int config_output(AVFilterLink *outlink)
     case INTERLEAVE_ROWS_LR:
         s->row_step      = 2;
         s->height        = s->height / 2;
-        s->out.off_right = s->width * 3;
-        s->in.off_right += s->in.width * 3;
+        s->out.off_rstep =
+        s->in.off_rstep  = 1;
         break;
     case INTERLEAVE_ROWS_RL:
         s->row_step      = 2;
         s->height        = s->height / 2;
-        s->out.off_left  = s->width * 3;
-        s->in.off_left  += s->in.width * 3;
+        s->out.off_lstep =
+        s->in.off_lstep  = 1;
         break;
     case MONO_R:
         s->in.off_left   = s->in.off_right;
@@ -332,7 +365,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     AVFrame *out;
     int out_off_left, out_off_right;
     int in_off_left, in_off_right;
-    int ret;
 
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
@@ -341,10 +373,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
     }
     av_frame_copy_props(out, inpicref);
 
-    in_off_left   = s->in.row_left  * inpicref->linesize[0] + s->in.off_left;
-    in_off_right  = s->in.row_right * inpicref->linesize[0] + s->in.off_right;
-    out_off_left  = s->out.row_left  * out->linesize[0] + s->out.off_left;
-    out_off_right = s->out.row_right * out->linesize[0] + s->out.off_right;
+    in_off_left   = (s->in.row_left   + s->in.off_lstep)  * inpicref->linesize[0] + s->in.off_left;
+    in_off_right  = (s->in.row_right  + s->in.off_rstep)  * inpicref->linesize[0] + s->in.off_right;
+    out_off_left  = (s->out.row_left  + s->out.off_lstep) * out->linesize[0] + s->out.off_left;
+    out_off_right = (s->out.row_right + s->out.off_rstep) * out->linesize[0] + s->out.off_right;
 
     switch (s->out.format) {
     case SIDE_BY_SIDE_LR:
@@ -414,18 +446,14 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
         av_assert0(0);
     }
 
-    ret = ff_filter_frame(outlink, out);
     av_frame_free(&inpicref);
-    if (ret < 0)
-        return ret;
-    return 0;
+    return ff_filter_frame(outlink, out);
 }
 
 static const AVFilterPad stereo3d_inputs[] = {
     {
         .name             = "default",
         .type             = AVMEDIA_TYPE_VIDEO,
-        .get_video_buffer = ff_null_get_video_buffer,
         .filter_frame     = filter_frame,
     },
     { NULL }

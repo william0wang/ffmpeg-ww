@@ -4303,16 +4303,13 @@ the named filter.
 
 The list of the currently supported filters follows:
 @table @var
-@item detc
 @item dint
-@item divtc
 @item down3dright
 @item eq2
 @item eq
 @item fil
 @item fspp
 @item ilpack
-@item ivtc
 @item mcdeint
 @item ow
 @item perspective
@@ -5362,8 +5359,8 @@ The parameter can be a floating point number string, an expression, or
 a string of the form @var{num}:@var{den}, where @var{num} and
 @var{den} are the numerator and denominator of the aspect ratio. If
 the parameter is not specified, it is assumed the value "0".
-In case the form "@var{num}:@var{den}" the @code{:} character should
-be escaped.
+In case the form "@var{num}:@var{den}" is used, the @code{:} character
+should be escaped.
 
 @item max
 Set the maximum integer value to use for expressing numerator and
@@ -6724,10 +6721,20 @@ This filter accepts the following options:
 @table @option
 
 @item expr, e
-An expression, which is evaluated for each input frame. If the expression is
-evaluated to a non-zero value, the frame is selected and passed to the output,
-otherwise it is discarded.
+Set expression, which is evaluated for each input frame.
 
+If the expression is evaluated to zero, the frame is discarded.
+
+If the evaluation result is negative or NaN, the frame is sent to the
+first output; otherwise it is sent to the output with index
+@code{ceil(val)-1}, assuming that the input index starts from 0.
+
+For example a value of @code{1.2} corresponds to the output with index
+@code{ceil(1.2)-1 = 2-1 = 1}, that is the second output.
+
+@item outputs, n
+Set the number of outputs. The output to which to send the selected
+frame is based on the result of the evaluation. Default value is 1.
 @end table
 
 The expression can contain the following constants:
@@ -6881,6 +6888,12 @@ ffmpeg -i video.avi -vf select='gt(scene\,0.4)',scale=160:120,tile -frames:v 1 p
 
 Comparing @var{scene} against a value between 0.3 and 0.5 is generally a sane
 choice.
+
+@item
+Send even and odd frames to separate outputs, and compose them:
+@example
+select=n=2:e='mod(n, 2)+1' [odd][even]; [odd] pad=h=2*ih [tmp]; [tmp][even] overlay=y=h
+@end example
 @end itemize
 
 @section asendcmd, sendcmd

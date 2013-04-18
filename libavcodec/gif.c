@@ -1,5 +1,4 @@
 /*
- * GIF encoder.
  * Copyright (c) 2000 Fabrice Bellard
  * Copyright (c) 2002 Francois Revol
  * Copyright (c) 2006 Baptiste Coudurier
@@ -23,15 +22,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-/*
- * Features and limitations:
- * - uses only a global standard palette
- * - tested with IE 5.0, Opera for BeOS, NetPositive (BeOS), and Mozilla (BeOS).
- *
- * Reference documents:
- * http://www.goice.co.jp/member/mo/formats/gif.html
- * http://astronomy.swin.edu.au/pbourke/dataformats/gif/
- * http://www.dcs.ed.ac.uk/home/mxr/gfx/2d/GIF89a.txt
+/**
+ * @file
+ * GIF encoder
+ * @see http://www.w3.org/Graphics/GIF/spec-gif89a.txt
  */
 
 #include "avcodec.h"
@@ -49,72 +43,119 @@ typedef struct {
     AVFrame picture;
     LZWState *lzw;
     uint8_t *buf;
+    AVFrame *last_frame;
 } GIFContext;
-
-/* GIF header */
-static int gif_image_write_header(AVCodecContext *avctx,
-                                  uint8_t **bytestream, uint32_t *palette)
-{
-    int i;
-    unsigned int v, smallest_alpha = 0xFF, alpha_component = 0;
-
-    bytestream_put_buffer(bytestream, "GIF", 3);
-    bytestream_put_buffer(bytestream, "89a", 3);
-    bytestream_put_le16(bytestream, avctx->width);
-    bytestream_put_le16(bytestream, avctx->height);
-
-    bytestream_put_byte(bytestream, 0xf7); /* flags: global clut, 256 entries */
-    bytestream_put_byte(bytestream, 0x1f); /* background color index */
-    bytestream_put_byte(bytestream, 0); /* aspect ratio */
-
-    /* the global palette */
-    for(i=0;i<256;i++) {
-        v = palette[i];
-        bytestream_put_be24(bytestream, v);
-        if (v >> 24 < smallest_alpha) {
-            smallest_alpha = v >> 24;
-            alpha_component = i;
-        }
-    }
-
-    if (smallest_alpha < 128) {
-        bytestream_put_byte(bytestream, 0x21); /* Extension Introducer */
-        bytestream_put_byte(bytestream, 0xf9); /* Graphic Control Label */
-        bytestream_put_byte(bytestream, 0x04); /* block length */
-        bytestream_put_byte(bytestream, 0x01); /* Transparent Color Flag */
-        bytestream_put_le16(bytestream, 0x00); /* no delay */
-        bytestream_put_byte(bytestream, alpha_component);
-        bytestream_put_byte(bytestream, 0x00);
-    }
-
-    return 0;
-}
 
 static int gif_image_write_image(AVCodecContext *avctx,
                                  uint8_t **bytestream, uint8_t *end,
+                                 const uint32_t *palette,
                                  const uint8_t *buf, int linesize)
 {
     GIFContext *s = avctx->priv_data;
-    int len = 0, height;
+    int len = 0, height = avctx->height, width = avctx->width, y;
+    int x_start = 0, y_start = 0;
     const uint8_t *ptr;
-    /* image block */
 
+    /* Mark one colour as transparent if the input palette contains at least
+     * one colour that is more than 50% transparent. */
+    if (palette) {
+        unsigned i, smallest_alpha = 0xFF, alpha_component = 0;
+        for (i = 0; i < AVPALETTE_COUNT; i++) {
+            const uint32_t v = palette[i];
+            if (v >> 24 < smallest_alpha) {
+                smallest_alpha = v >> 24;
+                alpha_component = i;
+            }
+        }
+        if (smallest_alpha < 128) {
+            bytestream_put_byte(bytestream, 0x21); /* Extension Introducer */
+            bytestream_put_byte(bytestream, 0xf9); /* Graphic Control Label */
+            bytestream_put_byte(bytestream, 0x04); /* block length */
+            bytestream_put_byte(bytestream, 0x01); /* Transparent Color Flag */
+            bytestream_put_le16(bytestream, 0x00); /* no delay */
+            bytestream_put_byte(bytestream, alpha_component);
+            bytestream_put_byte(bytestream, 0x00);
+        }
+    }
+
+    /* Crop image */
+    // TODO support with palette change
+    if (s->last_frame && !palette) {
+        const uint8_t *ref = s->last_frame->data[0];
+        const int ref_linesize = s->last_frame->linesize[0];
+        int x_end = avctx->width  - 1,
+            y_end = avctx->height - 1;
+
+        /* skip common lines */
+        while (y_start < height) {
+            if (memcmp(ref + y_start*ref_linesize, buf + y_start*linesize, width))
+                break;
+            y_start++;
+        }
+        while (y_end > y_start) {
+            if (memcmp(ref + y_end*ref_linesize, buf + y_end*linesize, width))
+                break;
+            y_end--;
+        }
+        height = y_end + 1 - y_start;
+
+        /* skip common columns */
+        while (x_start < width) {
+            int same_column = 1;
+            for (y = y_start; y < y_end; y++) {
+                if (ref[y*ref_linesize + x_start] != buf[y*linesize + x_start]) {
+                    same_column = 0;
+                    break;
+                }
+            }
+            if (!same_column)
+                break;
+            x_start++;
+        }
+        while (x_end > x_start) {
+            int same_column = 1;
+            for (y = y_start; y < y_end; y++) {
+                if (ref[y*ref_linesize + x_end] != buf[y*linesize + x_end]) {
+                    same_column = 0;
+                    break;
+                }
+            }
+            if (!same_column)
+                break;
+            x_end--;
+        }
+        width = x_end + 1 - x_start;
+
+        av_log(avctx, AV_LOG_DEBUG,"%dx%d image at pos (%d;%d) [area:%dx%d]\n",
+               width, height, x_start, y_start, avctx->width, avctx->height);
+    }
+
+    /* image block */
     bytestream_put_byte(bytestream, 0x2c);
-    bytestream_put_le16(bytestream, 0);
-    bytestream_put_le16(bytestream, 0);
-    bytestream_put_le16(bytestream, avctx->width);
-    bytestream_put_le16(bytestream, avctx->height);
-    bytestream_put_byte(bytestream, 0x00); /* flags */
-    /* no local clut */
+    bytestream_put_le16(bytestream, x_start);
+    bytestream_put_le16(bytestream, y_start);
+    bytestream_put_le16(bytestream, width);
+    bytestream_put_le16(bytestream, height);
+
+    if (!palette) {
+        bytestream_put_byte(bytestream, 0x00); /* flags */
+    } else {
+        unsigned i;
+        bytestream_put_byte(bytestream, 1<<7 | 0x7); /* flags */
+        for (i = 0; i < AVPALETTE_COUNT; i++) {
+            const uint32_t v = palette[i];
+            bytestream_put_be24(bytestream, v);
+        }
+    }
 
     bytestream_put_byte(bytestream, 0x08);
 
-    ff_lzw_encode_init(s->lzw, s->buf, avctx->width*avctx->height,
+    ff_lzw_encode_init(s->lzw, s->buf, width * height,
                        12, FF_LZW_GIF, put_bits);
 
-    ptr = buf;
-    for (height = avctx->height; height--;) {
-        len += ff_lzw_encode(s->lzw, ptr, avctx->width);
+    ptr = buf + y_start*linesize + x_start;
+    for (y = 0; y < height; y++) {
+        len += ff_lzw_encode(s->lzw, ptr, width);
         ptr += linesize;
     }
     len += ff_lzw_encode_flush(s->lzw, flush_put_bits);
@@ -130,7 +171,6 @@ static int gif_image_write_image(AVCodecContext *avctx,
         len -= size;
     }
     bytestream_put_byte(bytestream, 0x00); /* end of image block */
-    bytestream_put_byte(bytestream, 0x3b);
     return 0;
 }
 
@@ -140,16 +180,14 @@ static av_cold int gif_encode_init(AVCodecContext *avctx)
 
     if (avctx->width > 65535 || avctx->height > 65535) {
         av_log(avctx, AV_LOG_ERROR, "GIF does not support resolutions above 65535x65535\n");
-        return -1;
+        return AVERROR(EINVAL);
     }
 
     avctx->coded_frame = &s->picture;
     s->lzw = av_mallocz(ff_lzw_encode_state_size);
-    if (!s->lzw)
-        return AVERROR(ENOMEM);
     s->buf = av_malloc(avctx->width*avctx->height*2);
-    if (!s->buf)
-         return AVERROR(ENOMEM);
+    if (!s->buf || !s->lzw)
+        return AVERROR(ENOMEM);
     return 0;
 }
 
@@ -160,6 +198,7 @@ static int gif_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     GIFContext *s = avctx->priv_data;
     AVFrame *const p = &s->picture;
     uint8_t *outbuf_ptr, *end;
+    const uint32_t *palette = NULL;
     int ret;
 
     if ((ret = ff_alloc_packet2(avctx, pkt, avctx->width*avctx->height*7/5 + FF_MIN_BUFFER_SIZE)) < 0)
@@ -170,8 +209,20 @@ static int gif_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     *p = *pict;
     p->pict_type = AV_PICTURE_TYPE_I;
     p->key_frame = 1;
-    gif_image_write_header(avctx, &outbuf_ptr, (uint32_t *)pict->data[1]);
-    gif_image_write_image(avctx, &outbuf_ptr, end, pict->data[0], pict->linesize[0]);
+
+    if (avctx->pix_fmt == AV_PIX_FMT_PAL8)
+        palette = (uint32_t*)p->data[1];
+
+    gif_image_write_image(avctx, &outbuf_ptr, end, palette, pict->data[0], pict->linesize[0]);
+    if (!s->last_frame) {
+        s->last_frame = av_frame_alloc();
+        if (!s->last_frame)
+            return AVERROR(ENOMEM);
+    }
+    av_frame_unref(s->last_frame);
+    ret = av_frame_ref(s->last_frame, (AVFrame*)pict);
+    if (ret < 0)
+        return ret;
 
     pkt->size   = outbuf_ptr - pkt->data;
     pkt->flags |= AV_PKT_FLAG_KEY;
@@ -186,6 +237,7 @@ static int gif_encode_close(AVCodecContext *avctx)
 
     av_freep(&s->lzw);
     av_freep(&s->buf);
+    av_frame_free(&s->last_frame);
     return 0;
 }
 

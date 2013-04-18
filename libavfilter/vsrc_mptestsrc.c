@@ -54,9 +54,8 @@ typedef struct MPTestContext {
     const AVClass *class;
     unsigned int frame_nb;
     AVRational frame_rate;
-    int64_t pts, max_pts;
+    int64_t pts, max_pts, duration;
     int hsub, vsub;
-    char *size, *duration;
     enum test_type test;
 } MPTestContext;
 
@@ -65,23 +64,22 @@ typedef struct MPTestContext {
 static const AVOption mptestsrc_options[]= {
     { "rate",     "set video rate",     OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, 0, FLAGS },
     { "r",        "set video rate",     OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, {.str = "25"}, 0, 0, FLAGS },
-    { "duration", "set video duration", OFFSET(duration), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
-    { "d",        "set video duration", OFFSET(duration), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
+    { "duration", "set video duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64 = -1}, -1, INT64_MAX, FLAGS },
+    { "d",        "set video duration", OFFSET(duration), AV_OPT_TYPE_DURATION, {.i64 = -1}, -1, INT64_MAX, FLAGS },
 
     { "test", "set test to perform", OFFSET(test),  AV_OPT_TYPE_INT,   {.i64=TEST_ALL}, 0, INT_MAX, FLAGS, "test" },
     { "t",    "set test to perform", OFFSET(test),  AV_OPT_TYPE_INT,   {.i64=TEST_ALL}, 0, INT_MAX, FLAGS, "test" },
-    { "dc_luma",     "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_DC_LUMA},     INT_MIN, INT_MAX, FLAGS, "test" },
-    { "dc_chroma",   "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_DC_CHROMA},   INT_MIN, INT_MAX, FLAGS, "test" },
-    { "freq_luma",   "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_FREQ_LUMA},   INT_MIN, INT_MAX, FLAGS, "test" },
-    { "freq_chroma", "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_FREQ_CHROMA}, INT_MIN, INT_MAX, FLAGS, "test" },
-    { "amp_luma",    "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_AMP_LUMA},    INT_MIN, INT_MAX, FLAGS, "test" },
-    { "amp_chroma",  "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_AMP_CHROMA},  INT_MIN, INT_MAX, FLAGS, "test" },
-    { "cbp",         "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_CBP},         INT_MIN, INT_MAX, FLAGS, "test" },
-    { "mv",          "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_MV},          INT_MIN, INT_MAX, FLAGS, "test" },
-    { "ring1",       "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_RING1},       INT_MIN, INT_MAX, FLAGS, "test" },
-    { "ring2",       "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_RING2},       INT_MIN, INT_MAX, FLAGS, "test" },
-    { "all",         "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_ALL},         INT_MIN, INT_MAX, FLAGS, "test" },
-
+        { "dc_luma",     "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_DC_LUMA},     INT_MIN, INT_MAX, FLAGS, "test" },
+        { "dc_chroma",   "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_DC_CHROMA},   INT_MIN, INT_MAX, FLAGS, "test" },
+        { "freq_luma",   "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_FREQ_LUMA},   INT_MIN, INT_MAX, FLAGS, "test" },
+        { "freq_chroma", "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_FREQ_CHROMA}, INT_MIN, INT_MAX, FLAGS, "test" },
+        { "amp_luma",    "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_AMP_LUMA},    INT_MIN, INT_MAX, FLAGS, "test" },
+        { "amp_chroma",  "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_AMP_CHROMA},  INT_MIN, INT_MAX, FLAGS, "test" },
+        { "cbp",         "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_CBP},         INT_MIN, INT_MAX, FLAGS, "test" },
+        { "mv",          "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_MV},          INT_MIN, INT_MAX, FLAGS, "test" },
+        { "ring1",       "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_RING1},       INT_MIN, INT_MAX, FLAGS, "test" },
+        { "ring2",       "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_RING2},       INT_MIN, INT_MAX, FLAGS, "test" },
+        { "all",         "", 0, AV_OPT_TYPE_CONST, {.i64=TEST_ALL},         INT_MIN, INT_MAX, FLAGS, "test" },
     { NULL },
 };
 
@@ -259,22 +257,15 @@ static void ring2_test(uint8_t *dst, int dst_linesize, int off)
 static av_cold int init(AVFilterContext *ctx)
 {
     MPTestContext *test = ctx->priv;
-    int64_t duration = -1;
-    int ret;
 
-    if ((test->duration) && (ret = av_parse_time(&duration, test->duration, 1)) < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Invalid duration: '%s'\n", test->duration);
-        return ret;
-    }
-
-    test->max_pts = duration >= 0 ?
-        av_rescale_q(duration, AV_TIME_BASE_Q, av_inv_q(test->frame_rate)) : -1;
+    test->max_pts = test->duration >= 0 ?
+        av_rescale_q(test->duration, AV_TIME_BASE_Q, av_inv_q(test->frame_rate)) : -1;
     test->frame_nb = 0;
     test->pts = 0;
 
     av_log(ctx, AV_LOG_VERBOSE, "rate:%d/%d duration:%f\n",
            test->frame_rate.num, test->frame_rate.den,
-           duration < 0 ? -1 : test->max_pts * av_q2d(av_inv_q(test->frame_rate)));
+           test->duration < 0 ? -1 : test->max_pts * av_q2d(av_inv_q(test->frame_rate)));
     init_idct();
 
     return 0;

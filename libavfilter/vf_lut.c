@@ -260,14 +260,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
     uint8_t *inrow, *outrow, *inrow0, *outrow0;
-    int i, j, plane;
+    int i, j, plane, direct = 0;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-    if (!out) {
-        av_frame_free(&in);
-        return AVERROR(ENOMEM);
+    if (av_frame_is_writable(in)) {
+        direct = 1;
+        out = in;
+    } else {
+        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+        av_frame_copy_props(out, in);
     }
-    av_frame_copy_props(out, in);
 
     if (lut->is_rgb) {
         /* packed */
@@ -280,15 +285,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             inrow  = inrow0;
             outrow = outrow0;
             for (j = 0; j < w; j++) {
-                outrow[0] = tab[0][inrow[0]];
-                if (lut->step>1) {
-                    outrow[1] = tab[1][inrow[1]];
-                    if (lut->step>2) {
-                        outrow[2] = tab[2][inrow[2]];
-                        if (lut->step>3) {
-                            outrow[3] = tab[3][inrow[3]];
-                        }
-                    }
+                switch (lut->step) {
+                case 4:  outrow[3] = tab[3][inrow[3]]; // Fall-through
+                case 3:  outrow[2] = tab[2][inrow[2]]; // Fall-through
+                case 2:  outrow[1] = tab[1][inrow[1]]; // Fall-through
+                default: outrow[0] = tab[0][inrow[0]];
                 }
                 outrow += lut->step;
                 inrow  += lut->step;
@@ -316,7 +317,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
-    av_frame_free(&in);
+    if (!direct)
+        av_frame_free(&in);
+
     return ff_filter_frame(outlink, out);
 }
 

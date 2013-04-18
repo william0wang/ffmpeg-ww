@@ -20,6 +20,7 @@
 #include "avutil.h"
 #include "avassert.h"
 #include "samplefmt.h"
+#include "pixdesc.h"
 
 /**
  * @file
@@ -28,6 +29,10 @@
 
 unsigned avutil_version(void)
 {
+    static int checks_done;
+    if (checks_done)
+        return LIBAVUTIL_VERSION_INT;
+
     av_assert0(AV_PIX_FMT_VDA_VLD == 81); //check if the pix fmt enum has not had anything inserted or removed by mistake
     av_assert0(AV_SAMPLE_FMT_DBLP == 9);
     av_assert0(AVMEDIA_TYPE_ATTACHMENT == 4);
@@ -40,6 +45,8 @@ unsigned avutil_version(void)
         abort();
     }
 
+    ff_check_pixfmt_descriptors();
+    checks_done = 1;
     return LIBAVUTIL_VERSION_INT;
 }
 
