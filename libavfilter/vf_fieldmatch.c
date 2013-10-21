@@ -77,7 +77,6 @@ typedef struct {
 
     AVFrame *prv,  *src,  *nxt;     ///< main sliding window of 3 frames
     AVFrame *prv2, *src2, *nxt2;    ///< sliding window of the optional second stream
-    int64_t frame_count;            ///< output frame counter
     int got_frame[2];               ///< frame request flag for each input stream
     int hsub, vsub;                 ///< chroma subsampling values
     uint32_t eof;                   ///< bitmask for end of stream
@@ -154,12 +153,12 @@ AVFILTER_DEFINE_CLASS(fieldmatch);
 
 static int get_width(const FieldMatchContext *fm, const AVFrame *f, int plane)
 {
-    return plane ? f->width >> fm->hsub : f->width;
+    return plane ? FF_CEIL_RSHIFT(f->width, fm->hsub) : f->width;
 }
 
 static int get_height(const FieldMatchContext *fm, const AVFrame *f, int plane)
 {
-    return plane ? f->height >> fm->vsub : f->height;
+    return plane ? FF_CEIL_RSHIFT(f->height, fm->vsub) : f->height;
 }
 
 static int64_t luma_abs_diff(const AVFrame *f1, const AVFrame *f2)
@@ -271,8 +270,8 @@ static int calc_combed_score(const FieldMatchContext *fm, const AVFrame *src)
         uint8_t *cmkp  = fm->cmask_data[0];
         uint8_t *cmkpU = fm->cmask_data[1];
         uint8_t *cmkpV = fm->cmask_data[2];
-        const int width  = src->width  >> fm->hsub;
-        const int height = src->height >> fm->vsub;
+        const int width  = FF_CEIL_RSHIFT(src->width,  fm->hsub);
+        const int height = FF_CEIL_RSHIFT(src->height, fm->vsub);
         const int cmk_linesize   = fm->cmask_linesize[0] << 1;
         const int cmk_linesizeUV = fm->cmask_linesize[2];
         uint8_t *cmkpp  = cmkp - (cmk_linesize>>1);
@@ -609,7 +608,7 @@ static void copy_fields(const FieldMatchContext *fm, AVFrame *dst,
                         const AVFrame *src, int field)
 {
     int plane;
-    for (plane = 0; plane < 4 && src->data[plane]; plane++)
+    for (plane = 0; plane < 4 && src->data[plane] && src->linesize[plane]; plane++)
         av_image_copy_plane(dst->data[plane] + field*dst->linesize[plane], dst->linesize[plane] << 1,
                             src->data[plane] + field*src->linesize[plane], src->linesize[plane] << 1,
                             get_width(fm, src, plane), get_height(fm, src, plane) / 2);
@@ -738,7 +737,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     /* scene change check */
     if (fm->combmatch == COMBMATCH_SC) {
-        if (fm->lastn == fm->frame_count - 1) {
+        if (fm->lastn == outlink->frame_count - 1) {
             if (fm->lastscdiff > fm->scthresh)
                 sc = 1;
         } else if (luma_abs_diff(fm->prv, fm->src) > fm->scthresh) {
@@ -746,7 +745,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
 
         if (!sc) {
-            fm->lastn = fm->frame_count;
+            fm->lastn = outlink->frame_count;
             fm->lastscdiff = luma_abs_diff(fm->src, fm->nxt);
             sc = fm->lastscdiff > fm->scthresh;
         }
@@ -805,10 +804,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     dst->interlaced_frame = combs[match] >= fm->combpel;
     if (dst->interlaced_frame) {
         av_log(ctx, AV_LOG_WARNING, "Frame #%"PRId64" at %s is still interlaced\n",
-               fm->frame_count, av_ts2timestr(in->pts, &inlink->time_base));
+               outlink->frame_count, av_ts2timestr(in->pts, &inlink->time_base));
         dst->top_field_first = field;
     }
-    fm->frame_count++;
 
     av_log(ctx, AV_LOG_DEBUG, "SC:%d | COMBS: %3d %3d %3d %3d %3d (combpel=%d)"
            " match=%d combed=%s\n", sc, combs[0], combs[1], combs[2], combs[3], combs[4],

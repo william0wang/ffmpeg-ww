@@ -55,6 +55,16 @@ extern AVDictionary *swr_opts;
 extern AVDictionary *format_opts, *codec_opts, *resample_opts;
 
 /**
+ * Register a program-specific cleanup routine.
+ */
+void register_exit(void (*cb)(int ret));
+
+/**
+ * Wraps exit with a program-specific cleanup routine.
+ */
+void exit_program(int ret);
+
+/**
  * Initialize the cmdutils option system, in particular
  * allocate the *_opts contexts.
  */
@@ -488,7 +498,7 @@ int read_yesno(void);
  * @param filename file to read from
  * @param bufptr location where pointer to buffer is returned
  * @param size   location where size of buffer is returned
- * @return 0 in case of success, a negative value corresponding to an
+ * @return >= 0 in case of success, a negative value corresponding to an
  * AVERROR error code in case of failure.
  */
 int cmdutils_read_file(const char *filename, char **bufptr, size_t *size);

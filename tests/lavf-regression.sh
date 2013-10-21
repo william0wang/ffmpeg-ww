@@ -49,12 +49,8 @@ do_image_formats()
 {
     outfile="$datadir/images/$1/"
     mkdir -p "$outfile"
-    if [ "$1" = "gif" ]; then
-        file=${outfile}02.$1
-    else
-        file=${outfile}%02d.$1
-    fi
-    run_avconv $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src $2 $ENC_OPTS -t 0.5 -y -qscale 10 $target_path/$file
+    file=${outfile}%02d.$1
+    run_avconv $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src $2 $ENC_OPTS -frames 13 -y -qscale 10 $target_path/$file
     do_md5sum ${outfile}02.$1
     do_avconv_crc $file $DEC_OPTS -i $target_path/$file $3
     echo $(wc -c ${outfile}02.$1)
@@ -184,18 +180,9 @@ do_streamed_images ppm
 fi
 
 if [ -n "$do_gif" ] ; then
-# this tests the gif muxer
 file=${outfile}lavf.gif
 do_avconv $file $DEC_OPTS -f image2 -vcodec pgmyuv -i $raw_src $ENC_OPTS -t 1 -qscale 10 -pix_fmt rgb24
 do_avconv_crc $file $DEC_OPTS -i $target_path/$file -pix_fmt rgb24
-# and this the gif encoder
-do_image_formats gif "" "-pix_fmt rgb24"
-do_image_formats gif "-pix_fmt rgb4_byte" "-pix_fmt rgb24"
-do_image_formats gif "-pix_fmt bgr4_byte" "-pix_fmt rgb24"
-do_image_formats gif "-pix_fmt rgb8" "-pix_fmt rgb24"
-do_image_formats gif "-pix_fmt bgr8" "-pix_fmt rgb24"
-do_image_formats gif "-pix_fmt gray" "-pix_fmt rgb24"
-do_image_formats gif "-pix_fmt pal8" "-pix_fmt rgb24"
 fi
 
 if [ -n "$do_yuv4mpeg" ] ; then
@@ -248,8 +235,8 @@ if [ -n "$do_pam" ] ; then
 do_image_formats pam
 do_image_formats pam "-pix_fmt rgba"
 do_image_formats pam "-pix_fmt gray"
-do_image_formats pam "-pix_fmt gray16be"
-do_image_formats pam "-pix_fmt rgb48be"
+do_image_formats pam "-pix_fmt gray16be" "-pix_fmt gray16be"
+do_image_formats pam "-pix_fmt rgb48be" "-pix_fmt rgb48be"
 do_image_formats pam "-pix_fmt monob"
 fi
 
@@ -259,8 +246,11 @@ fi
 
 if [ -n "$do_dpx" ] ; then
 do_image_formats dpx
+do_image_formats dpx "-pix_fmt gbrp10le" "-pix_fmt gbrp10le"
+do_image_formats dpx "-pix_fmt gbrp12le" "-pix_fmt gbrp12le"
 do_image_formats dpx "-pix_fmt rgb48le"
 do_image_formats dpx "-pix_fmt rgb48le -bits_per_raw_sample 10" "-pix_fmt rgb48le"
+do_image_formats dpx "-pix_fmt rgba64le"
 fi
 
 if [ -n "$do_xwd" ] ; then

@@ -75,10 +75,12 @@
 /tools/aviocat
 /tools/ffbisect
 /tools/bisect.need
+/tools/crypto_bench
 /tools/cws2fws
 /tools/fourcc2pixfmt
 /tools/ffescape
 /tools/ffeval
+/tools/ffhash
 /tools/graph2dot
 /tools/ismindex
 /tools/pktdumper
@@ -86,6 +88,7 @@
 /tools/qt-faststart
 /tools/trasher
 /tools/seek_print
+/tools/zmqsend
 release
 cf
 cla

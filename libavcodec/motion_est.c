@@ -338,9 +338,11 @@ int ff_init_me(MpegEncContext *s){
         else
             c->sub_motion_search= hpel_motion_search;
     }
-    c->hpel_avg= s->hdsp.avg_pixels_tab;
-    if(s->no_rounding) c->hpel_put= s->hdsp.put_no_rnd_pixels_tab;
-    else               c->hpel_put= s->hdsp.put_pixels_tab;
+    c->hpel_avg = s->hdsp.avg_pixels_tab;
+    if (s->no_rounding)
+        c->hpel_put = s->hdsp.put_no_rnd_pixels_tab;
+    else
+        c->hpel_put = s->hdsp.put_pixels_tab;
 
     if(s->linesize){
         c->stride  = s->linesize;
@@ -1121,8 +1123,8 @@ int ff_pre_estimate_p_frame_motion(MpegEncContext * s,
     return dmin;
 }
 
-static int ff_estimate_motion_b(MpegEncContext * s,
-                       int mb_x, int mb_y, int16_t (*mv_table)[2], int ref_index, int f_code)
+static int estimate_motion_b(MpegEncContext *s, int mb_x, int mb_y,
+                             int16_t (*mv_table)[2], int ref_index, int f_code)
 {
     MotionEstContext * const c= &s->me;
     int mx, my, dmin;
@@ -1539,10 +1541,12 @@ void ff_estimate_b_frame_motion(MpegEncContext * s,
         dmin= INT_MAX;
 //FIXME penalty stuff for non mpeg4
     c->skip=0;
-    fmin= ff_estimate_motion_b(s, mb_x, mb_y, s->b_forw_mv_table, 0, s->f_code) + 3*penalty_factor;
+    fmin = estimate_motion_b(s, mb_x, mb_y, s->b_forw_mv_table, 0, s->f_code) +
+           3 * penalty_factor;
 
     c->skip=0;
-    bmin= ff_estimate_motion_b(s, mb_x, mb_y, s->b_back_mv_table, 2, s->b_code) + 2*penalty_factor;
+    bmin = estimate_motion_b(s, mb_x, mb_y, s->b_back_mv_table, 2, s->b_code) +
+           2 * penalty_factor;
     av_dlog(s, " %d %d ", s->b_forw_mv_table[xy][0], s->b_forw_mv_table[xy][1]);
 
     c->skip=0;

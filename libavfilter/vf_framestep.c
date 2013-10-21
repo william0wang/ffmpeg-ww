@@ -30,7 +30,7 @@
 
 typedef struct {
     const AVClass *class;
-    int frame_step, frame_count;
+    int frame_step;
 } FrameStepContext;
 
 #define OFFSET(x) offsetof(FrameStepContext, x)
@@ -38,7 +38,7 @@ typedef struct {
 
 static const AVOption framestep_options[] = {
     { "step", "set frame step",  OFFSET(frame_step), AV_OPT_TYPE_INT, {.i64=1}, 1, INT_MAX, FLAGS},
-    {NULL},
+    { NULL },
 };
 
 AVFILTER_DEFINE_CLASS(framestep);
@@ -64,7 +64,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     FrameStepContext *framestep = inlink->dst->priv;
 
-    if (!(framestep->frame_count++ % framestep->frame_step)) {
+    if (!(inlink->frame_count % framestep->frame_step)) {
         return ff_filter_frame(inlink->dst->outputs[0], ref);
     } else {
         av_frame_free(&ref);
@@ -74,27 +74,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 
 static const AVFilterPad framestep_inputs[] = {
     {
-        .name             = "default",
-        .type             = AVMEDIA_TYPE_VIDEO,
-        .filter_frame     = filter_frame,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .filter_frame = filter_frame,
     },
     { NULL }
 };
 
 static const AVFilterPad framestep_outputs[] = {
     {
-        .name          = "default",
-        .type          = AVMEDIA_TYPE_VIDEO,
-        .config_props  = config_output_props,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_output_props,
     },
     { NULL }
 };
 
 AVFilter avfilter_vf_framestep = {
-    .name      = "framestep",
+    .name        = "framestep",
     .description = NULL_IF_CONFIG_SMALL("Select one frame every N frames."),
-    .priv_size = sizeof(FrameStepContext),
-    .priv_class = &framestep_class,
-    .inputs    = framestep_inputs,
-    .outputs   = framestep_outputs,
+    .priv_size   = sizeof(FrameStepContext),
+    .priv_class  = &framestep_class,
+    .inputs      = framestep_inputs,
+    .outputs     = framestep_outputs,
+    .flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

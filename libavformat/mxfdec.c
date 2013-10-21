@@ -43,8 +43,6 @@
  * Only tracks with associated descriptors will be decoded. "Highly Desirable" SMPTE 377M D.1
  */
 
-//#define DEBUG
-
 #include "libavutil/aes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/mathematics.h"
@@ -435,10 +433,7 @@ static int mxf_read_partition_pack(void *arg, AVIOContext *pb, int tag, int size
     uint64_t footer_partition;
     uint32_t nb_essence_containers;
 
-    if (mxf->partitions_count+1 >= UINT_MAX / sizeof(*mxf->partitions))
-        return AVERROR(ENOMEM);
-
-    tmp_part = av_realloc(mxf->partitions, (mxf->partitions_count + 1) * sizeof(*mxf->partitions));
+    tmp_part = av_realloc_array(mxf->partitions, mxf->partitions_count + 1, sizeof(*mxf->partitions));
     if (!tmp_part)
         return AVERROR(ENOMEM);
     mxf->partitions = tmp_part;
@@ -565,9 +560,8 @@ static int mxf_read_partition_pack(void *arg, AVIOContext *pb, int tag, int size
 static int mxf_add_metadata_set(MXFContext *mxf, void *metadata_set)
 {
     MXFMetadataSet **tmp;
-    if (mxf->metadata_sets_count+1 >= UINT_MAX / sizeof(*mxf->metadata_sets))
-        return AVERROR(ENOMEM);
-    tmp = av_realloc(mxf->metadata_sets, (mxf->metadata_sets_count + 1) * sizeof(*mxf->metadata_sets));
+
+    tmp = av_realloc_array(mxf->metadata_sets, mxf->metadata_sets_count + 1, sizeof(*mxf->metadata_sets));
     if (!tmp)
         return AVERROR(ENOMEM);
     mxf->metadata_sets = tmp;
@@ -941,6 +935,7 @@ static const MXFCodecUL mxf_intra_only_essence_container_uls[] = {
 /* intra-only PictureEssenceCoding ULs, where no corresponding EC UL exists */
 static const MXFCodecUL mxf_intra_only_picture_essence_coding_uls[] = {
     { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x0A,0x04,0x01,0x02,0x02,0x01,0x32,0x00,0x00 }, 14,       AV_CODEC_ID_H264 }, /* H.264/MPEG-4 AVC Intra Profiles */
+    { { 0x06,0x0E,0x2B,0x34,0x04,0x01,0x01,0x07,0x04,0x01,0x02,0x02,0x03,0x01,0x01,0x00 }, 14,   AV_CODEC_ID_JPEG2000 }, /* JPEG2000 Codestream */
     { { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 },  0,       AV_CODEC_ID_NONE },
 };
 
@@ -1574,11 +1569,13 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             st->codec->bits_per_coded_sample = descriptor->bits_per_sample;
 
             if (descriptor->sample_rate.den > 0) {
-                avpriv_set_pts_info(st, 64, descriptor->sample_rate.den, descriptor->sample_rate.num);
                 st->codec->sample_rate = descriptor->sample_rate.num / descriptor->sample_rate.den;
+                avpriv_set_pts_info(st, 64, descriptor->sample_rate.den, descriptor->sample_rate.num);
             } else {
-                av_log(mxf->fc, AV_LOG_WARNING, "invalid sample rate (%d/%d) found for stream #%d, time base forced to 1/48000\n",
-                       descriptor->sample_rate.num, descriptor->sample_rate.den, st->index);
+                av_log(mxf->fc, AV_LOG_WARNING, "invalid sample rate (%d/%d) "
+                       "found for stream #%d, time base forced to 1/48000\n",
+                       descriptor->sample_rate.num, descriptor->sample_rate.den,
+                       st->index);
                 avpriv_set_pts_info(st, 64, 1, 48000);
             }
 
@@ -1602,9 +1599,9 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             }
         }
         if (descriptor->extradata) {
-            st->codec->extradata = av_mallocz(descriptor->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
-            if (st->codec->extradata)
+            if (!ff_alloc_extradata(st->codec, descriptor->extradata_size)) {
                 memcpy(st->codec->extradata, descriptor->extradata, descriptor->extradata_size);
+            }
         } else if(st->codec->codec_id == AV_CODEC_ID_H264) {
             ff_generate_avci_extradata(st);
         }
@@ -1660,7 +1657,7 @@ static int mxf_uid_to_str(UID uid, char **str)
 
 static int mxf_timestamp_to_str(uint64_t timestamp, char **str)
 {
-    struct tm time;
+    struct tm time = {0};
     time.tm_year = (timestamp >> 48) - 1900;
     time.tm_mon  = (timestamp >> 40 & 0xFF) - 1;
     time.tm_mday = (timestamp >> 32 & 0xFF);
@@ -2199,7 +2196,9 @@ static int mxf_set_audio_pts(MXFContext *mxf, AVCodecContext *codec, AVPacket *p
 {
     MXFTrack *track = mxf->fc->streams[pkt->stream_index]->priv_data;
     pkt->pts = track->sample_count;
-    if (codec->channels <= 0 || av_get_bits_per_sample(codec->codec_id) <= 0)
+    if (   codec->channels <= 0
+        || av_get_bits_per_sample(codec->codec_id) <= 0
+        || codec->channels * (int64_t)av_get_bits_per_sample(codec->codec_id) < 8)
         return AVERROR(EINVAL);
     track->sample_count += pkt->size / (codec->channels * (int64_t)av_get_bits_per_sample(codec->codec_id) / 8);
     return 0;
@@ -2210,10 +2209,8 @@ static int mxf_read_packet_old(AVFormatContext *s, AVPacket *pkt)
     KLVPacket klv;
     MXFContext *mxf = s->priv_data;
 
-    while (!url_feof(s->pb)) {
+    while (klv_read_packet(&klv, s->pb) == 0) {
         int ret;
-        if (klv_read_packet(&klv, s->pb) < 0)
-            return -1;
         PRINT_KEY(s, "read packet", klv.key);
         av_dlog(s, "size %"PRIu64" offset %#"PRIx64"\n", klv.length, klv.offset);
         if (IS_KLV_KEY(klv.key, mxf_encrypted_triplet_key)) {
@@ -2298,7 +2295,7 @@ static int mxf_read_packet_old(AVFormatContext *s, AVPacket *pkt)
         skip:
             avio_skip(s->pb, klv.length);
     }
-    return AVERROR_EOF;
+    return url_feof(s->pb) ? AVERROR_EOF : -1;
 }
 
 static int mxf_read_packet(AVFormatContext *s, AVPacket *pkt)
@@ -2441,6 +2438,7 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
     MXFContext* mxf = s->priv_data;
     int64_t seekpos;
     int i, ret;
+    int64_t ret64;
     MXFIndexTable *t;
     MXFTrack *source_track = st->priv_data;
 
@@ -2455,8 +2453,8 @@ static int mxf_read_seek(AVFormatContext *s, int stream_index, int64_t sample_ti
         sample_time = 0;
     seconds = av_rescale(sample_time, st->time_base.num, st->time_base.den);
 
-    if ((ret = avio_seek(s->pb, (s->bit_rate * seconds) >> 3, SEEK_SET)) < 0)
-        return ret;
+    if ((ret64 = avio_seek(s->pb, (s->bit_rate * seconds) >> 3, SEEK_SET)) < 0)
+        return ret64;
     ff_update_cur_dts(s, st, sample_time);
     mxf->current_edit_unit = sample_time;
     } else {

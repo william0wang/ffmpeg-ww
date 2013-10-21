@@ -54,13 +54,13 @@ int ff_ass_subtitle_header(AVCodecContext *avctx,
 int ff_ass_subtitle_header_default(AVCodecContext *avctx)
 {
     return ff_ass_subtitle_header(avctx, ASS_DEFAULT_FONT,
-                                         ASS_DEFAULT_FONT_SIZE,
-                                         ASS_DEFAULT_COLOR,
-                                         ASS_DEFAULT_BACK_COLOR,
-                                         ASS_DEFAULT_BOLD,
-                                         ASS_DEFAULT_ITALIC,
-                                         ASS_DEFAULT_UNDERLINE,
-                                         ASS_DEFAULT_ALIGNMENT);
+                               ASS_DEFAULT_FONT_SIZE,
+                               ASS_DEFAULT_COLOR,
+                               ASS_DEFAULT_BACK_COLOR,
+                               ASS_DEFAULT_BOLD,
+                               ASS_DEFAULT_ITALIC,
+                               ASS_DEFAULT_UNDERLINE,
+                               ASS_DEFAULT_ALIGNMENT);
 }
 
 static void insert_ts(AVBPrint *buf, int ts)
@@ -85,17 +85,35 @@ int ff_ass_add_rect(AVSubtitle *sub, const char *dialog,
     AVSubtitleRect **rects;
 
     av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
-    if (!raw) {
-        av_bprintf(&buf, "Dialogue: 0,");
+    if (!raw || raw == 2) {
+        long int layer = 0;
+
+        if (raw == 2) {
+            /* skip ReadOrder */
+            dialog = strchr(dialog, ',');
+            if (!dialog)
+                return AVERROR_INVALIDDATA;
+            dialog++;
+
+            /* extract Layer or Marked */
+            layer = strtol(dialog, (char**)&dialog, 10);
+            if (*dialog != ',')
+                return AVERROR_INVALIDDATA;
+            dialog++;
+        }
+        av_bprintf(&buf, "Dialogue: %ld,", layer);
         insert_ts(&buf, ts_start);
         insert_ts(&buf, duration == -1 ? -1 : ts_start + duration);
-        av_bprintf(&buf, "Default,");
+        if (raw != 2)
+            av_bprintf(&buf, "Default,");
     }
 
     dlen = strcspn(dialog, "\n");
     dlen += dialog[dlen] == '\n';
 
     av_bprintf(&buf, "%.*s", dlen, dialog);
+    if (raw == 2)
+        av_bprintf(&buf, "\r\n");
     if (!av_bprint_is_complete(&buf))
         return AVERROR(ENOMEM);
 

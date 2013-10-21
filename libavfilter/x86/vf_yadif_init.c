@@ -23,7 +23,6 @@
 #include "libavutil/mem.h"
 #include "libavutil/x86/asm.h"
 #include "libavutil/x86/cpu.h"
-#include "libavcodec/x86/dsputil_mmx.h"
 #include "libavfilter/yadif.h"
 
 void ff_yadif_filter_line_mmxext(void *dst, void *prev, void *cur,
@@ -61,11 +60,11 @@ void ff_yadif_filter_line_10bit_ssse3(void *dst, void *prev, void *cur,
 
 av_cold void ff_yadif_init_x86(YADIFContext *yadif)
 {
+#if HAVE_YASM
     int cpu_flags = av_get_cpu_flags();
     int bit_depth = (!yadif->csp) ? 8
                                   : yadif->csp->comp[0].depth_minus1 + 1;
 
-#if HAVE_YASM
     if (bit_depth >= 15) {
 #if ARCH_X86_32
         if (EXTERNAL_MMXEXT(cpu_flags))

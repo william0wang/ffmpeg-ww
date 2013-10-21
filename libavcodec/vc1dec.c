@@ -78,13 +78,12 @@ static void init_block_index(VC1Context *v)
 {
     MpegEncContext *s = &v->s;
     ff_init_block_index(s);
-    if (v->field_mode && v->second_field) {
+    if (v->field_mode && !(v->second_field ^ v->tff)) {
         s->dest[0] += s->current_picture_ptr->f.linesize[0];
         s->dest[1] += s->current_picture_ptr->f.linesize[1];
         s->dest[2] += s->current_picture_ptr->f.linesize[2];
     }
 }
-
 
 /** @} */ //Bitplane group
 
@@ -348,9 +347,10 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
     H264ChromaContext *h264chroma = &v->h264chroma;
     uint8_t *srcY, *srcU, *srcV;
     int dxy, mx, my, uvmx, uvmy, src_x, src_y, uvsrc_x, uvsrc_y;
-    int off, off_uv;
     int v_edge_pos = s->v_edge_pos >> v->field_mode;
     int i;
+    uint8_t (*luty)[256], (*lutuv)[256];
+    int use_ic;
 
     if ((!v->field_mode ||
          (v->ref_field_type[dir] == 1 && v->cur_field_type == 1)) &&
@@ -384,36 +384,35 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
         uvmx = uvmx + ((uvmx < 0) ? (uvmx & 1) : -(uvmx & 1));
         uvmy = uvmy + ((uvmy < 0) ? (uvmy & 1) : -(uvmy & 1));
     }
-    if (v->field_mode) { // interlaced field picture
-        if (!dir) {
-            if ((v->cur_field_type != v->ref_field_type[dir]) && v->second_field) {
-                srcY = s->current_picture.f.data[0];
-                srcU = s->current_picture.f.data[1];
-                srcV = s->current_picture.f.data[2];
-            } else {
-                srcY = s->last_picture.f.data[0];
-                srcU = s->last_picture.f.data[1];
-                srcV = s->last_picture.f.data[2];
-            }
+    if (!dir) {
+        if (v->field_mode && (v->cur_field_type != v->ref_field_type[dir]) && v->second_field) {
+            srcY = s->current_picture.f.data[0];
+            srcU = s->current_picture.f.data[1];
+            srcV = s->current_picture.f.data[2];
+            luty  = v->curr_luty;
+            lutuv = v->curr_lutuv;
+            use_ic = v->curr_use_ic;
         } else {
-            srcY = s->next_picture.f.data[0];
-            srcU = s->next_picture.f.data[1];
-            srcV = s->next_picture.f.data[2];
-        }
-    } else {
-        if (!dir) {
             srcY = s->last_picture.f.data[0];
             srcU = s->last_picture.f.data[1];
             srcV = s->last_picture.f.data[2];
-        } else {
-            srcY = s->next_picture.f.data[0];
-            srcU = s->next_picture.f.data[1];
-            srcV = s->next_picture.f.data[2];
+            luty  = v->last_luty;
+            lutuv = v->last_lutuv;
+            use_ic = v->last_use_ic;
         }
+    } else {
+        srcY = s->next_picture.f.data[0];
+        srcU = s->next_picture.f.data[1];
+        srcV = s->next_picture.f.data[2];
+        luty  = v->next_luty;
+        lutuv = v->next_lutuv;
+        use_ic = v->next_use_ic;
     }
 
-    if(!srcY)
+    if (!srcY || !srcU) {
+        av_log(v->s.avctx, AV_LOG_ERROR, "Referenced frame missing.\n");
         return;
+    }
 
     src_x   = s->mb_x * 16 + (mx   >> 2);
     src_y   = s->mb_y * 16 + (my   >> 2);
@@ -448,22 +447,25 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
         srcV = s->edge_emu_buffer + 18 * s->linesize;
     }
 
-    if (v->rangeredfrm || (v->mv_mode == MV_PMODE_INTENSITY_COMP)
+    if (v->rangeredfrm || use_ic
         || s->h_edge_pos < 22 || v_edge_pos < 22
         || (unsigned)(src_x - s->mspel) > s->h_edge_pos - (mx&3) - 16 - s->mspel * 3
         || (unsigned)(src_y - 1)        > v_edge_pos    - (my&3) - 16 - 3) {
         uint8_t *uvbuf = s->edge_emu_buffer + 19 * s->linesize;
 
         srcY -= s->mspel * (1 + s->linesize);
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, srcY, s->linesize,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, s->linesize,
+                                 srcY, s->linesize,
                                  17 + s->mspel * 2, 17 + s->mspel * 2,
                                  src_x - s->mspel, src_y - s->mspel,
                                  s->h_edge_pos, v_edge_pos);
         srcY = s->edge_emu_buffer;
-        s->vdsp.emulated_edge_mc(uvbuf     , srcU, s->uvlinesize, 8 + 1, 8 + 1,
-                                 uvsrc_x, uvsrc_y, s->h_edge_pos >> 1, v_edge_pos >> 1);
-        s->vdsp.emulated_edge_mc(uvbuf + 16, srcV, s->uvlinesize, 8 + 1, 8 + 1,
-                                 uvsrc_x, uvsrc_y, s->h_edge_pos >> 1, v_edge_pos >> 1);
+        s->vdsp.emulated_edge_mc(uvbuf, s->uvlinesize, srcU, s->uvlinesize,
+                                 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
+                                 s->h_edge_pos >> 1, v_edge_pos >> 1);
+        s->vdsp.emulated_edge_mc(uvbuf + 16, s->uvlinesize, srcV, s->uvlinesize,
+                                 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
+                                 s->h_edge_pos >> 1, v_edge_pos >> 1);
         srcU = uvbuf;
         srcV = uvbuf + 16;
         /* if we deal with range reduction we need to scale source blocks */
@@ -489,22 +491,24 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
             }
         }
         /* if we deal with intensity compensation we need to scale source blocks */
-        if (v->mv_mode == MV_PMODE_INTENSITY_COMP) {
+        if (use_ic) {
             int i, j;
             uint8_t *src, *src2;
 
             src = srcY;
             for (j = 0; j < 17 + s->mspel * 2; j++) {
+                int f = v->field_mode ? v->ref_field_type[dir] : ((j + src_y - s->mspel) & 1) ;
                 for (i = 0; i < 17 + s->mspel * 2; i++)
-                    src[i] = v->luty[src[i]];
+                    src[i] = luty[f][src[i]];
                 src += s->linesize;
             }
             src  = srcU;
             src2 = srcV;
             for (j = 0; j < 9; j++) {
+                int f = v->field_mode ? v->ref_field_type[dir] : ((j + uvsrc_y) & 1);
                 for (i = 0; i < 9; i++) {
-                    src[i]  = v->lutuv[src[i]];
-                    src2[i] = v->lutuv[src2[i]];
+                    src[i]  = lutuv[f][src[i]];
+                    src2[i] = lutuv[f][src2[i]];
                 }
                 src  += s->uvlinesize;
                 src2 += s->uvlinesize;
@@ -513,21 +517,19 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
         srcY += s->mspel * (1 + s->linesize);
     }
 
-        off    = 0;
-        off_uv = 0;
     if (s->mspel) {
         dxy = ((my & 3) << 2) | (mx & 3);
-        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0] + off    , srcY    , s->linesize, v->rnd);
-        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0] + off + 8, srcY + 8, s->linesize, v->rnd);
+        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0]    , srcY    , s->linesize, v->rnd);
+        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0] + 8, srcY + 8, s->linesize, v->rnd);
         srcY += s->linesize * 8;
-        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0] + off + 8 * s->linesize    , srcY    , s->linesize, v->rnd);
-        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0] + off + 8 * s->linesize + 8, srcY + 8, s->linesize, v->rnd);
+        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0] + 8 * s->linesize    , srcY    , s->linesize, v->rnd);
+        v->vc1dsp.put_vc1_mspel_pixels_tab[dxy](s->dest[0] + 8 * s->linesize + 8, srcY + 8, s->linesize, v->rnd);
     } else { // hpel mc - always used for luma
         dxy = (my & 2) | ((mx & 2) >> 1);
         if (!v->rnd)
-            s->hdsp.put_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
+            s->hdsp.put_pixels_tab[0][dxy](s->dest[0], srcY, s->linesize, 16);
         else
-            s->hdsp.put_no_rnd_pixels_tab[0][dxy](s->dest[0] + off, srcY, s->linesize, 16);
+            s->hdsp.put_no_rnd_pixels_tab[0][dxy](s->dest[0], srcY, s->linesize, 16);
     }
 
     if (s->flags & CODEC_FLAG_GRAY) return;
@@ -535,11 +537,11 @@ static void vc1_mc_1mv(VC1Context *v, int dir)
     uvmx = (uvmx & 3) << 1;
     uvmy = (uvmy & 3) << 1;
     if (!v->rnd) {
-        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[1] + off_uv, srcU, s->uvlinesize, 8, uvmx, uvmy);
-        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[2] + off_uv, srcV, s->uvlinesize, 8, uvmx, uvmy);
+        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[1], srcU, s->uvlinesize, 8, uvmx, uvmy);
+        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[2], srcV, s->uvlinesize, 8, uvmx, uvmy);
     } else {
-        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[1] + off_uv, srcU, s->uvlinesize, 8, uvmx, uvmy);
-        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[2] + off_uv, srcV, s->uvlinesize, 8, uvmx, uvmy);
+        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[1], srcU, s->uvlinesize, 8, uvmx, uvmy);
+        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[2], srcV, s->uvlinesize, 8, uvmx, uvmy);
     }
 }
 
@@ -564,6 +566,8 @@ static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir, int avg)
     int off;
     int fieldmv = (v->fcm == ILACE_FRAME) ? v->blk_mv_type[s->block_index[n]] : 0;
     int v_edge_pos = s->v_edge_pos >> v->field_mode;
+    uint8_t (*luty)[256];
+    int use_ic;
 
     if ((!v->field_mode ||
          (v->ref_field_type[dir] == 1 && v->cur_field_type == 1)) &&
@@ -574,18 +578,25 @@ static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir, int avg)
     my = s->mv[dir][n][1];
 
     if (!dir) {
-        if (v->field_mode) {
-            if ((v->cur_field_type != v->ref_field_type[dir]) && v->second_field)
-                srcY = s->current_picture.f.data[0];
-            else
-                srcY = s->last_picture.f.data[0];
-        } else
+        if (v->field_mode && (v->cur_field_type != v->ref_field_type[dir]) && v->second_field) {
+            srcY = s->current_picture.f.data[0];
+            luty = v->curr_luty;
+            use_ic = v->curr_use_ic;
+        } else {
             srcY = s->last_picture.f.data[0];
-    } else
+            luty = v->last_luty;
+            use_ic = v->last_use_ic;
+        }
+    } else {
         srcY = s->next_picture.f.data[0];
+        luty = v->next_luty;
+        use_ic = v->next_use_ic;
+    }
 
-    if(!srcY)
+    if (!srcY) {
+        av_log(v->s.avctx, AV_LOG_ERROR, "Referenced frame missing.\n");
         return;
+    }
 
     if (v->field_mode) {
         if (v->cur_field_type != v->ref_field_type[dir])
@@ -620,7 +631,7 @@ static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir, int avg)
             ty = (chosen_mv[f][0][1] + chosen_mv[f][1][1]) / 2;
             break;
         default:
-            av_assert2(0);
+            av_assert0(0);
         }
         s->current_picture.motion_val[1][s->block_index[0] + v->blocks_off][0] = tx;
         s->current_picture.motion_val[1][s->block_index[0] + v->blocks_off][1] = ty;
@@ -683,13 +694,13 @@ static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir, int avg)
         v_edge_pos--;
     if (fieldmv && (src_y & 1) && src_y < 4)
         src_y--;
-    if (v->rangeredfrm || (v->mv_mode == MV_PMODE_INTENSITY_COMP)
+    if (v->rangeredfrm || use_ic
         || s->h_edge_pos < 13 || v_edge_pos < 23
         || (unsigned)(src_x - s->mspel) > s->h_edge_pos - (mx & 3) - 8 - s->mspel * 2
         || (unsigned)(src_y - (s->mspel << fieldmv)) > v_edge_pos - (my & 3) - ((8 + s->mspel * 2) << fieldmv)) {
         srcY -= s->mspel * (1 + (s->linesize << fieldmv));
         /* check emulate edge stride and offset */
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, srcY, s->linesize,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, s->linesize, srcY, s->linesize,
                                  9 + s->mspel * 2, (9 + s->mspel * 2) << fieldmv,
                                  src_x - s->mspel, src_y - (s->mspel << fieldmv),
                                  s->h_edge_pos, v_edge_pos);
@@ -707,14 +718,15 @@ static void vc1_mc_4mv_luma(VC1Context *v, int n, int dir, int avg)
             }
         }
         /* if we deal with intensity compensation we need to scale source blocks */
-        if (v->mv_mode == MV_PMODE_INTENSITY_COMP) {
+        if (use_ic) {
             int i, j;
             uint8_t *src;
 
             src = srcY;
             for (j = 0; j < 9 + s->mspel * 2; j++) {
+                int f = v->field_mode ? v->ref_field_type[dir] : (((j<<fieldmv)+src_y - (s->mspel << fieldmv)) & 1);
                 for (i = 0; i < 9 + s->mspel * 2; i++)
-                    src[i] = v->luty[src[i]];
+                    src[i] = luty[f][src[i]];
                 src += s->linesize << fieldmv;
             }
         }
@@ -800,8 +812,10 @@ static void vc1_mc_4mv_chroma(VC1Context *v, int dir)
     int k, tx = 0, ty = 0;
     int mvx[4], mvy[4], intra[4], mv_f[4];
     int valid_count;
-    int chroma_ref_type = v->cur_field_type, off = 0;
+    int chroma_ref_type = v->cur_field_type;
     int v_edge_pos = s->v_edge_pos >> v->field_mode;
+    uint8_t (*lutuv)[256];
+    int use_ic;
 
     if (!v->field_mode && !v->s.last_picture.f.data[0])
         return;
@@ -864,25 +878,28 @@ static void vc1_mc_4mv_chroma(VC1Context *v, int dir)
     }
 
     if (!dir) {
-        if (v->field_mode) {
-            if ((v->cur_field_type != chroma_ref_type) && v->cur_field_type) {
-                srcU = s->current_picture.f.data[1];
-                srcV = s->current_picture.f.data[2];
-            } else {
-                srcU = s->last_picture.f.data[1];
-                srcV = s->last_picture.f.data[2];
-            }
+        if (v->field_mode && (v->cur_field_type != chroma_ref_type) && v->second_field) {
+            srcU = s->current_picture.f.data[1];
+            srcV = s->current_picture.f.data[2];
+            lutuv = v->curr_lutuv;
+            use_ic = v->curr_use_ic;
         } else {
             srcU = s->last_picture.f.data[1];
             srcV = s->last_picture.f.data[2];
+            lutuv = v->last_lutuv;
+            use_ic = v->last_use_ic;
         }
     } else {
         srcU = s->next_picture.f.data[1];
         srcV = s->next_picture.f.data[2];
+        lutuv = v->next_lutuv;
+        use_ic = v->next_use_ic;
     }
 
-    if(!srcU)
+    if (!srcU) {
+        av_log(v->s.avctx, AV_LOG_ERROR, "Referenced frame missing.\n");
         return;
+    }
 
     srcU += uvsrc_y * s->uvlinesize + uvsrc_x;
     srcV += uvsrc_y * s->uvlinesize + uvsrc_x;
@@ -892,18 +909,17 @@ static void vc1_mc_4mv_chroma(VC1Context *v, int dir)
             srcU += s->current_picture_ptr->f.linesize[1];
             srcV += s->current_picture_ptr->f.linesize[2];
         }
-        off = 0;
     }
 
-    if (v->rangeredfrm || (v->mv_mode == MV_PMODE_INTENSITY_COMP)
+    if (v->rangeredfrm || use_ic
         || s->h_edge_pos < 18 || v_edge_pos < 18
         || (unsigned)uvsrc_x > (s->h_edge_pos >> 1) - 9
         || (unsigned)uvsrc_y > (v_edge_pos    >> 1) - 9) {
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer     , srcU, s->uvlinesize,
-                                 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, s->uvlinesize, srcU,
+                                 s->uvlinesize, 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
                                  s->h_edge_pos >> 1, v_edge_pos >> 1);
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer + 16, srcV, s->uvlinesize,
-                                 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer + 16, s->uvlinesize, srcV,
+                                 s->uvlinesize, 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
                                  s->h_edge_pos >> 1, v_edge_pos >> 1);
         srcU = s->edge_emu_buffer;
         srcV = s->edge_emu_buffer + 16;
@@ -925,16 +941,17 @@ static void vc1_mc_4mv_chroma(VC1Context *v, int dir)
             }
         }
         /* if we deal with intensity compensation we need to scale source blocks */
-        if (v->mv_mode == MV_PMODE_INTENSITY_COMP) {
+        if (use_ic) {
             int i, j;
             uint8_t *src, *src2;
 
             src  = srcU;
             src2 = srcV;
             for (j = 0; j < 9; j++) {
+                int f = v->field_mode ? chroma_ref_type : ((j + uvsrc_y) & 1);
                 for (i = 0; i < 9; i++) {
-                    src[i]  = v->lutuv[src[i]];
-                    src2[i] = v->lutuv[src2[i]];
+                    src[i]  = lutuv[f][src[i]];
+                    src2[i] = lutuv[f][src2[i]];
                 }
                 src  += s->uvlinesize;
                 src2 += s->uvlinesize;
@@ -946,17 +963,17 @@ static void vc1_mc_4mv_chroma(VC1Context *v, int dir)
     uvmx = (uvmx & 3) << 1;
     uvmy = (uvmy & 3) << 1;
     if (!v->rnd) {
-        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[1] + off, srcU, s->uvlinesize, 8, uvmx, uvmy);
-        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[2] + off, srcV, s->uvlinesize, 8, uvmx, uvmy);
+        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[1], srcU, s->uvlinesize, 8, uvmx, uvmy);
+        h264chroma->put_h264_chroma_pixels_tab[0](s->dest[2], srcV, s->uvlinesize, 8, uvmx, uvmy);
     } else {
-        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[1] + off, srcU, s->uvlinesize, 8, uvmx, uvmy);
-        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[2] + off, srcV, s->uvlinesize, 8, uvmx, uvmy);
+        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[1], srcU, s->uvlinesize, 8, uvmx, uvmy);
+        v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[0](s->dest[2], srcV, s->uvlinesize, 8, uvmx, uvmy);
     }
 }
 
-/** Do motion compensation for 4-MV field chroma macroblock (both U and V)
+/** Do motion compensation for 4-MV interlaced frame chroma macroblock (both U and V)
  */
-static void vc1_mc_4mv_chroma4(VC1Context *v)
+static void vc1_mc_4mv_chroma4(VC1Context *v, int dir, int dir2, int avg)
 {
     MpegEncContext *s = &v->s;
     H264ChromaContext *h264chroma = &v->h264chroma;
@@ -968,16 +985,17 @@ static void vc1_mc_4mv_chroma4(VC1Context *v)
     static const int s_rndtblfield[16] = { 0, 0, 1, 2, 4, 4, 5, 6, 2, 2, 3, 8, 6, 6, 7, 12 };
     int v_dist = fieldmv ? 1 : 4; // vertical offset for lower sub-blocks
     int v_edge_pos = s->v_edge_pos >> 1;
+    int use_ic;
+    uint8_t (*lutuv)[256];
 
-    if (!v->s.last_picture.f.data[0])
-        return;
     if (s->flags & CODEC_FLAG_GRAY)
         return;
 
     for (i = 0; i < 4; i++) {
-        tx = s->mv[0][i][0];
+        int d = i < 2 ? dir: dir2;
+        tx = s->mv[d][i][0];
         uvmx_field[i] = (tx + ((tx & 3) == 3)) >> 1;
-        ty = s->mv[0][i][1];
+        ty = s->mv[d][i][1];
         if (fieldmv)
             uvmy_field[i] = (ty >> 4) * 8 + s_rndtblfield[ty & 0xF];
         else
@@ -991,8 +1009,21 @@ static void vc1_mc_4mv_chroma4(VC1Context *v)
         // FIXME: implement proper pull-back (see vc1cropmv.c, vc1CROPMV_ChromaPullBack())
         uvsrc_x = av_clip(uvsrc_x, -8, s->avctx->coded_width  >> 1);
         uvsrc_y = av_clip(uvsrc_y, -8, s->avctx->coded_height >> 1);
-        srcU = s->last_picture.f.data[1] + uvsrc_y * s->uvlinesize + uvsrc_x;
-        srcV = s->last_picture.f.data[2] + uvsrc_y * s->uvlinesize + uvsrc_x;
+        if (i < 2 ? dir : dir2) {
+            srcU = s->next_picture.f.data[1];
+            srcV = s->next_picture.f.data[2];
+            lutuv  = v->next_lutuv;
+            use_ic = v->next_use_ic;
+        } else {
+            srcU = s->last_picture.f.data[1];
+            srcV = s->last_picture.f.data[2];
+            lutuv  = v->last_lutuv;
+            use_ic = v->last_use_ic;
+        }
+        if (!srcU)
+            return;
+        srcU += uvsrc_y * s->uvlinesize + uvsrc_x;
+        srcV += uvsrc_y * s->uvlinesize + uvsrc_x;
         uvmx_field[i] = (uvmx_field[i] & 3) << 1;
         uvmy_field[i] = (uvmy_field[i] & 3) << 1;
 
@@ -1001,42 +1032,53 @@ static void vc1_mc_4mv_chroma4(VC1Context *v)
 
         if (fieldmv && (uvsrc_y & 1) && uvsrc_y < 2)
             uvsrc_y--;
-        if ((v->mv_mode == MV_PMODE_INTENSITY_COMP)
+        if (use_ic
             || s->h_edge_pos < 10 || v_edge_pos < (5 << fieldmv)
             || (unsigned)uvsrc_x > (s->h_edge_pos >> 1) - 5
             || (unsigned)uvsrc_y > v_edge_pos - (5 << fieldmv)) {
-            s->vdsp.emulated_edge_mc(s->edge_emu_buffer, srcU, s->uvlinesize,
-                                     5, (5 << fieldmv), uvsrc_x, uvsrc_y,
-                                     s->h_edge_pos >> 1, v_edge_pos);
-            s->vdsp.emulated_edge_mc(s->edge_emu_buffer + 16, srcV, s->uvlinesize,
-                                     5, (5 << fieldmv), uvsrc_x, uvsrc_y,
-                                     s->h_edge_pos >> 1, v_edge_pos);
+            s->vdsp.emulated_edge_mc(s->edge_emu_buffer, s->uvlinesize, srcU,
+                                     s->uvlinesize, 5, (5 << fieldmv), uvsrc_x,
+                                     uvsrc_y, s->h_edge_pos >> 1, v_edge_pos);
+            s->vdsp.emulated_edge_mc(s->edge_emu_buffer + 16, s->uvlinesize, srcV,
+                                     s->uvlinesize, 5, (5 << fieldmv), uvsrc_x,
+                                     uvsrc_y, s->h_edge_pos >> 1, v_edge_pos);
             srcU = s->edge_emu_buffer;
             srcV = s->edge_emu_buffer + 16;
 
             /* if we deal with intensity compensation we need to scale source blocks */
-            if (v->mv_mode == MV_PMODE_INTENSITY_COMP) {
+            if (use_ic) {
                 int i, j;
                 uint8_t *src, *src2;
 
                 src  = srcU;
                 src2 = srcV;
                 for (j = 0; j < 5; j++) {
+                    int f = (uvsrc_y + (j << fieldmv)) & 1;
                     for (i = 0; i < 5; i++) {
-                        src[i]  = v->lutuv[src[i]];
-                        src2[i] = v->lutuv[src2[i]];
+                        src[i]  = lutuv[f][src[i]];
+                        src2[i] = lutuv[f][src2[i]];
                     }
-                    src  += s->uvlinesize << 1;
-                    src2 += s->uvlinesize << 1;
+                    src  += s->uvlinesize << fieldmv;
+                    src2 += s->uvlinesize << fieldmv;
                 }
             }
         }
-        if (!v->rnd) {
-            h264chroma->put_h264_chroma_pixels_tab[1](s->dest[1] + off, srcU, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
-            h264chroma->put_h264_chroma_pixels_tab[1](s->dest[2] + off, srcV, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+        if (avg) {
+            if (!v->rnd) {
+                h264chroma->avg_h264_chroma_pixels_tab[1](s->dest[1] + off, srcU, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+                h264chroma->avg_h264_chroma_pixels_tab[1](s->dest[2] + off, srcV, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+            } else {
+                v->vc1dsp.avg_no_rnd_vc1_chroma_pixels_tab[1](s->dest[1] + off, srcU, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+                v->vc1dsp.avg_no_rnd_vc1_chroma_pixels_tab[1](s->dest[2] + off, srcV, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+            }
         } else {
-            v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[1](s->dest[1] + off, srcU, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
-            v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[1](s->dest[2] + off, srcV, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+            if (!v->rnd) {
+                h264chroma->put_h264_chroma_pixels_tab[1](s->dest[1] + off, srcU, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+                h264chroma->put_h264_chroma_pixels_tab[1](s->dest[2] + off, srcV, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+            } else {
+                v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[1](s->dest[1] + off, srcU, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+                v->vc1dsp.put_no_rnd_vc1_chroma_pixels_tab[1](s->dest[2] + off, srcV, s->uvlinesize << fieldmv, 4, uvmx_field[i], uvmy_field[i]);
+            }
         }
     }
 }
@@ -1637,7 +1679,7 @@ static inline void vc1_pred_mv_intfr(VC1Context *v, int n, int dmv_x, int dmv_y,
     MpegEncContext *s = &v->s;
     int xy, wrap, off = 0;
     int A[2], B[2], C[2];
-    int px, py;
+    int px = 0, py = 0;
     int a_valid = 0, b_valid = 0, c_valid = 0;
     int field_a, field_b, field_c; // 0: same, 1: opposit
     int total_valid, num_samefield, num_oppfield;
@@ -1775,8 +1817,7 @@ static inline void vc1_pred_mv_intfr(VC1Context *v, int n, int dmv_x, int dmv_y,
                 else if (b_valid) { px = B[0]; py = B[1]; }
                 else if (c_valid) { px = C[0]; py = C[1]; }
                 else av_assert2(0);
-            } else
-                px = py = 0;
+            }
         }
     } else {
         if (a_valid)
@@ -1815,27 +1856,28 @@ static inline void vc1_pred_mv_intfr(VC1Context *v, int n, int dmv_x, int dmv_y,
                 } else if (!field_b && b_valid) {
                     px = B[0];
                     py = B[1];
-                } else if (c_valid) {
+                } else /*if (c_valid)*/ {
+                    av_assert1(c_valid);
                     px = C[0];
                     py = C[1];
-                } else px = py = 0;
+                } /*else px = py = 0;*/
             } else {
                 if (field_a && a_valid) {
                     px = A[0];
                     py = A[1];
-                } else if (field_b && b_valid) {
+                } else /*if (field_b && b_valid)*/ {
+                    av_assert1(field_b && b_valid);
                     px = B[0];
                     py = B[1];
-                } else if (c_valid) {
+                } /*else if (c_valid) {
                     px = C[0];
                     py = C[1];
-                } else px = py = 0;
+                }*/
             }
         } else if (total_valid == 1) {
             px = (a_valid) ? A[0] : ((b_valid) ? B[0] : C[0]);
             py = (a_valid) ? A[1] : ((b_valid) ? B[1] : C[1]);
-        } else
-            px = py = 0;
+        }
     }
 
     /* store MV using signed modulus of MV range defined in 4.11 */
@@ -1866,6 +1908,7 @@ static void vc1_interp_mc(VC1Context *v)
     int dxy, mx, my, uvmx, uvmy, src_x, src_y, uvsrc_x, uvsrc_y;
     int off, off_uv;
     int v_edge_pos = s->v_edge_pos >> v->field_mode;
+    int use_ic = v->next_use_ic;
 
     if (!v->field_mode && !v->s.next_picture.f.data[0])
         return;
@@ -1920,21 +1963,23 @@ static void vc1_interp_mc(VC1Context *v)
         srcV = s->edge_emu_buffer + 18 * s->linesize;
     }
 
-    if (v->rangeredfrm || s->h_edge_pos < 22 || v_edge_pos < 22
+    if (v->rangeredfrm || s->h_edge_pos < 22 || v_edge_pos < 22 || use_ic
         || (unsigned)(src_x - 1) > s->h_edge_pos - (mx & 3) - 16 - 3
         || (unsigned)(src_y - 1) > v_edge_pos    - (my & 3) - 16 - 3) {
         uint8_t *uvbuf = s->edge_emu_buffer + 19 * s->linesize;
 
         srcY -= s->mspel * (1 + s->linesize);
-        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, srcY, s->linesize,
+        s->vdsp.emulated_edge_mc(s->edge_emu_buffer, s->linesize, srcY, s->linesize,
                                  17 + s->mspel * 2, 17 + s->mspel * 2,
                                  src_x - s->mspel, src_y - s->mspel,
                                  s->h_edge_pos, v_edge_pos);
         srcY = s->edge_emu_buffer;
-        s->vdsp.emulated_edge_mc(uvbuf     , srcU, s->uvlinesize, 8 + 1, 8 + 1,
-                                 uvsrc_x, uvsrc_y, s->h_edge_pos >> 1, v_edge_pos >> 1);
-        s->vdsp.emulated_edge_mc(uvbuf + 16, srcV, s->uvlinesize, 8 + 1, 8 + 1,
-                                 uvsrc_x, uvsrc_y, s->h_edge_pos >> 1, v_edge_pos >> 1);
+        s->vdsp.emulated_edge_mc(uvbuf, s->uvlinesize, srcU, s->uvlinesize,
+                                 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
+                                 s->h_edge_pos >> 1, v_edge_pos >> 1);
+        s->vdsp.emulated_edge_mc(uvbuf + 16, s->uvlinesize, srcV, s->uvlinesize,
+                                 8 + 1, 8 + 1, uvsrc_x, uvsrc_y,
+                                 s->h_edge_pos >> 1, v_edge_pos >> 1);
         srcU = uvbuf;
         srcV = uvbuf + 16;
         /* if we deal with range reduction we need to scale source blocks */
@@ -1959,11 +2004,37 @@ static void vc1_interp_mc(VC1Context *v)
                 src2 += s->uvlinesize;
             }
         }
+
+        if (use_ic) {
+            uint8_t (*luty )[256] = v->next_luty;
+            uint8_t (*lutuv)[256] = v->next_lutuv;
+            int i, j;
+            uint8_t *src, *src2;
+
+            src = srcY;
+            for (j = 0; j < 17 + s->mspel * 2; j++) {
+                int f = v->field_mode ? v->ref_field_type[1] : ((j+src_y - s->mspel) & 1);
+                for (i = 0; i < 17 + s->mspel * 2; i++)
+                    src[i] = luty[f][src[i]];
+                src += s->linesize;
+            }
+            src  = srcU;
+            src2 = srcV;
+            for (j = 0; j < 9; j++) {
+                int f = v->field_mode ? v->ref_field_type[1] : ((j+uvsrc_y) & 1);
+                for (i = 0; i < 9; i++) {
+                    src[i]  = lutuv[f][src[i]];
+                    src2[i] = lutuv[f][src2[i]];
+                }
+                src  += s->uvlinesize;
+                src2 += s->uvlinesize;
+            }
+        }
         srcY += s->mspel * (1 + s->linesize);
     }
 
-        off    = 0;
-        off_uv = 0;
+    off    = 0;
+    off_uv = 0;
 
     if (s->mspel) {
         dxy = ((my & 3) << 2) | (mx & 3);
@@ -2018,30 +2089,18 @@ static av_always_inline int scale_mv(int value, int bfrac, int inv, int qs)
 static inline void vc1_b_mc(VC1Context *v, int dmv_x[2], int dmv_y[2],
                             int direct, int mode)
 {
-    if (v->use_ic) {
-        v->mv_mode2 = v->mv_mode;
-        v->mv_mode  = MV_PMODE_INTENSITY_COMP;
-    }
     if (direct) {
         vc1_mc_1mv(v, 0);
         vc1_interp_mc(v);
-        if (v->use_ic)
-            v->mv_mode = v->mv_mode2;
         return;
     }
     if (mode == BMV_TYPE_INTERPOLATED) {
         vc1_mc_1mv(v, 0);
         vc1_interp_mc(v);
-        if (v->use_ic)
-            v->mv_mode = v->mv_mode2;
         return;
     }
 
-    if (v->use_ic && (mode == BMV_TYPE_BACKWARD))
-        v->mv_mode = v->mv_mode2;
     vc1_mc_1mv(v, (mode == BMV_TYPE_BACKWARD));
-    if (v->use_ic)
-        v->mv_mode = v->mv_mode2;
 }
 
 static inline void vc1_pred_b_mv(VC1Context *v, int dmv_x[2], int dmv_y[2],
@@ -3841,7 +3900,7 @@ static int vc1_decode_p_mb_intfr(VC1Context *v)
                         vc1_pred_mv_intfr(v, i, dmv_x, dmv_y, 0, v->range_x, v->range_y, v->mb_type[0], 0);
                         vc1_mc_4mv_luma(v, i, 0, 0);
                     } else if (i == 4) {
-                        vc1_mc_4mv_chroma4(v);
+                        vc1_mc_4mv_chroma4(v, 0, 0, 0);
                     }
                 }
             } else if (twomv) {
@@ -3860,7 +3919,7 @@ static int vc1_decode_p_mb_intfr(VC1Context *v)
                 vc1_pred_mv_intfr(v, 2, dmv_x, dmv_y, 2, v->range_x, v->range_y, v->mb_type[0], 0);
                 vc1_mc_4mv_luma(v, 2, 0, 0);
                 vc1_mc_4mv_luma(v, 3, 0, 0);
-                vc1_mc_4mv_chroma4(v);
+                vc1_mc_4mv_chroma4(v, 0, 0, 0);
             } else {
                 mvbp = ff_vc1_mbmode_intfrp[v->fourmvswitch][idx_mbmode][2];
                 dmv_x = dmv_y = 0;
@@ -4202,7 +4261,7 @@ static void vc1_decode_b_mb_intfi(VC1Context *v)
     int fwd;
     int dmv_x[2], dmv_y[2], pred_flag[2];
     int bmvtype = BMV_TYPE_BACKWARD;
-    int idx_mbmode, interpmvp;
+    int idx_mbmode;
 
     mquant      = v->pq; /* Lossy initialization */
     s->mb_intra = 0;
@@ -4255,6 +4314,7 @@ static void vc1_decode_b_mb_intfi(VC1Context *v)
         else
             fwd = v->forward_mb_plane[mb_pos];
         if (idx_mbmode <= 5) { // 1-MV
+            int interpmvp = 0;
             dmv_x[0]     = dmv_x[1] = dmv_y[0] = dmv_y[1] = 0;
             pred_flag[0] = pred_flag[1] = 0;
             if (fwd)
@@ -4277,7 +4337,7 @@ static void vc1_decode_b_mb_intfi(VC1Context *v)
             if (bmvtype != BMV_TYPE_DIRECT && idx_mbmode & 1) {
                 get_mvdata_interlaced(v, &dmv_x[bmvtype == BMV_TYPE_BACKWARD], &dmv_y[bmvtype == BMV_TYPE_BACKWARD], &pred_flag[bmvtype == BMV_TYPE_BACKWARD]);
             }
-            if (bmvtype == BMV_TYPE_INTERPOLATED && interpmvp) {
+            if (interpmvp) {
                 get_mvdata_interlaced(v, &dmv_x[1], &dmv_y[1], &pred_flag[1]);
             }
             if (bmvtype == BMV_TYPE_DIRECT) {
@@ -4370,8 +4430,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
 
     if (!skipped) {
         idx_mbmode = get_vlc2(gb, v->mbmode_vlc->table, VC1_INTFR_NON4MV_MBMODE_VLC_BITS, 2);
-        if (ff_vc1_mbmode_intfrp[0][idx_mbmode][0] == MV_PMODE_INTFR_2MV_FIELD)
-        {
+        if (ff_vc1_mbmode_intfrp[0][idx_mbmode][0] == MV_PMODE_INTFR_2MV_FIELD) {
             twomv = 1;
             v->blk_mv_type[s->block_index[0]] = 1;
             v->blk_mv_type[s->block_index[1]] = 1;
@@ -4402,7 +4461,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
             s->mv[1][2][0] = s->current_picture.motion_val[1][s->block_index[2]][0] = scale_mv(s->next_picture.motion_val[1][s->block_index[2]][0], v->bfraction, 1, s->quarter_sample);
             s->mv[1][2][1] = s->current_picture.motion_val[1][s->block_index[2]][1] = scale_mv(s->next_picture.motion_val[1][s->block_index[2]][1], v->bfraction, 1, s->quarter_sample);
 
-            for (i = 1; i < 4; i+=2) {
+            for (i = 1; i < 4; i += 2) {
                 s->mv[0][i][0] = s->current_picture.motion_val[0][s->block_index[i]][0] = s->mv[0][i-1][0];
                 s->mv[0][i][1] = s->current_picture.motion_val[0][s->block_index[i]][1] = s->mv[0][i-1][1];
                 s->mv[1][i][0] = s->current_picture.motion_val[1][s->block_index[i]][0] = s->mv[1][i-1][0];
@@ -4425,7 +4484,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
             s->mv[1][i][0] = s->current_picture.motion_val[1][s->block_index[i]][0] = 0;
             s->mv[1][i][1] = s->current_picture.motion_val[1][s->block_index[i]][1] = 0;
         }
-        s->current_picture.mb_type[mb_pos]                     = MB_TYPE_INTRA;
+        s->current_picture.mb_type[mb_pos] = MB_TYPE_INTRA;
         s->mb_intra = v->is_intra[s->mb_x] = 1;
         for (i = 0; i < 6; i++)
             v->mb_type[0][s->block_index[i]] = 1;
@@ -4453,7 +4512,8 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
 
             vc1_decode_intra_block(v, s->block[i], i, val, mquant,
                                    (i & 4) ? v->codingset2 : v->codingset);
-            if ((i>3) && (s->flags & CODEC_FLAG_GRAY)) continue;
+            if (i > 3 && (s->flags & CODEC_FLAG_GRAY))
+                continue;
             v->vc1dsp.vc1_inv_trans_8x8(s->block[i]);
             if (i < 4) {
                 stride_y = s->linesize << fieldtx;
@@ -4492,8 +4552,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
             if (!direct) {
                 if (bmvtype == BMV_TYPE_INTERPOLATED & twomv) {
                     v->fourmvbp = get_vlc2(gb, v->fourmvbp_vlc->table, VC1_4MV_BLOCK_PATTERN_VLC_BITS, 1);
-                }
-                else if (bmvtype == BMV_TYPE_INTERPOLATED | twomv) {
+                } else if (bmvtype == BMV_TYPE_INTERPOLATED | twomv) {
                     v->twomvbp = get_vlc2(gb, v->twomvbp_vlc->table, VC1_2MV_BLOCK_PATTERN_VLC_BITS, 1);
                 }
             }
@@ -4509,7 +4568,8 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
                         vc1_mc_4mv_luma(v, i, 0, 0);
                         vc1_mc_4mv_luma(v, i, 1, 1);
                     }
-                    vc1_mc_4mv_chroma4(v);
+                    vc1_mc_4mv_chroma4(v, 0, 0, 0);
+                    vc1_mc_4mv_chroma4(v, 1, 1, 1);
                 } else {
                     vc1_mc_1mv(v, 0);
                     vc1_interp_mc(v);
@@ -4520,30 +4580,28 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
                     dir = i==1 || i==3;
                     dmv_x = dmv_y = 0;
                     val = ((mvbp >> (3 - i)) & 1);
-                    if (val) {
+                    if (val)
                         get_mvdata_interlaced(v, &dmv_x, &dmv_y, 0);
-                    }
                     j = i > 1 ? 2 : 0;
                     vc1_pred_mv_intfr(v, j, dmv_x, dmv_y, 2, v->range_x, v->range_y, v->mb_type[0], dir);
                     vc1_mc_4mv_luma(v, j, dir, dir);
                     vc1_mc_4mv_luma(v, j+1, dir, dir);
                 }
 
-                vc1_mc_4mv_chroma4(v);
+                vc1_mc_4mv_chroma4(v, 0, 0, 0);
+                vc1_mc_4mv_chroma4(v, 1, 1, 1);
             } else if (bmvtype == BMV_TYPE_INTERPOLATED) {
                 mvbp = v->twomvbp;
                 dmv_x = dmv_y = 0;
-                if (mvbp & 2) {
+                if (mvbp & 2)
                     get_mvdata_interlaced(v, &dmv_x, &dmv_y, 0);
-                }
 
                 vc1_pred_mv_intfr(v, 0, dmv_x, dmv_y, 1, v->range_x, v->range_y, v->mb_type[0], 0);
                 vc1_mc_1mv(v, 0);
 
                 dmv_x = dmv_y = 0;
-                if (mvbp & 1) {
+                if (mvbp & 1)
                     get_mvdata_interlaced(v, &dmv_x, &dmv_y, 0);
-                }
 
                 vc1_pred_mv_intfr(v, 0, dmv_x, dmv_y, 1, v->range_x, v->range_y, v->mb_type[0], 1);
                 vc1_interp_mc(v);
@@ -4554,19 +4612,17 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
                     dir2 = !dir;
                 mvbp = v->twomvbp;
                 dmv_x = dmv_y = 0;
-                if (mvbp & 2) {
+                if (mvbp & 2)
                     get_mvdata_interlaced(v, &dmv_x, &dmv_y, 0);
-                }
                 vc1_pred_mv_intfr(v, 0, dmv_x, dmv_y, 2, v->range_x, v->range_y, v->mb_type[0], dir);
 
                 dmv_x = dmv_y = 0;
-                if (mvbp & 1) {
+                if (mvbp & 1)
                     get_mvdata_interlaced(v, &dmv_x, &dmv_y, 0);
-                }
                 vc1_pred_mv_intfr(v, 2, dmv_x, dmv_y, 2, v->range_x, v->range_y, v->mb_type[0], dir2);
 
                 if (mvsw) {
-                    for (i = 0; i<2; i++) {
+                    for (i = 0; i < 2; i++) {
                         s->mv[dir][i+2][0] = s->mv[dir][i][0] = s->current_picture.motion_val[dir][s->block_index[i+2]][0] = s->current_picture.motion_val[dir][s->block_index[i]][0];
                         s->mv[dir][i+2][1] = s->mv[dir][i][1] = s->current_picture.motion_val[dir][s->block_index[i+2]][1] = s->current_picture.motion_val[dir][s->block_index[i]][1];
                         s->mv[dir2][i+2][0] = s->mv[dir2][i][0] = s->current_picture.motion_val[dir2][s->block_index[i]][0] = s->current_picture.motion_val[dir2][s->block_index[i+2]][0];
@@ -4581,15 +4637,14 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
                 vc1_mc_4mv_luma(v, 1, dir, 0);
                 vc1_mc_4mv_luma(v, 2, dir2, 0);
                 vc1_mc_4mv_luma(v, 3, dir2, 0);
-                vc1_mc_4mv_chroma4(v);
+                vc1_mc_4mv_chroma4(v, dir, dir2, 0);
             } else {
                 dir = bmvtype == BMV_TYPE_BACKWARD;
 
                 mvbp = ff_vc1_mbmode_intfrp[0][idx_mbmode][2];
                 dmv_x = dmv_y = 0;
-                if (mvbp) {
+                if (mvbp)
                     get_mvdata_interlaced(v, &dmv_x, &dmv_y, 0);
-                }
 
                 vc1_pred_mv_intfr(v, 0, dmv_x, dmv_y, 1, v->range_x, v->range_y, v->mb_type[0], dir);
                 v->blk_mv_type[s->block_index[0]] = 1;
@@ -4597,7 +4652,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
                 v->blk_mv_type[s->block_index[2]] = 1;
                 v->blk_mv_type[s->block_index[3]] = 1;
                 vc1_pred_mv_intfr(v, 0, 0, 0, 2, v->range_x, v->range_y, 0, !dir);
-                for (i = 0; i<2; i++) {
+                for (i = 0; i < 2; i++) {
                     s->mv[!dir][i+2][0] = s->mv[!dir][i][0] = s->current_picture.motion_val[!dir][s->block_index[i+2]][0] = s->current_picture.motion_val[!dir][s->block_index[i]][0];
                     s->mv[!dir][i+2][1] = s->mv[!dir][i][1] = s->current_picture.motion_val[!dir][s->block_index[i+2]][1] = s->current_picture.motion_val[!dir][s->block_index[i]][1];
                 }
@@ -4653,7 +4708,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
                         int dir2 = dir;
                         if (mvsw)
                             dir2 = !dir;
-                        for (i = 0; i<2; i++) {
+                        for (i = 0; i < 2; i++) {
                             s->mv[dir][i+2][0] = s->mv[dir][i][0] = s->current_picture.motion_val[dir][s->block_index[i+2]][0] = s->current_picture.motion_val[dir][s->block_index[i]][0];
                             s->mv[dir][i+2][1] = s->mv[dir][i][1] = s->current_picture.motion_val[dir][s->block_index[i+2]][1] = s->current_picture.motion_val[dir][s->block_index[i]][1];
                             s->mv[dir2][i+2][0] = s->mv[dir2][i][0] = s->current_picture.motion_val[dir2][s->block_index[i]][0] = s->current_picture.motion_val[dir2][s->block_index[i+2]][0];
@@ -4665,7 +4720,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
                         v->blk_mv_type[s->block_index[2]] = 1;
                         v->blk_mv_type[s->block_index[3]] = 1;
                         vc1_pred_mv_intfr(v, 0, 0, 0, 2, v->range_x, v->range_y, 0, !dir);
-                        for (i = 0; i<2; i++) {
+                        for (i = 0; i < 2; i++) {
                             s->mv[!dir][i+2][0] = s->mv[!dir][i][0] = s->current_picture.motion_val[!dir][s->block_index[i+2]][0] = s->current_picture.motion_val[!dir][s->block_index[i]][0];
                             s->mv[!dir][i+2][1] = s->mv[!dir][i][1] = s->current_picture.motion_val[!dir][s->block_index[i+2]][1] = s->current_picture.motion_val[!dir][s->block_index[i]][1];
                         }
@@ -4680,7 +4735,7 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
         }
     }
     if (s->mb_x == s->mb_width - 1)
-        memmove(v->is_intra_base, v->is_intra, sizeof(v->is_intra_base[0])*s->mb_stride);
+        memmove(v->is_intra_base, v->is_intra, sizeof(v->is_intra_base[0]) * s->mb_stride);
     v->cbp[s->mb_x]      = block_cbp;
     v->ttblk[s->mb_x]    = block_tt;
     return 0;
@@ -4992,7 +5047,8 @@ static void vc1_decode_p_blocks(VC1Context *v)
         break;
     }
 
-    apply_loop_filter   = s->loop_filter && !(s->avctx->skip_loop_filter >= AVDISCARD_NONKEY);
+    apply_loop_filter   = s->loop_filter && !(s->avctx->skip_loop_filter >= AVDISCARD_NONKEY) &&
+                          v->fcm == PROGRESSIVE;
     s->first_slice_line = 1;
     memset(v->cbp_base, 0, sizeof(v->cbp_base[0])*2*s->mb_stride);
     for (s->mb_y = s->start_mb_y; s->mb_y < s->end_mb_y; s->mb_y++) {
@@ -5006,7 +5062,7 @@ static void vc1_decode_p_blocks(VC1Context *v)
             else if (v->fcm == ILACE_FRAME)
                 vc1_decode_p_mb_intfr(v);
             else vc1_decode_p_mb(v);
-            if (s->mb_y != s->start_mb_y && apply_loop_filter && v->fcm == PROGRESSIVE)
+            if (s->mb_y != s->start_mb_y && apply_loop_filter)
                 vc1_apply_p_loop_filter(v);
             if (get_bits_count(&s->gb) > v->bits || get_bits_count(&s->gb) < 0) {
                 // TODO: may need modification to handle slice coding
@@ -5023,7 +5079,7 @@ static void vc1_decode_p_blocks(VC1Context *v)
         if (s->mb_y != s->start_mb_y) ff_mpeg_draw_horiz_band(s, (s->mb_y - 1) * 16, 16);
         s->first_slice_line = 0;
     }
-    if (apply_loop_filter && v->fcm == PROGRESSIVE) {
+    if (apply_loop_filter) {
         s->mb_x = 0;
         init_block_index(v);
         for (; s->mb_x < s->mb_width; s->mb_x++) {
@@ -5104,17 +5160,18 @@ static void vc1_decode_skip_blocks(VC1Context *v)
 {
     MpegEncContext *s = &v->s;
 
+    if (!v->s.last_picture.f.data[0])
+        return;
+
     ff_er_add_slice(&s->er, 0, s->start_mb_y, s->mb_width - 1, s->end_mb_y - 1, ER_MB_END);
     s->first_slice_line = 1;
     for (s->mb_y = s->start_mb_y; s->mb_y < s->end_mb_y; s->mb_y++) {
         s->mb_x = 0;
         init_block_index(v);
         ff_update_block_index(s);
-        if (s->last_picture.f.data[0]) {
-            memcpy(s->dest[0], s->last_picture.f.data[0] + s->mb_y * 16 * s->linesize,   s->linesize   * 16);
-            memcpy(s->dest[1], s->last_picture.f.data[1] + s->mb_y *  8 * s->uvlinesize, s->uvlinesize *  8);
-            memcpy(s->dest[2], s->last_picture.f.data[2] + s->mb_y *  8 * s->uvlinesize, s->uvlinesize *  8);
-        }
+        memcpy(s->dest[0], s->last_picture.f.data[0] + s->mb_y * 16 * s->linesize,   s->linesize   * 16);
+        memcpy(s->dest[1], s->last_picture.f.data[1] + s->mb_y *  8 * s->uvlinesize, s->uvlinesize *  8);
+        memcpy(s->dest[2], s->last_picture.f.data[2] + s->mb_y *  8 * s->uvlinesize, s->uvlinesize *  8);
         ff_mpeg_draw_horiz_band(s, s->mb_y * 16, 16);
         s->first_slice_line = 0;
     }
@@ -5466,9 +5523,6 @@ av_cold int ff_vc1_decode_init_alloc_tables(VC1Context *v)
     v->mv_f_base        = av_mallocz(2 * (s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride * (s->mb_height + 1) * 2));
     v->mv_f[0]          = v->mv_f_base + s->b8_stride + 1;
     v->mv_f[1]          = v->mv_f[0] + (s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride * (s->mb_height + 1) * 2);
-    v->mv_f_last_base   = av_mallocz(2 * (s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride * (s->mb_height + 1) * 2));
-    v->mv_f_last[0]     = v->mv_f_last_base + s->b8_stride + 1;
-    v->mv_f_last[1]     = v->mv_f_last[0] + (s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride * (s->mb_height + 1) * 2);
     v->mv_f_next_base   = av_mallocz(2 * (s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride * (s->mb_height + 1) * 2));
     v->mv_f_next[0]     = v->mv_f_next_base + s->b8_stride + 1;
     v->mv_f_next[1]     = v->mv_f_next[0] + (s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride * (s->mb_height + 1) * 2);
@@ -5485,13 +5539,25 @@ av_cold int ff_vc1_decode_init_alloc_tables(VC1Context *v)
 
     if (s->avctx->codec_id == AV_CODEC_ID_WMV3IMAGE || s->avctx->codec_id == AV_CODEC_ID_VC1IMAGE) {
         for (i = 0; i < 4; i++)
-            if (!(v->sr_rows[i >> 1][i & 1] = av_malloc(v->output_width))) return -1;
+            if (!(v->sr_rows[i >> 1][i & 1] = av_malloc(v->output_width)))
+                return AVERROR(ENOMEM);
     }
 
     if (!v->mv_type_mb_plane || !v->direct_mb_plane || !v->acpred_plane || !v->over_flags_plane ||
         !v->block || !v->cbp_base || !v->ttblk_base || !v->is_intra_base || !v->luma_mv_base ||
-        !v->mb_type_base)
-            return -1;
+        !v->mb_type_base) {
+        av_freep(&v->mv_type_mb_plane);
+        av_freep(&v->direct_mb_plane);
+        av_freep(&v->acpred_plane);
+        av_freep(&v->over_flags_plane);
+        av_freep(&v->block);
+        av_freep(&v->cbp_base);
+        av_freep(&v->ttblk_base);
+        av_freep(&v->is_intra_base);
+        av_freep(&v->luma_mv_base);
+        av_freep(&v->mb_type_base);
+        return AVERROR(ENOMEM);
+    }
 
     return 0;
 }
@@ -5520,6 +5586,7 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
     VC1Context *v = avctx->priv_data;
     MpegEncContext *s = &v->s;
     GetBitContext gb;
+    int ret;
 
     /* save the container output size for WMImage */
     v->output_width  = avctx->width;
@@ -5536,13 +5603,13 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
     avctx->flags |= CODEC_FLAG_EMU_EDGE;
     v->s.flags   |= CODEC_FLAG_EMU_EDGE;
 
-    if (ff_vc1_init_common(v) < 0)
-        return -1;
+    if ((ret = ff_vc1_init_common(v)) < 0)
+        return ret;
     // ensure static VLC tables are initialized
-    if (ff_msmpeg4_decode_init(avctx) < 0)
-        return -1;
-    if (ff_vc1_decode_init_alloc_tables(v) < 0)
-        return -1;
+    if ((ret = ff_msmpeg4_decode_init(avctx)) < 0)
+        return ret;
+    if ((ret = ff_vc1_decode_init_alloc_tables(v)) < 0)
+        return ret;
     // Hack to ensure the above functions will be called
     // again once we know all necessary settings.
     // That this is necessary might indicate a bug.
@@ -5561,8 +5628,8 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
 
         init_get_bits(&gb, avctx->extradata, avctx->extradata_size*8);
 
-        if (ff_vc1_decode_sequence_header(avctx, v, &gb) < 0)
-          return -1;
+        if ((ret = ff_vc1_decode_sequence_header(avctx, v, &gb)) < 0)
+          return ret;
 
         count = avctx->extradata_size*8 - get_bits_count(&gb);
         if (count > 0) {
@@ -5596,16 +5663,16 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
             init_get_bits(&gb, buf2, buf2_size * 8);
             switch (AV_RB32(start)) {
             case VC1_CODE_SEQHDR:
-                if (ff_vc1_decode_sequence_header(avctx, v, &gb) < 0) {
+                if ((ret = ff_vc1_decode_sequence_header(avctx, v, &gb)) < 0) {
                     av_free(buf2);
-                    return -1;
+                    return ret;
                 }
                 seq_initialized = 1;
                 break;
             case VC1_CODE_ENTRYPOINT:
-                if (ff_vc1_decode_entry_point(avctx, v, &gb) < 0) {
+                if ((ret = ff_vc1_decode_entry_point(avctx, v, &gb)) < 0) {
                     av_free(buf2);
-                    return -1;
+                    return ret;
                 }
                 ep_initialized = 1;
                 break;
@@ -5681,7 +5748,6 @@ av_cold int ff_vc1_decode_end(AVCodecContext *avctx)
     av_freep(&v->mb_type_base);
     av_freep(&v->blk_mv_type_base);
     av_freep(&v->mv_f_base);
-    av_freep(&v->mv_f_last_base);
     av_freep(&v->mv_f_next_base);
     av_freep(&v->block);
     av_freep(&v->cbp_base);
@@ -5743,6 +5809,8 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
     if (avctx->codec_id == AV_CODEC_ID_VC1 || avctx->codec_id == AV_CODEC_ID_VC1IMAGE) {
         int buf_size2 = 0;
         buf2 = av_mallocz(buf_size + FF_INPUT_BUFFER_PADDING_SIZE);
+        if (!buf2)
+            return AVERROR(ENOMEM);
 
         if (IS_MARKER(AV_RB32(buf))) { /* frame starts with marker and needs to be parsed */
             const uint8_t *start, *end, *next;
@@ -5866,8 +5934,12 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
     }
 
     if (!s->context_initialized) {
-        if (ff_msmpeg4_decode_init(avctx) < 0 || ff_vc1_decode_init_alloc_tables(v) < 0)
+        if (ff_msmpeg4_decode_init(avctx) < 0)
             goto err;
+        if (ff_vc1_decode_init_alloc_tables(v) < 0) {
+            ff_MPV_common_end(s);
+            goto err;
+        }
 
         s->low_delay = !avctx->has_b_frames || v->res_sprite;
 
@@ -5960,9 +6032,14 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
     s->me.qpel_avg = s->dsp.avg_qpel_pixels_tab;
 
     if ((CONFIG_VC1_VDPAU_DECODER)
-        &&s->avctx->codec->capabilities&CODEC_CAP_HWACCEL_VDPAU)
-        ff_vdpau_vc1_decode_picture(s, buf_start, (buf + buf_size) - buf_start);
-    else if (avctx->hwaccel) {
+        &&s->avctx->codec->capabilities&CODEC_CAP_HWACCEL_VDPAU) {
+        if (v->field_mode && buf_start_second_field) {
+            ff_vdpau_vc1_decode_picture(s, buf_start, buf_start_second_field - buf_start);
+            ff_vdpau_vc1_decode_picture(s, buf_start_second_field, (buf + buf_size) - buf_start_second_field);
+        } else {
+            ff_vdpau_vc1_decode_picture(s, buf_start, (buf + buf_size) - buf_start);
+        }
+    } else if (avctx->hwaccel) {
         if (v->field_mode && buf_start_second_field) {
             // decode first field
             s->picture_structure = PICT_BOTTOM_FIELD - v->tff;
@@ -6002,28 +6079,21 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
     } else {
         int header_ret = 0;
 
-
         ff_mpeg_er_frame_start(s);
 
         v->bits = buf_size * 8;
         v->end_mb_x = s->mb_width;
         if (v->field_mode) {
-            uint8_t *tmp[2];
             s->current_picture.f.linesize[0] <<= 1;
             s->current_picture.f.linesize[1] <<= 1;
             s->current_picture.f.linesize[2] <<= 1;
             s->linesize                      <<= 1;
             s->uvlinesize                    <<= 1;
-            tmp[0]          = v->mv_f_last[0];
-            tmp[1]          = v->mv_f_last[1];
-            v->mv_f_last[0] = v->mv_f_next[0];
-            v->mv_f_last[1] = v->mv_f_next[1];
-            v->mv_f_next[0] = v->mv_f[0];
-            v->mv_f_next[1] = v->mv_f[1];
-            v->mv_f[0] = tmp[0];
-            v->mv_f[1] = tmp[1];
         }
         mb_height = s->mb_height >> v->field_mode;
+
+        av_assert0 (mb_height > 0);
+
         for (i = 0; i <= n_slices; i++) {
             if (i > 0 &&  slices[i - 1].mby_start >= mb_height) {
                 if (v->field_mode <= 0) {
@@ -6045,12 +6115,16 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
                 if (v->field_mode && i == n_slices1 + 2) {
                     if ((header_ret = ff_vc1_parse_frame_header_adv(v, &s->gb)) < 0) {
                         av_log(v->s.avctx, AV_LOG_ERROR, "Field header damaged\n");
+                        if (avctx->err_recognition & AV_EF_EXPLODE)
+                            goto err;
                         continue;
                     }
                 } else if (get_bits1(&s->gb)) {
                     v->pic_header_flag = 1;
                     if ((header_ret = ff_vc1_parse_frame_header_adv(v, &s->gb)) < 0) {
                         av_log(v->s.avctx, AV_LOG_ERROR, "Slice header damaged\n");
+                        if (avctx->err_recognition & AV_EF_EXPLODE)
+                            goto err;
                         continue;
                     }
                 }
@@ -6081,15 +6155,15 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
         }
         if (v->field_mode) {
             v->second_field = 0;
-            if (s->pict_type == AV_PICTURE_TYPE_B) {
-                memcpy(v->mv_f_base, v->mv_f_next_base,
-                       2 * (s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride * (s->mb_height + 1) * 2));
-            }
             s->current_picture.f.linesize[0] >>= 1;
             s->current_picture.f.linesize[1] >>= 1;
             s->current_picture.f.linesize[2] >>= 1;
             s->linesize                      >>= 1;
             s->uvlinesize                    >>= 1;
+            if (v->s.pict_type != AV_PICTURE_TYPE_BI && v->s.pict_type != AV_PICTURE_TYPE_B) {
+                FFSWAP(uint8_t *, v->mv_f_next[0], v->mv_f[0]);
+                FFSWAP(uint8_t *, v->mv_f_next[1], v->mv_f[1]);
+            }
         }
         av_dlog(s->avctx, "Consumed %i/%i bits\n",
                 get_bits_count(&s->gb), s->gb.size_in_bits);
@@ -6097,7 +6171,7 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
 //      return -1;
         if(s->er.error_occurred && s->pict_type == AV_PICTURE_TYPE_B)
             goto err;
-        if(!v->field_mode)
+        if (!v->field_mode)
             ff_er_frame_end(&s->er);
     }
 
@@ -6171,6 +6245,7 @@ static const enum AVPixelFormat vc1_hwaccel_pixfmt_list_420[] = {
 
 AVCodec ff_vc1_decoder = {
     .name           = "vc1",
+    .long_name      = NULL_IF_CONFIG_SMALL("SMPTE VC-1"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VC1,
     .priv_data_size = sizeof(VC1Context),
@@ -6179,7 +6254,6 @@ AVCodec ff_vc1_decoder = {
     .decode         = vc1_decode_frame,
     .flush          = ff_mpeg_flush,
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY,
-    .long_name      = NULL_IF_CONFIG_SMALL("SMPTE VC-1"),
     .pix_fmts       = vc1_hwaccel_pixfmt_list_420,
     .profiles       = NULL_IF_CONFIG_SMALL(profiles)
 };
@@ -6187,6 +6261,7 @@ AVCodec ff_vc1_decoder = {
 #if CONFIG_WMV3_DECODER
 AVCodec ff_wmv3_decoder = {
     .name           = "wmv3",
+    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_WMV3,
     .priv_data_size = sizeof(VC1Context),
@@ -6195,7 +6270,6 @@ AVCodec ff_wmv3_decoder = {
     .decode         = vc1_decode_frame,
     .flush          = ff_mpeg_flush,
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY,
-    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9"),
     .pix_fmts       = vc1_hwaccel_pixfmt_list_420,
     .profiles       = NULL_IF_CONFIG_SMALL(profiles)
 };
@@ -6204,6 +6278,7 @@ AVCodec ff_wmv3_decoder = {
 #if CONFIG_WMV3_VDPAU_DECODER
 AVCodec ff_wmv3_vdpau_decoder = {
     .name           = "wmv3_vdpau",
+    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9 VDPAU"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_WMV3,
     .priv_data_size = sizeof(VC1Context),
@@ -6211,7 +6286,6 @@ AVCodec ff_wmv3_vdpau_decoder = {
     .close          = ff_vc1_decode_end,
     .decode         = vc1_decode_frame,
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY | CODEC_CAP_HWACCEL_VDPAU,
-    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9 VDPAU"),
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_VDPAU_WMV3, AV_PIX_FMT_NONE },
     .profiles       = NULL_IF_CONFIG_SMALL(profiles)
 };
@@ -6220,6 +6294,7 @@ AVCodec ff_wmv3_vdpau_decoder = {
 #if CONFIG_VC1_VDPAU_DECODER
 AVCodec ff_vc1_vdpau_decoder = {
     .name           = "vc1_vdpau",
+    .long_name      = NULL_IF_CONFIG_SMALL("SMPTE VC-1 VDPAU"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VC1,
     .priv_data_size = sizeof(VC1Context),
@@ -6227,7 +6302,6 @@ AVCodec ff_vc1_vdpau_decoder = {
     .close          = ff_vc1_decode_end,
     .decode         = vc1_decode_frame,
     .capabilities   = CODEC_CAP_DR1 | CODEC_CAP_DELAY | CODEC_CAP_HWACCEL_VDPAU,
-    .long_name      = NULL_IF_CONFIG_SMALL("SMPTE VC-1 VDPAU"),
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_VDPAU_VC1, AV_PIX_FMT_NONE },
     .profiles       = NULL_IF_CONFIG_SMALL(profiles)
 };
@@ -6236,6 +6310,7 @@ AVCodec ff_vc1_vdpau_decoder = {
 #if CONFIG_WMV3IMAGE_DECODER
 AVCodec ff_wmv3image_decoder = {
     .name           = "wmv3image",
+    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9 Image"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_WMV3IMAGE,
     .priv_data_size = sizeof(VC1Context),
@@ -6244,7 +6319,6 @@ AVCodec ff_wmv3image_decoder = {
     .decode         = vc1_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
     .flush          = vc1_sprite_flush,
-    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9 Image"),
     .pix_fmts       = ff_pixfmt_list_420
 };
 #endif
@@ -6252,6 +6326,7 @@ AVCodec ff_wmv3image_decoder = {
 #if CONFIG_VC1IMAGE_DECODER
 AVCodec ff_vc1image_decoder = {
     .name           = "vc1image",
+    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9 Image v2"),
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VC1IMAGE,
     .priv_data_size = sizeof(VC1Context),
@@ -6260,7 +6335,6 @@ AVCodec ff_vc1image_decoder = {
     .decode         = vc1_decode_frame,
     .capabilities   = CODEC_CAP_DR1,
     .flush          = vc1_sprite_flush,
-    .long_name      = NULL_IF_CONFIG_SMALL("Windows Media Video 9 Image v2"),
     .pix_fmts       = ff_pixfmt_list_420
 };
 #endif
