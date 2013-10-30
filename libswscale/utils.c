@@ -821,13 +821,6 @@ static av_cold int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
 }
 #endif /* HAVE_MMXEXT_INLINE */
 
-static void getSubSampleFactors(int *h, int *v, enum AVPixelFormat format)
-{
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(format);
-    *h = desc->log2_chroma_w;
-    *v = desc->log2_chroma_h;
-}
-
 static void fill_rgb2yuv_table(SwsContext *c, const int table[4], int dstRange)
 {
     int64_t W, V, Z, Cy, Cu, Cv;
@@ -1199,8 +1192,8 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
                   (dstFilter->lumH && dstFilter->lumH->length > 1) ||
                   (dstFilter->chrH && dstFilter->chrH->length > 1);
 
-    getSubSampleFactors(&c->chrSrcHSubSample, &c->chrSrcVSubSample, srcFormat);
-    getSubSampleFactors(&c->chrDstHSubSample, &c->chrDstVSubSample, dstFormat);
+    av_pix_fmt_get_chroma_sub_sample(srcFormat, &c->chrSrcHSubSample, &c->chrSrcVSubSample);
+    av_pix_fmt_get_chroma_sub_sample(dstFormat, &c->chrDstHSubSample, &c->chrDstVSubSample);
 
     if (isAnyRGB(dstFormat) && !(flags&SWS_FULL_CHR_H_INT)) {
         if (dstW&1) {
@@ -1430,8 +1423,11 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
                                 c->hChrFilter, (uint32_t*)c->hChrFilterPos, 4);
 
 #if USE_MMAP
-            mprotect(c->lumMmxextFilterCode, c->lumMmxextFilterCodeSize, PROT_EXEC | PROT_READ);
-            mprotect(c->chrMmxextFilterCode, c->chrMmxextFilterCodeSize, PROT_EXEC | PROT_READ);
+            if (   mprotect(c->lumMmxextFilterCode, c->lumMmxextFilterCodeSize, PROT_EXEC | PROT_READ) == -1
+                || mprotect(c->chrMmxextFilterCode, c->chrMmxextFilterCodeSize, PROT_EXEC | PROT_READ) == -1) {
+                av_log(c, AV_LOG_ERROR, "mprotect failed, cannot use fast bilinear scaler\n");
+                goto fail;
+            }
 #endif
         } else
 #endif /* HAVE_MMXEXT_INLINE */

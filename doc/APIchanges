@@ -15,7 +15,12 @@ libavutil:     2012-10-22
 
 API changes, most recent first:
 
-libavutil 52.47.100
+2013-10-27 - xxxxxxx - lavc 55.39.100 - avcodec.h
+  Add CODEC_CAP_DELAY support to avcodec_decode_subtitle2.
+
+2013-10-27 - xxxxxxx - lavu 52.48.100 - parseutils.h
+  Add av_get_known_color_name().
+
 2013-10-17 - xxxxxxx - lavu 52.47.100 - opt.h
   Add AV_OPT_TYPE_CHANNEL_LAYOUT and channel layout option handlers
   av_opt_get_channel_layout() and av_opt_set_channel_layout().
@@ -89,7 +94,7 @@ libavutil 52.47.100
 2013-06-24 - af5f9c0 / 95d5246 - lavc 55.17.100 / 55.10.0 - avcodec.h
   Add MPEG-2 AAC profiles
 
-2013-06-25 - 95d5246 - lavf 55.10.100 - avformat.h
+2013-06-25 - af5f9c0 / 95d5246 - lavf 55.10.100 - avformat.h
   Add AV_DISPOSITION_* flags to indicate text track kind.
 
 2013-06-15 - 99b8cd0 - lavu 52.36.100
@@ -457,7 +462,7 @@ lavd 54.4.100 / 54.0.0, lavfi 3.5.0
 2012-07-29 - 7c26761 / 681ed00 - lavf 54.22.100 / 54.13.0 - avformat.h
   Add AVFMT_FLAG_NOBUFFER for low latency use cases.
 
-2012-07-10 - f3e5e6f - lavu 51.37.0
+2012-07-10 - fbe0245 / f3e5e6f - lavu 51.65.100 / 51.37.0
   Add av_malloc_array() and av_mallocz_array()
 
 2012-06-22 - e847f41 / d3d3a32 - lavu 51.61.100 / 51.34.0

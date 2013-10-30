@@ -47,6 +47,7 @@
 #include "libavutil/eval.h"
 #include "libavutil/dict.h"
 #include "libavutil/opt.h"
+#include "libavutil/cpu.h"
 #include "cmdutils.h"
 #include "version.h"
 #if CONFIG_NETWORK
@@ -808,6 +809,18 @@ do {                                                                           \
     return 0;
 }
 
+int opt_cpuflags(void *optctx, const char *opt, const char *arg)
+{
+    int ret;
+    unsigned flags = av_get_cpu_flags();
+
+    if ((ret = av_parse_cpu_caps(&flags, arg)) < 0)
+        return ret;
+
+    av_force_cpu_flags(flags);
+    return 0;
+}
+
 int opt_loglevel(void *optctx, const char *opt, const char *arg)
 {
     const struct { const char *name; int level; } log_levels[] = {
@@ -957,18 +970,6 @@ int opt_max_alloc(void *optctx, const char *opt, const char *arg)
         exit_program(1);
     }
     av_max_alloc(max);
-    return 0;
-}
-
-int opt_cpuflags(void *optctx, const char *opt, const char *arg)
-{
-    int ret;
-    unsigned flags = av_get_cpu_flags();
-
-    if ((ret = av_parse_cpu_caps(&flags, arg)) < 0)
-        return ret;
-
-    av_force_cpu_flags(flags);
     return 0;
 }
 
@@ -1514,6 +1515,20 @@ int show_filters(void *optctx, const char *opt, const char *arg)
                filter->name, descr, filter->description);
     }
 #endif
+    return 0;
+}
+
+int show_colors(void *optctx, const char *opt, const char *arg)
+{
+    const char *name;
+    const uint8_t *rgb;
+    int i;
+
+    printf("%-32s #RRGGBB\n", "name");
+
+    for (i = 0; name = av_get_known_color_name(i, &rgb); i++)
+        printf("%-32s #%02x%02x%02x\n", name, rgb[0], rgb[1], rgb[2]);
+
     return 0;
 }
 

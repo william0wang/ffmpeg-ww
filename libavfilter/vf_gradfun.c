@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2010 Nolan Lum <nol888@gmail.com>
- * Copyright (c) 2009 Loren Merritt <lorenm@u.washignton.edu>
+ * Copyright (c) 2009 Loren Merritt <lorenm@u.washington.edu>
  *
  * This file is part of FFmpeg.
  *
@@ -250,7 +250,7 @@ static const AVFilterPad avfilter_vf_gradfun_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_gradfun = {
+AVFilter ff_vf_gradfun = {
     .name          = "gradfun",
     .description   = NULL_IF_CONFIG_SMALL("Debands video quickly using gradients."),
     .priv_size     = sizeof(GradFunContext),

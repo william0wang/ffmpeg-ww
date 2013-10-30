@@ -215,11 +215,8 @@ static inline int parse_nal_units(AVCodecParserContext *s,
     s->key_frame         = 0;
     s->picture_structure = AV_PICTURE_STRUCTURE_UNKNOWN;
 
-    h->avctx                        = avctx;
-    h->sei_recovery_frame_cnt       = -1;
-    h->sei_dpb_output_delay         = 0;
-    h->sei_cpb_removal_delay        = -1;
-    h->sei_buffering_period_present = 0;
+    h->avctx = avctx;
+    ff_h264_reset_sei(h);
     h->sei_fpa.frame_packing_arrangement_cancel_flag = -1;
 
     if (!buf_size)
@@ -311,6 +308,9 @@ static inline int parse_nal_units(AVCodecParserContext *s,
             }
             h->sps       = *h->sps_buffers[h->pps.sps_id];
             h->frame_num = get_bits(&h->gb, h->sps.log2_max_frame_num);
+
+            if(h->sps.ref_frame_count <= 1 && h->pps.ref_count[0] <= 1 && s->pict_type == AV_PICTURE_TYPE_I)
+                s->key_frame = 1;
 
             avctx->profile = ff_h264_get_profile(&h->sps);
             avctx->level   = h->sps.level_idc;

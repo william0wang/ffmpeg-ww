@@ -34,7 +34,7 @@ typedef struct PulseData {
     const char *stream_name;
     const char *device;
     pa_simple *pa;
-    unsigned int stream_index;
+    int64_t timestamp;
 } PulseData;
 
 static av_cold int pulse_write_header(AVFormatContext *h)
@@ -46,21 +46,18 @@ static av_cold int pulse_write_header(AVFormatContext *h)
     pa_buffer_attr attr = { -1, -1, -1, -1, -1 };
     const char *stream_name = s->stream_name;
 
-    for (unsigned i = 0; i < h->nb_streams; i++) {
-        if (h->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
-            st = h->streams[i];
-            s->stream_index = i;
-            break;
-        }
-    }
-
-    if (!st) {
-        av_log(s, AV_LOG_ERROR, "No audio stream found.\n");
+    if (h->nb_streams != 1 || h->streams[0]->codec->codec_type != AVMEDIA_TYPE_AUDIO) {
+        av_log(s, AV_LOG_ERROR, "Only a single audio stream is supported.\n");
         return AVERROR(EINVAL);
     }
+    st = h->streams[0];
 
-    if (!stream_name)
-        stream_name = h->filename;
+    if (!stream_name) {
+        if (h->filename[0])
+            stream_name = h->filename;
+        else
+            stream_name = "Playback";
+    }
 
     ss.format = codec_id_to_pulse_format(st->codec->codec_id);
     ss.rate = st->codec->sample_rate;
@@ -108,8 +105,18 @@ static int pulse_write_packet(AVFormatContext *h, AVPacket *pkt)
         return 0;
     }
 
-    if (s->stream_index != pkt->stream_index)
-        return 0;
+    if (pkt->dts != AV_NOPTS_VALUE)
+        s->timestamp = pkt->dts;
+
+    if (pkt->duration) {
+        s->timestamp += pkt->duration;
+    } else {
+        AVStream *st = h->streams[0];
+        AVCodecContext *codec_ctx = st->codec;
+        AVRational r = { 1, codec_ctx->sample_rate };
+        int64_t samples = pkt->size / (av_get_bytes_per_sample(codec_ctx->sample_fmt) * codec_ctx->channels);
+        s->timestamp += av_rescale_q(samples, r, st->time_base);
+    }
 
     if (pa_simple_write(s->pa, pkt->data, pkt->size, &error) < 0) {
         av_log(s, AV_LOG_ERROR, "pa_simple_write failed: %s\n", pa_strerror(error));
@@ -124,7 +131,7 @@ static void pulse_get_output_timestamp(AVFormatContext *h, int stream, int64_t *
     PulseData *s = h->priv_data;
     pa_usec_t latency = pa_simple_get_latency(s->pa, NULL);
     *wall = av_gettime();
-    *dts = h->streams[s->stream_index]->cur_dts - latency;
+    *dts = s->timestamp - latency;
 }
 
 #define OFFSET(a) offsetof(PulseData, a)

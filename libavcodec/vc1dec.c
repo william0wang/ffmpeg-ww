@@ -1815,8 +1815,7 @@ static inline void vc1_pred_mv_intfr(VC1Context *v, int n, int dmv_x, int dmv_y,
             } else if (total_valid) {
                 if      (a_valid) { px = A[0]; py = A[1]; }
                 else if (b_valid) { px = B[0]; py = B[1]; }
-                else if (c_valid) { px = C[0]; py = C[1]; }
-                else av_assert2(0);
+                else              { px = C[0]; py = C[1]; }
             }
         }
     } else {
@@ -4550,9 +4549,9 @@ static int vc1_decode_b_mb_intfr(VC1Context *v)
             if (mb_has_coeffs)
                 cbp = 1 + get_vlc2(&v->s.gb, v->cbpcy_vlc->table, VC1_CBPCY_P_VLC_BITS, 2);
             if (!direct) {
-                if (bmvtype == BMV_TYPE_INTERPOLATED & twomv) {
+                if (bmvtype == BMV_TYPE_INTERPOLATED && twomv) {
                     v->fourmvbp = get_vlc2(gb, v->fourmvbp_vlc->table, VC1_4MV_BLOCK_PATTERN_VLC_BITS, 1);
-                } else if (bmvtype == BMV_TYPE_INTERPOLATED | twomv) {
+                } else if (bmvtype == BMV_TYPE_INTERPOLATED || twomv) {
                     v->twomvbp = get_vlc2(gb, v->twomvbp_vlc->table, VC1_2MV_BLOCK_PATTERN_VLC_BITS, 1);
                 }
             }

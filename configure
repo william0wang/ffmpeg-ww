@@ -315,6 +315,7 @@ Optimization options (experts only):
   --disable-sse42          disable SSE4.2 optimizations
   --disable-avx            disable AVX optimizations
   --disable-fma4           disable FMA4 optimizations
+  --disable-avx2           disable AVX2 optimizations
   --disable-armv5te        disable armv5te optimizations
   --disable-armv6          disable armv6 optimizations
   --disable-armv6t2        disable armv6t2 optimizations
@@ -1344,6 +1345,7 @@ ARCH_EXT_LIST_X86='
     amd3dnow
     amd3dnowext
     avx
+    avx2
     fma4
     i686
     mmx
@@ -1705,6 +1707,7 @@ sse4_deps="ssse3"
 sse42_deps="sse4"
 avx_deps="sse42"
 fma4_deps="avx"
+avx2_deps="avx"
 
 mmx_external_deps="yasm"
 mmx_inline_deps="inline_asm"
@@ -2125,6 +2128,7 @@ dshow_indev_extralibs="-lpsapi -lole32 -lstrmiids -luuid"
 dv1394_indev_deps="dv1394"
 dv1394_indev_select="dv_demuxer"
 fbdev_indev_deps="linux_fb_h"
+fbdev_outdev_deps="linux_fb_h"
 iec61883_indev_deps="libiec61883"
 jack_indev_deps="jack_jack_h sem_timedwait"
 lavfi_indev_deps="avfilter"
@@ -2224,7 +2228,6 @@ mp_filter_deps="gpl avcodec swscale inline_asm"
 mpdecimate_filter_deps="gpl avcodec"
 mptestsrc_filter_deps="gpl"
 negate_filter_deps="lut_filter"
-noise_filter_deps="gpl"
 perspective_filter_deps="gpl"
 resample_filter_deps="avresample"
 ocv_filter_deps="libopencv"
@@ -2263,7 +2266,7 @@ postproc_deps="avutil gpl"
 swscale_deps="avutil"
 
 # programs
-ffmpeg_deps="avcodec avfilter avformat swscale swresample"
+ffmpeg_deps="avcodec avfilter avformat swresample"
 ffmpeg_select="aformat_filter anull_filter atrim_filter format_filter
                null_filter
                setpts_filter trim_filter"
@@ -2629,6 +2632,10 @@ case "$toolchain" in
     gcov)
         add_cflags  -fprofile-arcs -ftest-coverage
         add_ldflags -fprofile-arcs -ftest-coverage
+    ;;
+    hardened)
+        add_cflags -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -fno-strict-overflow -fstack-protector-all
+        add_ldflags -Wl,-z,relro -Wl,-z,now
     ;;
     ?*)
         die "Unknown toolchain $toolchain"
@@ -4525,6 +4532,7 @@ elif enabled gcc; then
     check_cflags -Werror=missing-prototypes
     check_cflags -Werror=return-type
     check_cflags -Werror=vla
+    enabled extra_warnings || check_cflags -Wno-maybe-uninitialized
 elif enabled llvm_gcc; then
     check_cflags -mllvm -stack-alignment=16
 elif enabled clang; then
@@ -4577,6 +4585,8 @@ esac
 enable frame_thread_encoder
 enabled_any $THREADS_LIST      && enable threads
 enabled_any $ATOMICS_LIST      && enable atomics_native
+
+enabled threads && ! enabled pthreads && ! enabled atomics_native && die "non pthread threading without atomics not supported, try adding --enable-pthreads or --cpu=i486 or higher if you are on x86"
 
 enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
@@ -4958,7 +4968,7 @@ Description: $comment
 Version: $version
 Requires: $requires
 Conflicts:
-Libs: -L\${libdir} -l${shortname} $(enabled shared || echo $libs)
+Libs: -L\${libdir} -Wl,-rpath,\${libdir} -l${shortname} $(enabled shared || echo $libs)
 Cflags: -I\${includedir}
 EOF
 }

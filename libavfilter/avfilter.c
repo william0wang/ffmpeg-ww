@@ -119,8 +119,8 @@ int ff_insert_pad(unsigned idx, unsigned *count, size_t padidx_off,
 
     (*count)++;
     for (i = idx + 1; i < *count; i++)
-        if (*links[i])
-            (*(unsigned *)((uint8_t *) *links[i] + padidx_off))++;
+        if ((*links)[i])
+            (*(unsigned *)((uint8_t *) (*links)[i] + padidx_off))++;
 
     return 0;
 }
@@ -457,6 +457,9 @@ int avfilter_process_command(AVFilterContext *filter, const char *cmd, const cha
 
 static AVFilter *first_filter;
 
+#if !FF_API_NOCONST_GET_NAME
+const
+#endif
 AVFilter *avfilter_get_by_name(const char *name)
 {
     const AVFilter *f = NULL;
