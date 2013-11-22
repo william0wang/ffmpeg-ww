@@ -47,6 +47,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/mathematics.h"
 #include "libavcodec/bytestream.h"
+#include "libavutil/intreadwrite.h"
 #include "libavutil/timecode.h"
 #include "avformat.h"
 #include "internal.h"
@@ -1515,6 +1516,7 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
                 av_log(mxf->fc, AV_LOG_VERBOSE, ".");
         }
         av_log(mxf->fc, AV_LOG_VERBOSE, "\n");
+
         if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
             source_track->intra_only = mxf_is_intra_only(descriptor);
             container_ul = mxf_get_codec_ul(mxf_picture_essence_container_uls, essence_container_ul);
@@ -1604,8 +1606,10 @@ static int mxf_parse_structural_metadata(MXFContext *mxf)
             if (!ff_alloc_extradata(st->codec, descriptor->extradata_size)) {
                 memcpy(st->codec->extradata, descriptor->extradata, descriptor->extradata_size);
             }
-        } else if(st->codec->codec_id == AV_CODEC_ID_H264) {
-            ff_generate_avci_extradata(st);
+        } else if (st->codec->codec_id == AV_CODEC_ID_H264) {
+            ret = ff_generate_avci_extradata(st);
+            if (ret < 0)
+                return ret;
         }
         if (st->codec->codec_type != AVMEDIA_TYPE_DATA && (*essence_container_ul)[15] > 0x01) {
             /* TODO: decode timestamps */
@@ -2456,10 +2460,19 @@ static int mxf_probe(AVProbeData *p) {
 
     /* Must skip Run-In Sequence and search for MXF header partition pack key SMPTE 377M 5.5 */
     end -= sizeof(mxf_header_partition_pack_key);
-    for (; bufp < end; bufp++) {
-        if (IS_KLV_KEY(bufp, mxf_header_partition_pack_key))
-            return AVPROBE_SCORE_MAX;
+
+    for (; bufp < end;) {
+        if (!((bufp[13] - 1) & 0xF2)){
+            if (AV_RN32(bufp   ) == AV_RN32(mxf_header_partition_pack_key   ) &&
+                AV_RN32(bufp+ 4) == AV_RN32(mxf_header_partition_pack_key+ 4) &&
+                AV_RN32(bufp+ 8) == AV_RN32(mxf_header_partition_pack_key+ 8) &&
+                AV_RN16(bufp+12) == AV_RN16(mxf_header_partition_pack_key+12))
+                return AVPROBE_SCORE_MAX;
+            bufp ++;
+        } else
+            bufp += 10;
     }
+
     return 0;
 }
 

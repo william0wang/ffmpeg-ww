@@ -857,12 +857,17 @@ int x;
 EOF
 }
 
-check_cflags(){
-    log check_cflags "$@"
+test_cflags(){
+    log test_cflags "$@"
     set -- $($cflags_filter "$@")
-    check_cc "$@" <<EOF && append CFLAGS "$@"
+    check_cc "$@" <<EOF
 int x;
 EOF
+}
+
+check_cflags(){
+    log check_cflags "$@"
+    test_cflags "$@" && add_cflags "$@"
 }
 
 check_cxxflags(){
@@ -1571,6 +1576,7 @@ CONFIG_EXTRA="
     gcrypt
     golomb
     gplv3
+    h263dsp
     h264chroma
     h264dsp
     h264pred
@@ -1806,8 +1812,8 @@ g2m_decoder_select="dsputil zlib"
 g729_decoder_select="dsputil"
 h261_decoder_select="error_resilience mpegvideo"
 h261_encoder_select="aandcttables mpegvideoenc"
-h263_decoder_select="error_resilience h263_parser mpegvideo"
-h263_encoder_select="aandcttables mpegvideoenc"
+h263_decoder_select="error_resilience h263_parser h263dsp mpegvideo"
+h263_encoder_select="aandcttables h263dsp mpegvideoenc"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
@@ -1872,9 +1878,9 @@ qdm2_decoder_select="mdct rdft mpegaudiodsp"
 ra_144_encoder_select="audio_frame_queue lpc"
 ralf_decoder_select="golomb"
 rtjpeg_decoder_select="dsputil"
-rv10_decoder_select="error_resilience h263_decoder"
+rv10_decoder_select="error_resilience h263_decoder h263dsp"
 rv10_encoder_select="h263_encoder"
-rv20_decoder_select="error_resilience h263_decoder"
+rv20_decoder_select="error_resilience h263_decoder h263dsp"
 rv20_encoder_select="h263_encoder"
 rv30_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo videodsp"
 rv40_decoder_select="error_resilience golomb h264chroma h264pred h264qpel mpegvideo videodsp"
@@ -1996,6 +2002,7 @@ wmv3_vdpau_hwaccel_select="vc1_vdpau_hwaccel"
 
 # parsers
 h264_parser_select="golomb h264chroma h264dsp h264pred h264qpel videodsp"
+hevc_parser_select="hevc_decoder"
 mpeg4video_parser_select="error_resilience mpegvideo"
 mpegvideo_parser_select="error_resilience mpegvideo"
 vc1_parser_select="mpegvideo"
@@ -2074,6 +2081,7 @@ dxa_demuxer_select="riffdec"
 eac3_demuxer_select="ac3_parser"
 f4v_muxer_select="mov_muxer"
 flac_demuxer_select="flac_parser"
+hds_muxer_select="flv_muxer"
 hls_muxer_select="mpegts_muxer"
 ipod_muxer_select="mov_muxer"
 ismv_muxer_select="mov_muxer"
@@ -2616,18 +2624,35 @@ case "$toolchain" in
         target_exec_args="--error-exitcode=1 --malloc-fill=0x2a --track-origins=yes --leak-check=full --gen-suppressions=all --suppressions=$source_path/tests/fate-valgrind.supp"
     ;;
     msvc)
-        cc_default="c99wrap cl"
-        ld_default="c99wrap link"
+        # Check whether the current MSVC version needs the C99 converter.
+        # From MSVC 2013 (compiler major version 18) onwards, it does actually
+        # support enough of C99 to build ffmpeg. Default to the new
+        # behaviour if the regexp was unable to match anything, since this
+        # successfully parses the version number of existing supported
+        # versions that require the converter (MSVC 2010 and 2012).
+        cl_major_ver=$(cl 2>&1 | sed -n 's/.*Version \([[:digit:]]\{1,\}\)\..*/\1/p')
+        if [ -z "$cl_major_ver" ] || [ $cl_major_ver -ge 18 ]; then
+            cc_default="cl"
+        else
+            cc_default="c99wrap cl"
+        fi
+        ld_default="link"
         nm_default="dumpbin -symbols"
         ar_default="lib"
         target_os_default="win32"
+        # Use a relative path for TMPDIR. This makes sure all the
+        # ffconf temp files are written with a relative path, avoiding
+        # issues with msys/win32 path conversion for MSVC parameters
+        # such as -Fo<file> or -out:<file>.
+        TMPDIR=.
     ;;
     icl)
-        cc_default="c99wrap -noconv icl"
-        ld_default="c99wrap xilink"
+        cc_default="icl"
+        ld_default="xilink"
         nm_default="dumpbin -symbols"
         ar_default="xilib"
         target_os_default="win32"
+        TMPDIR=.
     ;;
     gcov)
         add_cflags  -fprofile-arcs -ftest-coverage
@@ -2882,7 +2907,9 @@ probe_cc(){
     unset _depflags _DEPCMD _DEPFLAGS
     _flags_filter=echo
 
-    if $_cc -v 2>&1 | grep -q '^gcc.*LLVM'; then
+    if $_cc --version 2>&1 | grep -q '^GNU assembler'; then
+        true # no-op to avoid reading stdin in following checks
+    elif $_cc -v 2>&1 | grep -q '^gcc.*LLVM'; then
         _type=llvm_gcc
         gcc_extra_ver=$(expr "$($_cc --version | head -n1)" : '.*\((.*)\)')
         _ident="llvm-gcc $($_cc -dumpversion) $gcc_extra_ver"
@@ -2990,15 +3017,13 @@ probe_cc(){
         _DEPFLAGS='$(CPPFLAGS) $(CFLAGS) -showIncludes -Zs'
         _cflags_speed="-O2"
         _cflags_size="-O1"
-        # Nonstandard output options, to avoid msys path conversion issues.
-        # Relies on wrapper to remap it.
         if $_cc 2>&1 | grep -q Linker; then
-            _ld_o='-out $@'
+            _ld_o='-out:$@'
         else
             _ld_o='-Fe$@'
         fi
-        _cc_o='-Fo $@'
-        _cc_e='-P -Fi $@'
+        _cc_o='-Fo$@'
+        _cc_e='-P -Fi$@'
         _flags_filter=msvc_flags
         _ld_lib='lib%.a'
         _ld_path='-libpath:'
@@ -3016,14 +3041,12 @@ probe_cc(){
         # versions (tested) as well.
         _cflags_speed="-O2"
         _cflags_size="-O1 -Oi" # -O1 without -Oi miscompiles stuff
-        # Nonstandard output options, to avoid msys path conversion issues.
-        # Relies on wrapper to remap it.
         if $_cc 2>&1 | grep -q Linker; then
-            _ld_o='-out $@'
+            _ld_o='-out:$@'
         else
             _ld_o='-Fe$@'
         fi
-        _cc_o='-Fo $@'
+        _cc_o='-Fo$@'
         _cc_e='-P'
         _flags_filter=icl_flags
         _ld_lib='lib%.a'
@@ -3591,6 +3614,7 @@ case $target_os in
         enable dos_paths
         ;;
     win32|win64)
+        disable symver
         if enabled shared; then
             # Link to the import library instead of the normal static library
             # for shared libs.
@@ -4419,13 +4443,9 @@ enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 # add some useful compiler flags if supported
 check_cflags -Wdeclaration-after-statement
 check_cflags -Wall
-check_cflags -Wno-parentheses
-check_cflags -Wno-switch
-check_cflags -Wno-format-zero-length
 check_cflags -Wdisabled-optimization
 check_cflags -Wpointer-arith
 check_cflags -Wredundant-decls
-check_cflags -Wno-pointer-sign
 check_cflags -Wwrite-strings
 check_cflags -Wtype-limits
 check_cflags -Wundef
@@ -4433,6 +4453,16 @@ check_cflags -Wmissing-prototypes
 check_cflags -Wno-pointer-to-int-cast
 check_cflags -Wstrict-prototypes
 enabled extra_warnings && check_cflags -Winline
+
+check_disable_warning(){
+    warning_flag=-W${1#-Wno-}
+    test_cflags $warning_flag && add_cflags $1
+}
+
+check_disable_warning -Wno-parentheses
+check_disable_warning -Wno-switch
+check_disable_warning -Wno-format-zero-length
+check_disable_warning -Wno-pointer-sign
 
 # add some linker flags
 check_ldflags -Wl,--warn-common
@@ -4532,7 +4562,7 @@ elif enabled gcc; then
     check_cflags -Werror=missing-prototypes
     check_cflags -Werror=return-type
     check_cflags -Werror=vla
-    enabled extra_warnings || check_cflags -Wno-maybe-uninitialized
+    enabled extra_warnings || check_disable_warning -Wno-maybe-uninitialized
 elif enabled llvm_gcc; then
     check_cflags -mllvm -stack-alignment=16
 elif enabled clang; then
@@ -4731,7 +4761,7 @@ echo "License: $license"
 
 echo "Creating config.mak, config.h, and doc/config.texi..."
 
-test -e Makefile || $ln_s "$source_path/Makefile" .
+test -e Makefile || echo "include $source_path/Makefile" > Makefile
 
 enabled stripping || strip="echo skipping strip"
 

@@ -50,6 +50,7 @@ OBJS-$(CONFIG_FFT)                     += avfft.o fft_fixed.o fft_float.o \
                                           fft_fixed_32.o fft_init_table.o \
                                           $(FFT-OBJS-yes)
 OBJS-$(CONFIG_GOLOMB)                  += golomb.o
+OBJS-$(CONFIG_H263DSP)                 += h263dsp.o
 OBJS-$(CONFIG_H264CHROMA)              += h264chroma.o
 OBJS-$(CONFIG_H264DSP)                 += h264dsp.o h264idct.o
 OBJS-$(CONFIG_H264PRED)                += h264pred.o
@@ -236,7 +237,7 @@ OBJS-$(CONFIG_H264_VDA_DECODER)        += vda_h264_dec.o
 OBJS-$(CONFIG_HEVC_DECODER)            += hevc.o hevc_mvs.o hevc_ps.o hevc_sei.o \
                                           hevc_cabac.o hevc_refs.o hevcpred.o    \
                                           hevcdsp.o hevc_filter.o cabac.o
-
+OBJS-$(CONFIG_HNM4_VIDEO_DECODER)      += hnm4video.o
 OBJS-$(CONFIG_HUFFYUV_DECODER)         += huffyuv.o huffyuvdec.o
 OBJS-$(CONFIG_HUFFYUV_ENCODER)         += huffyuv.o huffyuvenc.o
 OBJS-$(CONFIG_IAC_DECODER)             += imc.o
@@ -300,8 +301,7 @@ OBJS-$(CONFIG_MPEG_XVMC_DECODER)       += mpegvideo_xvmc.o
 OBJS-$(CONFIG_MPEG1VIDEO_DECODER)      += mpeg12dec.o mpeg12.o mpeg12data.o
 OBJS-$(CONFIG_MPEG1VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o
 OBJS-$(CONFIG_MPEG2VIDEO_DECODER)      += mpeg12dec.o mpeg12.o mpeg12data.o
-OBJS-$(CONFIG_MPEG2VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o          \
-                                          timecode.o
+OBJS-$(CONFIG_MPEG2VIDEO_ENCODER)      += mpeg12enc.o mpeg12.o
 OBJS-$(CONFIG_MPL2_DECODER)            += mpl2dec.o ass.o
 OBJS-$(CONFIG_MSMPEG4V1_DECODER)       += msmpeg4dec.o msmpeg4.o msmpeg4data.o
 OBJS-$(CONFIG_MSMPEG4V2_DECODER)       += msmpeg4dec.o msmpeg4.o msmpeg4data.o \
@@ -598,6 +598,7 @@ OBJS-$(CONFIG_ADPCM_G722_DECODER)         += g722.o g722dec.o
 OBJS-$(CONFIG_ADPCM_G722_ENCODER)         += g722.o g722enc.o
 OBJS-$(CONFIG_ADPCM_G726_DECODER)         += g726.o
 OBJS-$(CONFIG_ADPCM_G726_ENCODER)         += g726.o
+OBJS-$(CONFIG_ADPCM_G726LE_DECODER)       += g726.o
 OBJS-$(CONFIG_ADPCM_IMA_AMV_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_APC_DECODER)      += adpcm.o adpcm_data.o
 OBJS-$(CONFIG_ADPCM_IMA_DK3_DECODER)      += adpcm.o adpcm_data.o
@@ -649,7 +650,7 @@ OBJS-$(CONFIG_ADX_DEMUXER)             += adx.o
 OBJS-$(CONFIG_CAF_DEMUXER)             += mpeg4audio.o mpegaudiodata.o  \
                                           ac3tab.o
 OBJS-$(CONFIG_DV_DEMUXER)              += dv_profile.o
-OBJS-$(CONFIG_DV_MUXER)                += dv_profile.o timecode.o
+OBJS-$(CONFIG_DV_MUXER)                += dv_profile.o
 OBJS-$(CONFIG_FLAC_DEMUXER)            += flac.o flacdata.o vorbis_data.o \
                                           vorbis_parser.o xiph.o
 OBJS-$(CONFIG_FLAC_MUXER)              += flac.o flacdata.o vorbis_data.o
@@ -665,11 +666,11 @@ OBJS-$(CONFIG_MATROSKA_MUXER)          += mpeg4audio.o mpegaudiodata.o  \
                                           flac.o flacdata.o vorbis_data.o xiph.o
 OBJS-$(CONFIG_MP2_MUXER)               += mpegaudiodata.o mpegaudiodecheader.o
 OBJS-$(CONFIG_MP3_MUXER)               += mpegaudiodata.o mpegaudiodecheader.o
-OBJS-$(CONFIG_MOV_DEMUXER)             += mpeg4audio.o mpegaudiodata.o ac3tab.o timecode.o
+OBJS-$(CONFIG_MOV_DEMUXER)             += mpeg4audio.o mpegaudiodata.o ac3tab.o
 OBJS-$(CONFIG_MOV_MUXER)               += mpeg4audio.o mpegaudiodata.o
 OBJS-$(CONFIG_MPEGTS_MUXER)            += mpeg4audio.o
 OBJS-$(CONFIG_MPEGTS_DEMUXER)          += mpeg4audio.o mpegaudiodata.o
-OBJS-$(CONFIG_MXF_MUXER)               += timecode.o dnxhddata.o
+OBJS-$(CONFIG_MXF_MUXER)               += dnxhddata.o
 OBJS-$(CONFIG_NUT_MUXER)               += mpegaudiodata.o
 OBJS-$(CONFIG_OGG_DEMUXER)             += xiph.o flac.o flacdata.o     \
                                           mpeg12data.o vorbis_parser.o \
@@ -685,6 +686,9 @@ OBJS-$(CONFIG_WEBM_MUXER)              += mpeg4audio.o mpegaudiodata.o  \
                                           xiph.o flac.o flacdata.o \
                                           vorbis_data.o
 OBJS-$(CONFIG_WTV_DEMUXER)             += mpeg4audio.o mpegaudiodata.o
+
+# libavfilter dependencies
+OBJS-$(CONFIG_ELBG_FILTER)             += elbg.o
 
 # external codec libraries
 OBJS-$(CONFIG_LIBAACPLUS_ENCODER)         += libaacplus.o
@@ -802,9 +806,9 @@ OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += remove_extradata_bsf.o
 OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
 
 # thread libraries
-OBJS-$(HAVE_PTHREADS)                  += pthread.o
-OBJS-$(HAVE_W32THREADS)                += pthread.o
-OBJS-$(HAVE_OS2THREADS)                += pthread.o
+OBJS-$(HAVE_PTHREADS)                  += pthread.o pthread_slice.o pthread_frame.o
+OBJS-$(HAVE_W32THREADS)                += pthread.o pthread_slice.o pthread_frame.o
+OBJS-$(HAVE_OS2THREADS)                += pthread.o pthread_slice.o pthread_frame.o
 
 OBJS-$(CONFIG_FRAME_THREAD_ENCODER)    += frame_thread_encoder.o
 

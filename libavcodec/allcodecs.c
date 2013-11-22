@@ -24,8 +24,9 @@
  * Provide registration of all codecs, parsers and bitstream filters for libavcodec.
  */
 
-#include "avcodec.h"
 #include "config.h"
+#include "avcodec.h"
+#include "version.h"
 
 #define REGISTER_HWACCEL(X, x)                                          \
     {                                                                   \
@@ -165,6 +166,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(H264_VDA,          h264_vda);
     REGISTER_DECODER(H264_VDPAU,        h264_vdpau);
     REGISTER_DECODER(HEVC,              hevc);
+    REGISTER_DECODER(HNM4_VIDEO,        hnm4_video);
     REGISTER_ENCDEC (HUFFYUV,           huffyuv);
     REGISTER_DECODER(IDCIN,             idcin);
     REGISTER_DECODER(IFF_BYTERUN1,      iff_byterun1);
@@ -188,7 +190,9 @@ void avcodec_register_all(void)
     REGISTER_DECODER(MJPEGB,            mjpegb);
     REGISTER_DECODER(MMVIDEO,           mmvideo);
     REGISTER_DECODER(MOTIONPIXELS,      motionpixels);
+#if FF_API_XVMC
     REGISTER_DECODER(MPEG_XVMC,         mpeg_xvmc);
+#endif /* FF_API_XVMC */
     REGISTER_ENCDEC (MPEG1VIDEO,        mpeg1video);
     REGISTER_ENCDEC (MPEG2VIDEO,        mpeg2video);
     REGISTER_ENCDEC (MPEG4,             mpeg4);

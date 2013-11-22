@@ -121,6 +121,7 @@ typedef struct PacketQueue {
 
 typedef struct VideoPicture {
     double pts;             // presentation timestamp for this picture
+    double duration;        // estimated duration based on frame rate
     int64_t pos;            // byte position in file
     SDL_Overlay *bmp;
     int width, height; /* source height & width */
@@ -242,13 +243,8 @@ typedef struct VideoState {
     SDL_cond *subpq_cond;
 
     double frame_timer;
-    double frame_last_pts;
-    double frame_last_duration;
-    double frame_last_dropped_pts;
     double frame_last_returned_time;
     double frame_last_filter_delay;
-    int64_t frame_last_dropped_pos;
-    int frame_last_dropped_serial;
     int video_stream;
     AVStream *video_st;
     PacketQueue videoq;
@@ -1292,6 +1288,18 @@ static double compute_target_delay(double delay, VideoState *is)
     return delay;
 }
 
+static double vp_duration(VideoState *is, VideoPicture *vp, VideoPicture *nextvp) {
+    if (vp->serial == nextvp->serial) {
+        double duration = nextvp->pts - vp->pts;
+        if (isnan(duration) || duration <= 0 || duration > is->max_frame_duration)
+            return vp->duration;
+        else
+            return duration;
+    } else {
+        return 0.0;
+    }
+}
+
 static void pictq_next_picture(VideoState *is) {
     /* update queue size and signal for next picture */
     if (++is->pictq_rindex == VIDEO_PICTURE_QUEUE_SIZE)
@@ -1327,14 +1335,12 @@ static void update_video_pts(VideoState *is, double pts, int64_t pos, int serial
     set_clock(&is->vidclk, pts, serial);
     sync_clock_to_slave(&is->extclk, &is->vidclk);
     is->video_current_pos = pos;
-    is->frame_last_pts = pts;
 }
 
 /* called to display each frame */
 static void video_refresh(void *opaque, double *remaining_time)
 {
     VideoState *is = opaque;
-    VideoPicture *vp;
     double time;
 
     SubPicture *sp, *sp2;
@@ -1357,17 +1363,14 @@ static void video_refresh(void *opaque, double *remaining_time)
             redisplay = pictq_prev_picture(is);
 retry:
         if (is->pictq_size == 0) {
-            SDL_LockMutex(is->pictq_mutex);
-            if (is->frame_last_dropped_pts != AV_NOPTS_VALUE && is->frame_last_dropped_pts > is->frame_last_pts) {
-                update_video_pts(is, is->frame_last_dropped_pts, is->frame_last_dropped_pos, is->frame_last_dropped_serial);
-                is->frame_last_dropped_pts = AV_NOPTS_VALUE;
-            }
-            SDL_UnlockMutex(is->pictq_mutex);
             // nothing to do, no picture to display in the queue
         } else {
             double last_duration, duration, delay;
+            VideoPicture *vp, *lastvp;
+
             /* dequeue the picture */
             vp = &is->pictq[is->pictq_rindex];
+            lastvp = &is->pictq[(is->pictq_rindex + VIDEO_PICTURE_QUEUE_SIZE - 1) % VIDEO_PICTURE_QUEUE_SIZE];
 
             if (vp->serial != is->videoq.serial) {
                 pictq_next_picture(is);
@@ -1379,15 +1382,11 @@ retry:
                 goto display;
 
             /* compute nominal last_duration */
-            last_duration = vp->pts - is->frame_last_pts;
-            if (!isnan(last_duration) && last_duration > 0 && last_duration < is->max_frame_duration) {
-                /* if duration of the last frame was sane, update last_duration in video state */
-                is->frame_last_duration = last_duration;
-            }
+            last_duration = vp_duration(is, lastvp, vp);
             if (redisplay)
                 delay = 0.0;
             else
-                delay = compute_target_delay(is->frame_last_duration, is);
+                delay = compute_target_delay(last_duration, is);
 
             time= av_gettime()/1000000.0;
             if (time < is->frame_timer + delay && !redisplay) {
@@ -1406,7 +1405,7 @@ retry:
 
             if (is->pictq_size > 1) {
                 VideoPicture *nextvp = &is->pictq[(is->pictq_rindex + 1) % VIDEO_PICTURE_QUEUE_SIZE];
-                duration = nextvp->pts - vp->pts;
+                duration = vp_duration(is, vp, nextvp);
                 if(!is->step && (redisplay || framedrop>0 || (framedrop && get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER)) && time > is->frame_timer + duration){
                     if (!redisplay)
                         is->frame_drops_late++;
@@ -1549,7 +1548,7 @@ static void duplicate_right_border_pixels(SDL_Overlay *bmp) {
     }
 }
 
-static int queue_picture(VideoState *is, AVFrame *src_frame, double pts, int64_t pos, int serial)
+static int queue_picture(VideoState *is, AVFrame *src_frame, double pts, double duration, int64_t pos, int serial)
 {
     VideoPicture *vp;
 
@@ -1646,6 +1645,7 @@ static int queue_picture(VideoState *is, AVFrame *src_frame, double pts, int64_t
         SDL_UnlockYUVOverlay(vp->bmp);
 
         vp->pts = pts;
+        vp->duration = duration;
         vp->pos = pos;
         vp->serial = serial;
 
@@ -1675,10 +1675,7 @@ static int get_video_frame(VideoState *is, AVFrame *frame, AVPacket *pkt, int *s
             SDL_CondWait(is->pictq_cond, is->pictq_mutex);
         }
         is->video_current_pos = -1;
-        is->frame_last_pts = AV_NOPTS_VALUE;
-        is->frame_last_duration = 0;
         is->frame_timer = (double)av_gettime() / 1000000.0;
-        is->frame_last_dropped_pts = AV_NOPTS_VALUE;
         SDL_UnlockMutex(is->pictq_mutex);
         return 0;
     }
@@ -1707,23 +1704,17 @@ static int get_video_frame(VideoState *is, AVFrame *frame, AVPacket *pkt, int *s
         frame->sample_aspect_ratio = av_guess_sample_aspect_ratio(is->ic, is->video_st, frame);
 
         if (framedrop>0 || (framedrop && get_master_sync_type(is) != AV_SYNC_VIDEO_MASTER)) {
-            SDL_LockMutex(is->pictq_mutex);
-            if (is->frame_last_pts != AV_NOPTS_VALUE && frame->pts != AV_NOPTS_VALUE) {
-                double clockdiff = get_clock(&is->vidclk) - get_master_clock(is);
-                double ptsdiff = dpts - is->frame_last_pts;
-                if (!isnan(clockdiff) && fabs(clockdiff) < AV_NOSYNC_THRESHOLD &&
-                    !isnan(ptsdiff) && ptsdiff > 0 && ptsdiff < AV_NOSYNC_THRESHOLD &&
-                    clockdiff + ptsdiff - is->frame_last_filter_delay < 0 &&
+            if (frame->pts != AV_NOPTS_VALUE) {
+                double diff = dpts - get_master_clock(is);
+                if (!isnan(diff) && fabs(diff) < AV_NOSYNC_THRESHOLD &&
+                    diff - is->frame_last_filter_delay < 0 &&
+                    *serial == is->vidclk.serial &&
                     is->videoq.nb_packets) {
-                    is->frame_last_dropped_pos = av_frame_get_pkt_pos(frame);
-                    is->frame_last_dropped_pts = dpts;
-                    is->frame_last_dropped_serial = *serial;
                     is->frame_drops_early++;
                     av_frame_unref(frame);
                     ret = 0;
                 }
             }
-            SDL_UnlockMutex(is->pictq_mutex);
         }
 
         return ret;
@@ -1909,8 +1900,11 @@ static int video_thread(void *arg)
     VideoState *is = arg;
     AVFrame *frame = av_frame_alloc();
     double pts;
+    double duration;
     int ret;
     int serial = 0;
+    AVRational tb = is->video_st->time_base;
+    AVRational frame_rate = av_guess_frame_rate(is->ic, is->video_st, NULL);
 
 #if CONFIG_AVFILTER
     AVFilterGraph *graph = avfilter_graph_alloc();
@@ -1961,6 +1955,7 @@ static int video_thread(void *arg)
             last_h = frame->height;
             last_format = frame->format;
             last_serial = serial;
+            frame_rate = filt_out->inputs[0]->frame_rate;
         }
 
         ret = av_buffersrc_add_frame(filt_in, frame);
@@ -1984,15 +1979,14 @@ static int video_thread(void *arg)
             is->frame_last_filter_delay = av_gettime() / 1000000.0 - is->frame_last_returned_time;
             if (fabs(is->frame_last_filter_delay) > AV_NOSYNC_THRESHOLD / 10.0)
                 is->frame_last_filter_delay = 0;
-
-            pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(filt_out->inputs[0]->time_base);
-            ret = queue_picture(is, frame, pts, av_frame_get_pkt_pos(frame), serial);
+            tb = filt_out->inputs[0]->time_base;
+#endif
+            duration = (frame_rate.num && frame_rate.den ? av_q2d((AVRational){frame_rate.den, frame_rate.num}) : 0);
+            pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(tb);
+            ret = queue_picture(is, frame, pts, duration, av_frame_get_pkt_pos(frame), serial);
             av_frame_unref(frame);
+#if CONFIG_AVFILTER
         }
-#else
-        pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(is->video_st->time_base);
-        ret = queue_picture(is, frame, pts, av_frame_get_pkt_pos(frame), serial);
-        av_frame_unref(frame);
 #endif
 
         if (ret < 0)
@@ -2169,7 +2163,7 @@ static int audio_decode_frame(VideoState *is)
         /* NOTE: the audio packet can contain several frames */
         while (pkt_temp->stream_index != -1 || is->audio_buf_frames_pending) {
             if (!is->frame) {
-                if (!(is->frame = avcodec_alloc_frame()))
+                if (!(is->frame = av_frame_alloc()))
                     return AVERROR(ENOMEM);
             } else {
                 av_frame_unref(is->frame);

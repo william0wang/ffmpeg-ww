@@ -40,7 +40,6 @@
 #endif
 #include "libavformat/avformat.h"
 #include "libavdevice/avdevice.h"
-#include "libswscale/swscale.h"
 #include "libswresample/swresample.h"
 #include "libavutil/opt.h"
 #include "libavutil/channel_layout.h"
@@ -819,10 +818,26 @@ static void do_video_out(AVFormatContext *s,
     nb_frames = 1;
 
     format_video_sync = video_sync_method;
-    if (format_video_sync == VSYNC_AUTO)
-        format_video_sync = (s->oformat->flags & AVFMT_VARIABLE_FPS) ? ((s->oformat->flags & AVFMT_NOTIMESTAMPS) ? VSYNC_PASSTHROUGH : VSYNC_VFR) : VSYNC_CFR;
+    if (format_video_sync == VSYNC_AUTO) {
+        if(!strcmp(s->oformat->name, "avi")) {
+            format_video_sync = VSYNC_VFR;
+        } else
+            format_video_sync = (s->oformat->flags & AVFMT_VARIABLE_FPS) ? ((s->oformat->flags & AVFMT_NOTIMESTAMPS) ? VSYNC_PASSTHROUGH : VSYNC_VFR) : VSYNC_CFR;
+        if (   ist
+            && format_video_sync == VSYNC_CFR
+            && input_files[ist->file_index]->ctx->nb_streams == 1
+            && input_files[ist->file_index]->input_ts_offset == 0) {
+            format_video_sync = VSYNC_VSCFR;
+        }
+    }
 
     switch (format_video_sync) {
+    case VSYNC_VSCFR:
+        if (ost->frame_number == 0 && delta - duration >= 0.5) {
+            av_log(NULL, AV_LOG_DEBUG, "Not duplicating %d initial frames\n", (int)lrintf(delta - duration));
+            delta = duration;
+            ost->sync_opts = lrint(sync_ipts);
+        }
     case VSYNC_CFR:
         // FIXME set to 0.5 after we fix some dts/pts bugs like in avidec.c
         if (delta < -1.1)
@@ -1056,7 +1071,7 @@ static int reap_filters(void)
         if (!ost->filter)
             continue;
 
-        if (!ost->filtered_frame && !(ost->filtered_frame = avcodec_alloc_frame())) {
+        if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
             return AVERROR(ENOMEM);
         } else
             avcodec_get_frame_defaults(ost->filtered_frame);
@@ -1481,6 +1496,7 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
         opkt.data = pkt->data;
         opkt.size = pkt->size;
     }
+    av_copy_packet_side_data(&opkt, pkt);
 
     if (ost->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && (of->ctx->oformat->flags & AVFMT_RAWPICTURE)) {
         /* store AVPicture in AVPacket, as expected by the output format */
@@ -1521,7 +1537,7 @@ static int decode_audio(InputStream *ist, AVPacket *pkt, int *got_output)
     int i, ret, err = 0, resample_changed;
     AVRational decoded_frame_tb;
 
-    if (!ist->decoded_frame && !(ist->decoded_frame = avcodec_alloc_frame()))
+    if (!ist->decoded_frame && !(ist->decoded_frame = av_frame_alloc()))
         return AVERROR(ENOMEM);
     if (!ist->filter_frame && !(ist->filter_frame = av_frame_alloc()))
         return AVERROR(ENOMEM);
@@ -2362,7 +2378,7 @@ static int transcode_init(void)
                 if (ost->filter && !(codec->time_base.num && codec->time_base.den))
                     codec->time_base = ost->filter->filter->inputs[0]->time_base;
                 if (   av_q2d(codec->time_base) < 0.001 && video_sync_method != VSYNC_PASSTHROUGH
-                   && (video_sync_method == VSYNC_CFR || (video_sync_method == VSYNC_AUTO && !(oc->oformat->flags & AVFMT_VARIABLE_FPS)))){
+                   && (video_sync_method == VSYNC_CFR || video_sync_method == VSYNC_VSCFR || (video_sync_method == VSYNC_AUTO && !(oc->oformat->flags & AVFMT_VARIABLE_FPS)))){
                     av_log(oc, AV_LOG_WARNING, "Frame rate very high for a muxer not efficiently supporting it.\n"
                                                "Please consider specifying a lower framerate, a different muxer or -vsync 2\n");
                 }
@@ -2452,7 +2468,7 @@ static int transcode_init(void)
                         codec->stats_in = logbuffer;
                     }
                     if (codec->flags & CODEC_FLAG_PASS1) {
-                        f = fopen(logfilename, "wb");
+                        f = av_fopen_utf8(logfilename, "wb");
                         if (!f) {
                             av_log(NULL, AV_LOG_FATAL, "Cannot write log file '%s' for pass-1 encoding: %s\n",
                                 logfilename, strerror(errno));
@@ -2502,9 +2518,6 @@ static int transcode_init(void)
                 av_log(NULL, AV_LOG_WARNING, "The bitrate parameter is set too low."
                                              " It takes bits/s as argument, not kbits/s\n");
             extra_size += ost->st->codec->extradata_size;
-
-            if (ost->st->codec->me_threshold)
-                input_streams[ost->source_index]->st->codec->debug |= FF_DEBUG_MV;
         } else {
             av_opt_set_dict(ost->st->codec, &ost->opts);
         }

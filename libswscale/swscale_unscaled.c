@@ -168,10 +168,31 @@ static int planarToNv12Wrapper(SwsContext *c, const uint8_t *src[],
 
     if (c->dstFormat == AV_PIX_FMT_NV12)
         interleaveBytes(src[1], src[2], dst, c->srcW / 2, srcSliceH / 2,
-                        srcStride[1], srcStride[2], dstStride[0]);
+                        srcStride[1], srcStride[2], dstStride[1]);
     else
         interleaveBytes(src[2], src[1], dst, c->srcW / 2, srcSliceH / 2,
-                        srcStride[2], srcStride[1], dstStride[0]);
+                        srcStride[2], srcStride[1], dstStride[1]);
+
+    return srcSliceH;
+}
+
+static int nv12ToPlanarWrapper(SwsContext *c, const uint8_t *src[],
+                               int srcStride[], int srcSliceY,
+                               int srcSliceH, uint8_t *dstParam[],
+                               int dstStride[])
+{
+    uint8_t *dst1 = dstParam[1] + dstStride[1] * srcSliceY / 2;
+    uint8_t *dst2 = dstParam[2] + dstStride[2] * srcSliceY / 2;
+
+    copyPlane(src[0], srcStride[0], srcSliceY, srcSliceH, c->srcW,
+              dstParam[0], dstStride[0]);
+
+    if (c->srcFormat == AV_PIX_FMT_NV12)
+        deinterleaveBytes(src[1], dst1, dst2,c->srcW / 2, srcSliceH / 2,
+                          srcStride[1], dstStride[1], dstStride[2]);
+    else
+        deinterleaveBytes(src[1], dst2, dst1, c->srcW / 2, srcSliceH / 2,
+                          srcStride[1], dstStride[2], dstStride[1]);
 
     return srcSliceH;
 }
@@ -1091,27 +1112,24 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
                         srcPtr  += srcStride[plane];
                     }
                 } else if (src_depth <= dst_depth) {
-                    int orig_length = length;
                     for (i = 0; i < height; i++) {
+                        j = 0;
                         if(isBE(c->srcFormat) == HAVE_BIGENDIAN &&
                            isBE(c->dstFormat) == HAVE_BIGENDIAN &&
                            shiftonly) {
                              unsigned shift = dst_depth - src_depth;
-                             length = orig_length;
 #if HAVE_FAST_64BIT
 #define FAST_COPY_UP(shift) \
-    for (j = 0; j < length - 3; j += 4) { \
+    for (; j < length - 3; j += 4) { \
         uint64_t v = AV_RN64A(srcPtr2 + j); \
         AV_WN64A(dstPtr2 + j, v << shift); \
-    } \
-    length &= 3;
+    }
 #else
 #define FAST_COPY_UP(shift) \
-    for (j = 0; j < length - 1; j += 2) { \
+    for (; j < length - 1; j += 2) { \
         uint32_t v = AV_RN32A(srcPtr2 + j); \
         AV_WN32A(dstPtr2 + j, v << shift); \
-    } \
-    length &= 1;
+    }
 #endif
                              switch (shift)
                              {
@@ -1121,12 +1139,12 @@ static int planarCopyWrapper(SwsContext *c, const uint8_t *src[],
                         }
 #define COPY_UP(r,w) \
     if(shiftonly){\
-        for (j = 0; j < length; j++){ \
+        for (; j < length; j++){ \
             unsigned int v= r(&srcPtr2[j]);\
             w(&dstPtr2[j], v<<(dst_depth-src_depth));\
         }\
     }else{\
-        for (j = 0; j < length; j++){ \
+        for (; j < length; j++){ \
             unsigned int v= r(&srcPtr2[j]);\
             w(&dstPtr2[j], (v<<(dst_depth-src_depth)) | \
                         (v>>(2*src_depth-dst_depth)));\
@@ -1214,6 +1232,11 @@ void ff_get_unscaled_swscale(SwsContext *c)
     if ((srcFormat == AV_PIX_FMT_YUV420P || srcFormat == AV_PIX_FMT_YUVA420P) &&
         (dstFormat == AV_PIX_FMT_NV12 || dstFormat == AV_PIX_FMT_NV21)) {
         c->swscale = planarToNv12Wrapper;
+    }
+    /* nv12_to_yv12 */
+    if (dstFormat == AV_PIX_FMT_YUV420P &&
+        (srcFormat == AV_PIX_FMT_NV12 || srcFormat == AV_PIX_FMT_NV21)) {
+        c->swscale = nv12ToPlanarWrapper;
     }
     /* yuv2bgr */
     if ((srcFormat == AV_PIX_FMT_YUV420P || srcFormat == AV_PIX_FMT_YUV422P ||

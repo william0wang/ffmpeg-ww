@@ -112,7 +112,7 @@ av_cold int ff_h263_decode_init(AVCodecContext *avctx)
         return AVERROR(ENOSYS);
     }
     s->codec_id    = avctx->codec->id;
-    avctx->hwaccel = ff_find_hwaccel(avctx->codec->id, avctx->pix_fmt);
+    avctx->hwaccel = ff_find_hwaccel(avctx);
 
     if (avctx->stream_codec_tag == AV_RL32("l263") && avctx->extradata_size == 56 && avctx->extradata[0] == 1)
         s->ehc_mode = 1;
@@ -124,6 +124,7 @@ av_cold int ff_h263_decode_init(AVCodecContext *avctx)
         if ((ret = ff_MPV_common_init(s)) < 0)
             return ret;
 
+    ff_h263dsp_init(&s->h263dsp);
     ff_h263_decode_init_vlc();
 
     return 0;
@@ -630,7 +631,9 @@ retry:
         /* H.263 could change picture size any time */
         s->context_reinit = 0;
 
-        avcodec_set_dimensions(avctx, s->width, s->height);
+        ret = ff_set_dimensions(avctx, s->width, s->height);
+        if (ret < 0)
+            return ret;
 
         if ((ret = ff_MPV_common_frame_size_change(s)))
             return ret;
