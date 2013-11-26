@@ -87,6 +87,8 @@ Standard options:
   --shlibdir=DIR           install shared libs in DIR [PREFIX/lib]
   --incdir=DIR             install includes in DIR [PREFIX/include]
   --mandir=DIR             install man page in DIR [PREFIX/share/man]
+  --enable-rpath           use rpath to allow installing libraries in paths
+                           not part of the dynamic linker search path
 
 Licensing options:
   --enable-gpl             allow use of GPL code, the resulting libs
@@ -1162,6 +1164,10 @@ COMPONENT_LIST="
     protocols
 "
 
+EXAMPLE_LIST="
+    muxing_example
+"
+
 EXTERNAL_LIBRARY_LIST="
     avisynth
     bzlib
@@ -1262,6 +1268,7 @@ PROGRAM_LIST="
 CONFIG_LIST="
     $COMPONENT_LIST
     $DOCUMENT_LIST
+    $EXAMPLE_LIST
     $EXTERNAL_LIBRARY_LIST
     $HWACCEL_LIST
     $LIBRARY_LIST
@@ -1557,11 +1564,13 @@ HAVE_LIST="
     threads
     unistd_h
     usleep
+    vdpau_x11
     vfp_args
     VirtualAlloc
     windows_h
     winsock2_h
     xform_asm
+    xlib
     xmm_clobbers
 "
 
@@ -1612,6 +1621,7 @@ CMDLINE_SELECT="
     logging
     lto
     optimizations
+    rpath
     stripping
 "
 
@@ -2264,6 +2274,9 @@ tinterlace_merge_test_deps="tinterlace_filter"
 tinterlace_pad_test_deps="tinterlace_filter"
 zmq_filter_deps="libzmq"
 
+# examples
+muxing_example_deps="avcodec avformat avutil swscale"
+
 # libraries
 avcodec_deps="avutil"
 avdevice_deps="avutil avcodec avformat"
@@ -2334,6 +2347,7 @@ host_os=$target_os_default
 # configurable options
 enable $PROGRAM_LIST
 enable $DOCUMENT_LIST
+enable $EXAMPLE_LIST
 enable $(filter_out avresample $LIBRARY_LIST)
 enable stripping
 
@@ -3627,7 +3641,7 @@ case $target_os in
         SLIBSUF=".dll"
         SLIBNAME_WITH_VERSION='$(SLIBPREF)$(FULLNAME)-$(LIBVERSION)$(SLIBSUF)'
         SLIBNAME_WITH_MAJOR='$(SLIBPREF)$(FULLNAME)-$(LIBMAJOR)$(SLIBSUF)'
-        SLIB_CREATE_DEF_CMD='makedef $(SUBDIR)lib$(NAME).ver $(OBJS) > $$(@:$(SLIBSUF)=.def)'
+        SLIB_CREATE_DEF_CMD='$(SRC_PATH)/compat/windows/makedef $(SUBDIR)lib$(NAME).ver $(OBJS) > $$(@:$(SLIBSUF)=.def)'
         SLIB_INSTALL_NAME='$(SLIBNAME_WITH_MAJOR)'
         SLIB_INSTALL_LINKS=
         SLIB_INSTALL_EXTRA_SHLIB='$(SLIBNAME:$(SLIBSUF)=.lib)'
@@ -4370,7 +4384,7 @@ enabled sdl && add_cflags $sdl_cflags && add_extralibs $sdl_libs
 
 texi2html --help 2> /dev/null | grep -q 'init-file' && enable texi2html || disable texi2html
 makeinfo --version > /dev/null 2>&1 && enable makeinfo  || disable makeinfo
-perl --version > /dev/null 2>&1 && enable perl || disable perl
+perl -v            > /dev/null 2>&1 && enable perl      || disable perl
 pod2man --help > /dev/null 2>&1 && enable pod2man || disable pod2man
 rsync --help 2> /dev/null | grep -q 'contimeout' && enable rsync_contimeout || disable rsync_contimeout
 
@@ -4422,10 +4436,12 @@ if enabled libcdio; then
     die "ERROR: libcdio-paranoia not found"
 fi
 
+check_lib X11/Xlib.h XOpenDisplay -lX11 && enable xlib
+
 enabled x11grab                                           &&
-require X11 X11/Xlib.h XOpenDisplay -lX11                 &&
 require Xext X11/extensions/XShm.h XShmCreateImage -lXext &&
-require Xfixes X11/extensions/Xfixes.h XFixesGetCursorImage -lXfixes
+require Xfixes X11/extensions/Xfixes.h XFixesGetCursorImage -lXfixes &&
+{ enabled xlib || die "ERROR: Xlib not found"; }
 
 enabled vaapi &&
     check_lib va/va.h vaInitialize -lva ||
@@ -4434,6 +4450,10 @@ enabled vaapi &&
 enabled vdpau &&
     check_cpp_condition vdpau/vdpau.h "defined VDP_DECODER_PROFILE_MPEG4_PART2_ASP" ||
     disable vdpau
+
+enabled vdpau && enabled xlib &&
+    check_lib2 "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau &&
+    enable vdpau_x11
 
 # Funny iconv installations are not unusual, so check it after all flags have been set
 disabled iconv || check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || disable iconv
@@ -4467,6 +4487,7 @@ check_disable_warning -Wno-pointer-sign
 # add some linker flags
 check_ldflags -Wl,--warn-common
 check_ldflags -Wl,-rpath-link=libpostproc:libswresample:libswscale:libavfilter:libavdevice:libavformat:libavcodec:libavutil:libavresample
+enabled rpath && add_ldflags -Wl,-rpath=$libdir
 test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
 
 enabled xmm_clobber_test &&
@@ -4897,6 +4918,7 @@ cat > $TMPH <<EOF
 #define FFMPEG_CONFIG_H
 #define FFMPEG_CONFIGURATION "$(c_escape $FFMPEG_CONFIGURATION)"
 #define FFMPEG_LICENSE "$(c_escape $license)"
+#define CONFIG_THIS_YEAR 2013
 #define FFMPEG_DATADIR "$(eval c_escape $datadir)"
 #define AVCONV_DATADIR "$(eval c_escape $datadir)"
 #define CC_IDENT "$(c_escape ${cc_ident:-Unknown compiler})"
@@ -4979,7 +5001,7 @@ Version: $version
 Requires: $(enabled shared || echo $requires)
 Requires.private: $(enabled shared && echo $requires)
 Conflicts:
-Libs: -L\${libdir} -l${shortname} $(enabled shared || echo $libs)
+Libs: -L\${libdir} $(enabled rpath && echo "-Wl,-rpath,\${libdir}") -l${shortname} $(enabled shared || echo $libs)
 Libs.private: $(enabled shared && echo $libs)
 Cflags: -I\${includedir}
 EOF

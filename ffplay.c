@@ -28,6 +28,8 @@
 #include <math.h>
 #include <limits.h>
 #include <signal.h>
+#include <stdint.h>
+
 #include "libavutil/avstring.h"
 #include "libavutil/colorspace.h"
 #include "libavutil/mathematics.h"
@@ -3546,7 +3548,6 @@ int main(int argc, char **argv)
     parse_loglevel(argc, argv, options);
 
     /* register all codecs, demux and protocols */
-    avcodec_register_all();
 #if CONFIG_AVDEVICE
     avdevice_register_all();
 #endif

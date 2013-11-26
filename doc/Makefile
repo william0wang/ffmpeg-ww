@@ -14,11 +14,11 @@ COMPONENTS-$(CONFIG_AVFORMAT)   += ffmpeg-formats ffmpeg-protocols
 COMPONENTS-$(CONFIG_AVDEVICE)   += ffmpeg-devices
 COMPONENTS-$(CONFIG_AVFILTER)   += ffmpeg-filters
 
-MANPAGES1   = $(PROGS-yes:%=doc/%.1)    $(PROGS-yes:%=doc/%-all.1)    $(COMPONENTS-yes:%=doc/%.1)
+MANPAGES1   = $(AVPROGS-yes:%=doc/%.1)    $(AVPROGS-yes:%=doc/%-all.1)    $(COMPONENTS-yes:%=doc/%.1)
 MANPAGES3   = $(LIBRARIES-yes:%=doc/%.3)
 MANPAGES    = $(MANPAGES1) $(MANPAGES3)
-PODPAGES    = $(PROGS-yes:%=doc/%.pod)  $(PROGS-yes:%=doc/%-all.pod)  $(COMPONENTS-yes:%=doc/%.pod)  $(LIBRARIES-yes:%=doc/%.pod)
-HTMLPAGES   = $(PROGS-yes:%=doc/%.html) $(PROGS-yes:%=doc/%-all.html) $(COMPONENTS-yes:%=doc/%.html) $(LIBRARIES-yes:%=doc/%.html) \
+PODPAGES    = $(AVPROGS-yes:%=doc/%.pod)  $(AVPROGS-yes:%=doc/%-all.pod)  $(COMPONENTS-yes:%=doc/%.pod)  $(LIBRARIES-yes:%=doc/%.pod)
+HTMLPAGES   = $(AVPROGS-yes:%=doc/%.html) $(AVPROGS-yes:%=doc/%-all.html) $(COMPONENTS-yes:%=doc/%.html) $(LIBRARIES-yes:%=doc/%.html) \
               doc/developer.html                                        \
               doc/faq.html                                              \
               doc/fate.html                                             \
@@ -36,12 +36,21 @@ DOCS-$(CONFIG_MANPAGES)  += $(MANPAGES)
 DOCS-$(CONFIG_TXTPAGES)  += $(TXTPAGES)
 DOCS = $(DOCS-yes)
 
+DOC_EXAMPLES-$(CONFIG_MUXING_EXAMPLE)           += muxing
+ALL_DOC_EXAMPLES = muxing
+
+DOC_EXAMPLES     := $(DOC_EXAMPLES-yes:%=doc/examples/%$(EXESUF))
+ALL_DOC_EXAMPLES := $(ALL_DOC_EXAMPLES:%=doc/examples/%$(EXESUF))
+PROGS            += $(DOC_EXAMPLES-yes:%=doc/examples/%)
+
 all-$(CONFIG_DOC): doc
 
 doc: documentation
 
 apidoc: doc/doxy/html
 documentation: $(DOCS)
+
+examples: $(DOC_EXAMPLES)
 
 TEXIDEP = awk '/^@(verbatim)?include/ { printf "$@: $(@D)/%s\n", $$2 }' <$< >$(@:%=%.d)
 
@@ -84,6 +93,8 @@ doc/%.3: doc/%.pod $(GENTEXI)
 	$(M)pod2man --section=3 --center=" " --release=" " $< > $@
 
 $(DOCS) doc/doxy/html: | doc/
+$(DOC_EXAMPLES:%=%.o): | doc/examples
+OBJDIRS += doc/examples
 
 doc/doxy/html: $(SRC_PATH)/doc/Doxyfile $(INSTHEADERS)
 	$(M)$(SRC_PATH)/doc/doxy-wrapper.sh $(SRC_PATH) $^
@@ -120,7 +131,7 @@ uninstall-html:
 	$(RM) -r "$(DOCDIR)"
 
 uninstall-man:
-	$(RM) $(addprefix "$(MANDIR)/man1/",$(PROGS-yes:%=%.1) $(PROGS-yes:%=%-all.1) $(COMPONENTS-yes:%=%.1))
+	$(RM) $(addprefix "$(MANDIR)/man1/",$(AVPROGS-yes:%=%.1) $(AVPROGS-yes:%=%-all.1) $(COMPONENTS-yes:%=%.1))
 	$(RM) $(addprefix "$(MANDIR)/man3/",$(LIBRARIES-yes:%=%.3))
 
 clean:: docclean
@@ -129,7 +140,9 @@ distclean:: docclean
 	$(RM) doc/config.texi
 
 docclean:
-	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 doc/*.3 $(CLEANSUFFIXES:%=doc/%) doc/avoptions_*.texi
+	$(RM) $(ALL_DOC_EXAMPLES)
+	$(RM) $(CLEANSUFFIXES:%=doc/%) $(CLEANSUFFIXES:%=doc/examples/%)
+	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 doc/*.3 doc/avoptions_*.texi
 	$(RM) -r doc/doxy/html
 
 -include $(wildcard $(DOCS:%=%.d))

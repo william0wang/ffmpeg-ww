@@ -617,7 +617,11 @@ so if you allow the use of GPL, you should configure with
 
 This encoder is considered to be of higher quality with respect to
 both @ref{aacenc,,the native experimental FFmpeg AAC encoder} and
-libfaac.
+@ref{libfaac}.
+
+VBR encoding, enabled through the @option{vbr} or @option{flags
++qscale} options, is experimental and only works with some
+combinations of parameters.
 
 For more information see the fdk-aac project at
 @url{http://sourceforge.net/p/opencore-amr/fdk-aac/}.
@@ -642,7 +646,7 @@ Set the number of audio channels.
 
 @item flags +qscale
 Enable fixed quality, VBR (Variable Bit Rate) mode.
-Note that VBR is implicitely enabled when the @option{vbr} value is
+Note that VBR is implicitly enabled when the @option{vbr} value is
 positive.
 
 @item cutoff
@@ -725,12 +729,12 @@ Default value is 0.
 
 @item vbr
 Set VBR mode, from 1 to 5. 1 is lowest quality (though still pretty
-good) and 5 is highest quality. A value of 0 will disable VBR mode,
-and CBR (Constant Bit Rate) mode is enabled.
+good) and 5 is highest quality. A value of 0 will disable VBR, and CBR
+(Constant Bit Rate) is enabled.
 
-Currently only the @samp{aac_low} profile supports VBR mode.
+Currently only the @samp{aac_low} profile supports VBR encoding.
 
-VBR modes 1-5 correspond to roughly the following average bit rate:
+VBR modes 1-5 correspond to roughly the following average bit rates:
 
 @table @samp
 @item 1

@@ -10,23 +10,27 @@ vpath %.v    $(SRC_PATH)
 vpath %.texi $(SRC_PATH)
 vpath %/fate_config.sh.template $(SRC_PATH)
 
-PROGS-$(CONFIG_FFMPEG)   += ffmpeg
-PROGS-$(CONFIG_FFPLAY)   += ffplay
-PROGS-$(CONFIG_FFPROBE)  += ffprobe
-PROGS-$(CONFIG_FFSERVER) += ffserver
+AVPROGS-$(CONFIG_FFMPEG)   += ffmpeg
+AVPROGS-$(CONFIG_FFPLAY)   += ffplay
+AVPROGS-$(CONFIG_FFPROBE)  += ffprobe
+AVPROGS-$(CONFIG_FFSERVER) += ffserver
 
-PROGS      := $(PROGS-yes:%=%$(PROGSSUF)$(EXESUF))
-INSTPROGS   = $(PROGS-yes:%=%$(PROGSSUF)$(EXESUF))
+AVPROGS    := $(AVPROGS-yes:%=%$(PROGSSUF)$(EXESUF))
+INSTPROGS   = $(AVPROGS-yes:%=%$(PROGSSUF)$(EXESUF))
+PROGS      += $(AVPROGS-yes)
 
-OBJS-ffmpeg = ffmpeg_opt.o ffmpeg_filter.o
+AVBASENAMES  = ffmpeg ffplay ffprobe ffserver
+ALLAVPROGS   = $(AVBASENAMES:%=%$(PROGSSUF)$(EXESUF))
+ALLAVPROGS_G = $(AVBASENAMES:%=%$(PROGSSUF)_g$(EXESUF))
+
+$(foreach prog,$(AVBASENAMES),$(eval OBJS-$(prog) += cmdutils.o))
+
+OBJS-ffmpeg                   += ffmpeg_opt.o ffmpeg_filter.o
+OBJS-ffmpeg-$(HAVE_VDPAU_X11) += ffmpeg_vdpau.o
 TESTTOOLS   = audiogen videogen rotozoom tiny_psnr tiny_ssim base64
 HOSTPROGS  := $(TESTTOOLS:%=tests/%) doc/print_options
 TOOLS       = qt-faststart trasher
 TOOLS-$(CONFIG_ZLIB) += cws2fws
-
-BASENAMES   = ffmpeg ffplay ffprobe ffserver
-ALLPROGS    = $(BASENAMES:%=%$(PROGSSUF)$(EXESUF))
-ALLPROGS_G  = $(BASENAMES:%=%$(PROGSSUF)_g$(EXESUF))
 
 FFLIBS-$(CONFIG_AVDEVICE) += avdevice
 FFLIBS-$(CONFIG_AVFILTER) += avfilter
@@ -49,11 +53,7 @@ include $(SRC_PATH)/common.mak
 FF_EXTRALIBS := $(FFEXTRALIBS)
 FF_DEP_LIBS  := $(DEP_LIBS)
 
-all: $(PROGS)
-
-$(PROGS): %$(EXESUF): %_g$(EXESUF)
-	$(CP) $< $@
-	$(STRIP) $@
+all: $(AVPROGS)
 
 $(TOOLS): %$(EXESUF): %.o $(EXEOBJS)
 	$(LD) $(LDFLAGS) $(LD_O) $^ $(ELIBS)
@@ -95,8 +95,10 @@ ffmpeg-rc.o: etc/ffmpeg.rc
 ffmpeg_g.exe: ffmpeg.o cmdutils.o $(FF_DEP_LIBS) ffmpeg-rc.o
 	$(CC) $(LDFLAGS) -o $@ $< cmdutils.o ffmpeg-rc.o $(FF_EXTRALIBS)
 
+include $(SRC_PATH)/doc/Makefile
+
 define DOPROG
-OBJS-$(1) += $(1).o cmdutils.o $(EXEOBJS)
+OBJS-$(1) += $(1).o $(EXEOBJS) $(OBJS-$(1)-yes)
 $(1)$(PROGSSUF)_g$(EXESUF): $$(OBJS-$(1))
 $$(OBJS-$(1)): CFLAGS  += $(CFLAGS-$(1))
 $(1)$(PROGSSUF)_g$(EXESUF): LDFLAGS += $(LDFLAGS-$(1))
@@ -104,7 +106,11 @@ $(1)$(PROGSSUF)_g$(EXESUF): FF_EXTRALIBS += $(LIBS-$(1))
 -include $$(OBJS-$(1):.o=.d)
 endef
 
-$(foreach P,$(PROGS-yes),$(eval $(call DOPROG,$(P))))
+$(foreach P,$(PROGS),$(eval $(call DOPROG,$(P))))
+
+$(PROGS:%=%$(PROGSSUF)$(EXESUF)): %$(PROGSSUF)$(EXESUF): %$(PROGSSUF)_g$(EXESUF)
+	$(CP) $< $@
+	$(STRIP) $@
 
 %$(PROGSSUF)_g$(EXESUF): %.o $(FF_DEP_LIBS)
 	$(LD) $(LDFLAGS) $(LD_O) $(OBJS-$*) $(FF_EXTRALIBS)
@@ -126,7 +132,7 @@ version.h .version:
 # force version.sh to run whenever version might have changed
 -include .version
 
-ifdef PROGS
+ifdef AVPROGS
 install: install-progs install-data
 endif
 
@@ -137,7 +143,7 @@ install-libs: install-libs-yes
 install-progs-yes:
 install-progs-$(CONFIG_SHARED): install-libs
 
-install-progs: install-progs-yes $(PROGS)
+install-progs: install-progs-yes $(AVPROGS)
 	$(Q)mkdir -p "$(BINDIR)"
 	$(INSTALL) -c -m 755 $(INSTPROGS) "$(BINDIR)"
 
@@ -149,13 +155,13 @@ install-data: $(DATA_FILES) $(EXAMPLES_FILES)
 uninstall: uninstall-libs uninstall-headers uninstall-progs uninstall-data
 
 uninstall-progs:
-	$(RM) $(addprefix "$(BINDIR)/", $(ALLPROGS))
+	$(RM) $(addprefix "$(BINDIR)/", $(ALLAVPROGS))
 
 uninstall-data:
 	$(RM) -r "$(DATADIR)"
 
 clean::
-	$(RM) $(ALLPROGS) $(ALLPROGS_G)
+	$(RM) $(ALLAVPROGS) $(ALLAVPROGS_G)
 	$(RM) $(CLEANSUFFIXES)
 	$(RM) $(CLEANSUFFIXES:%=tools/%)
 	$(RM) -r coverage-html
@@ -170,7 +176,6 @@ config:
 
 check: all alltools examples testprogs fate
 
-include $(SRC_PATH)/doc/Makefile
 include $(SRC_PATH)/tests/Makefile
 
 $(sort $(OBJDIRS)):

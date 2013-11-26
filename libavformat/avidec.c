@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <stdint.h>
+
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bswap.h"
@@ -1310,10 +1312,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
                     size);
             pkt->stream_index = avi->stream_index;
 
-            if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO && st->index_entries) {
                 AVIndexEntry *e;
                 int index;
-                av_assert0(st->index_entries);
 
                 index = av_index_search_timestamp(st, ast->frame_offset, 0);
                 e     = &st->index_entries[index];
