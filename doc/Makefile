@@ -36,12 +36,21 @@ DOCS-$(CONFIG_MANPAGES)  += $(MANPAGES)
 DOCS-$(CONFIG_TXTPAGES)  += $(TXTPAGES)
 DOCS = $(DOCS-yes)
 
-DOC_EXAMPLES-$(CONFIG_MUXING_EXAMPLE)           += muxing
-ALL_DOC_EXAMPLES = muxing
+DOC_EXAMPLES-$(CONFIG_DECODING_ENCODING_EXAMPLE) += decoding_encoding
+DOC_EXAMPLES-$(CONFIG_DEMUXING_DECODING_EXAMPLE) += demuxing_decoding
+DOC_EXAMPLES-$(CONFIG_FILTERING_AUDIO_EXAMPLE)   += filtering_audio
+DOC_EXAMPLES-$(CONFIG_FILTERING_VIDEO_EXAMPLE)   += filtering_video
+DOC_EXAMPLES-$(CONFIG_METADATA_EXAMPLE)          += metadata
+DOC_EXAMPLES-$(CONFIG_MUXING_EXAMPLE)            += muxing
+DOC_EXAMPLES-$(CONFIG_RESAMPLING_AUDIO_EXAMPLE)  += resampling_audio
+DOC_EXAMPLES-$(CONFIG_SCALING_VIDEO_EXAMPLE)     += scaling_video
+DOC_EXAMPLES-$(CONFIG_TRANSCODE_AAC_EXAMPLE)     += transcode_aac
+ALL_DOC_EXAMPLES_LIST = $(DOC_EXAMPLES-) $(DOC_EXAMPLES-yes)
 
-DOC_EXAMPLES     := $(DOC_EXAMPLES-yes:%=doc/examples/%$(EXESUF))
-ALL_DOC_EXAMPLES := $(ALL_DOC_EXAMPLES:%=doc/examples/%$(EXESUF))
-PROGS            += $(DOC_EXAMPLES-yes:%=doc/examples/%)
+DOC_EXAMPLES       := $(DOC_EXAMPLES-yes:%=doc/examples/%$(PROGSSUF)$(EXESUF))
+ALL_DOC_EXAMPLES   := $(ALL_DOC_EXAMPLES_LIST:%=doc/examples/%$(PROGSSUF)$(EXESUF))
+ALL_DOC_EXAMPLES_G := $(ALL_DOC_EXAMPLES_LIST:%=doc/examples/%$(PROGSSUF)_g$(EXESUF))
+PROGS              += $(DOC_EXAMPLES)
 
 all-$(CONFIG_DOC): doc
 
@@ -139,9 +148,12 @@ clean:: docclean
 distclean:: docclean
 	$(RM) doc/config.texi
 
-docclean:
-	$(RM) $(ALL_DOC_EXAMPLES)
-	$(RM) $(CLEANSUFFIXES:%=doc/%) $(CLEANSUFFIXES:%=doc/examples/%)
+examplesclean:
+	$(RM) $(ALL_DOC_EXAMPLES) $(ALL_DOC_EXAMPLES_G)
+	$(RM) $(CLEANSUFFIXES:%=doc/examples/%)
+
+docclean: examplesclean
+	$(RM) $(CLEANSUFFIXES:%=doc/%)
 	$(RM) $(TXTPAGES) doc/*.html doc/*.pod doc/*.1 doc/*.3 doc/avoptions_*.texi
 	$(RM) -r doc/doxy/html
 

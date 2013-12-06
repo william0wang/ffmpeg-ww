@@ -33,9 +33,6 @@
 #define FRAC_BITS   15   /* fractional bits for sb_samples and dct */
 #define WFRAC_BITS  14   /* fractional bits for window */
 
-/* define it to use floats in quantization (I don't like floats !) */
-#define USE_FLOATS
-
 #include "mpegaudio.h"
 #include "mpegaudiodsp.h"
 #include "mpegaudiodata.h"
@@ -67,7 +64,7 @@ typedef struct MpegAudioContext {
     int16_t filter_bank[512];
     int scale_factor_table[64];
     unsigned char scale_diff_table[128];
-#ifdef USE_FLOATS
+#if USE_FLOATS
     float scale_factor_inv_table[64];
 #else
     int8_t scale_factor_shift[64];
@@ -161,7 +158,7 @@ static av_cold int MPA_encode_init(AVCodecContext *avctx)
         if (v <= 0)
             v = 1;
         s->scale_factor_table[i] = v;
-#ifdef USE_FLOATS
+#if USE_FLOATS
         s->scale_factor_inv_table[i] = exp2(-(3 - i) / 3.0) / (float)(1 << 20);
 #else
 #define P 15
@@ -684,7 +681,7 @@ static void encode_frame(MpegAudioContext *s,
                         for(m=0;m<3;m++) {
                             sample = s->sb_samples[ch][k][l + m][i];
                             /* divide by scale factor */
-#ifdef USE_FLOATS
+#if USE_FLOATS
                             {
                                 float a;
                                 a = (float)sample * s->scale_factor_inv_table[s->scale_factors[ch][i][k]];
@@ -780,21 +777,3 @@ static const AVCodecDefault mp2_defaults[] = {
     { NULL },
 };
 
-AVCodec ff_mp2_encoder = {
-    .name                  = "mp2",
-    .long_name             = NULL_IF_CONFIG_SMALL("MP2 (MPEG audio layer 2)"),
-    .type                  = AVMEDIA_TYPE_AUDIO,
-    .id                    = AV_CODEC_ID_MP2,
-    .priv_data_size        = sizeof(MpegAudioContext),
-    .init                  = MPA_encode_init,
-    .encode2               = MPA_encode_frame,
-    .sample_fmts           = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
-                                                            AV_SAMPLE_FMT_NONE },
-    .supported_samplerates = (const int[]){
-        44100, 48000,  32000, 22050, 24000, 16000, 0
-    },
-    .channel_layouts       = (const uint64_t[]){ AV_CH_LAYOUT_MONO,
-                                                 AV_CH_LAYOUT_STEREO,
-                                                 0 },
-    .defaults              = mp2_defaults,
-};

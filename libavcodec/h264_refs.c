@@ -68,7 +68,8 @@ static int split_field_copy(Picture *dest, Picture *src, int parity, int id_add)
     return match;
 }
 
-static int build_def_list(Picture *def, Picture **in, int len, int is_long, int sel)
+static int build_def_list(Picture *def, int def_len,
+                          Picture **in, int len, int is_long, int sel)
 {
     int  i[2] = { 0 };
     int index = 0;
@@ -79,10 +80,12 @@ static int build_def_list(Picture *def, Picture **in, int len, int is_long, int 
         while (i[1] < len && !(in[i[1]] && (in[i[1]]->reference & (sel ^ 3))))
             i[1]++;
         if (i[0] < len) {
+            av_assert0(index < def_len);
             in[i[0]]->pic_id = is_long ? i[0] : in[i[0]]->frame_num;
             split_field_copy(&def[index++], in[i[0]++], sel, 1);
         }
         if (i[1] < len) {
+            av_assert0(index < def_len);
             in[i[1]]->pic_id = is_long ? i[1] : in[i[1]]->frame_num;
             split_field_copy(&def[index++], in[i[1]++], sel ^ 3, 0);
         }
@@ -131,8 +134,12 @@ int ff_h264_fill_default_ref_list(H264Context *h)
             len  = add_sorted(sorted,       h->short_ref, h->short_ref_count, cur_poc, 1 ^ list);
             len += add_sorted(sorted + len, h->short_ref, h->short_ref_count, cur_poc, 0 ^ list);
             av_assert0(len <= 32);
-            len  = build_def_list(h->default_ref_list[list],       sorted,      len, 0, h->picture_structure);
-            len += build_def_list(h->default_ref_list[list] + len, h->long_ref, 16,  1, h->picture_structure);
+
+            len  = build_def_list(h->default_ref_list[list], FF_ARRAY_ELEMS(h->default_ref_list[0]),
+                                  sorted, len, 0, h->picture_structure);
+            len += build_def_list(h->default_ref_list[list] + len,
+                                  FF_ARRAY_ELEMS(h->default_ref_list[0]) - len,
+                                  h->long_ref, 16, 1, h->picture_structure);
             av_assert0(len <= 32);
 
             if (len < h->ref_count[list])
@@ -152,9 +159,13 @@ int ff_h264_fill_default_ref_list(H264Context *h)
             }
         }
     } else {
-        len  = build_def_list(h->default_ref_list[0],       h->short_ref, h->short_ref_count, 0, h->picture_structure);
-        len += build_def_list(h->default_ref_list[0] + len, h-> long_ref, 16,                 1, h->picture_structure);
+        len  = build_def_list(h->default_ref_list[0], FF_ARRAY_ELEMS(h->default_ref_list[0]),
+                              h->short_ref, h->short_ref_count, 0, h->picture_structure);
+        len += build_def_list(h->default_ref_list[0] + len,
+                              FF_ARRAY_ELEMS(h->default_ref_list[0]) - len,
+                              h-> long_ref, 16, 1, h->picture_structure);
         av_assert0(len <= 32);
+
         if (len < h->ref_count[0])
             memset(&h->default_ref_list[0][len], 0, sizeof(Picture) * (h->ref_count[0] - len));
     }
@@ -564,6 +575,7 @@ int ff_generate_sliding_window_mmcos(H264Context *h, int first_slice)
 int ff_h264_execute_ref_pic_marking(H264Context *h, MMCO *mmco, int mmco_count)
 {
     int i, av_uninit(j);
+    int pps_count;
     int current_ref_assigned = 0, err = 0;
     Picture *av_uninit(pic);
 
@@ -734,7 +746,15 @@ int ff_h264_execute_ref_pic_marking(H264Context *h, MMCO *mmco, int mmco_count)
     print_short_term(h);
     print_long_term(h);
 
-    if(err >= 0 && h->long_ref_count==0 && h->short_ref_count<=2 && h->pps.ref_count[0]<=2 + (h->picture_structure != PICT_FRAME) && h->cur_pic_ptr->f.pict_type == AV_PICTURE_TYPE_I){
+    pps_count = 0;
+    for (i = 0; i < FF_ARRAY_ELEMS(h->pps_buffers); i++)
+        pps_count += !!h->pps_buffers[i];
+
+    if (   err >= 0
+        && h->long_ref_count==0
+        && (h->short_ref_count<=2 || h->pps.ref_count[0] <= 1 && h->pps.ref_count[1] <= 1 && pps_count == 1)
+        && h->pps.ref_count[0]<=2 + (h->picture_structure != PICT_FRAME)
+        && h->cur_pic_ptr->f.pict_type == AV_PICTURE_TYPE_I){
         h->cur_pic_ptr->recovered |= 1;
         if(!h->avctx->has_b_frames)
             h->frame_recovered |= FRAME_RECOVERED_SEI;

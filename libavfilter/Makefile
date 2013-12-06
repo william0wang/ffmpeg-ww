@@ -49,8 +49,6 @@ OBJS = allfilters.o                                                     \
 
 
 OBJS-$(CONFIG_AVCODEC)                       += avcodec.o
-OBJS-$(CONFIG_AVFORMAT)                      += lavfutils.o
-OBJS-$(CONFIG_SWSCALE)                       += lswsutils.o
 
 OBJS-$(CONFIG_ACONVERT_FILTER)               += af_aconvert.o
 OBJS-$(CONFIG_ADELAY_FILTER)                 += af_adelay.o
@@ -248,6 +246,9 @@ OBJS-$(CONFIG_SHOWWAVES_FILTER)              += avf_showwaves.o
 # multimedia sources
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
+
+# Windows resource file
+SLIBOBJS-$(HAVE_GNU_WINDRES)                 += avfilterres.o
 
 SKIPHEADERS-$(CONFIG_LIBVIDSTAB)             += vidstabutils.h
 SKIPHEADERS-$(CONFIG_OPENCL)                 += opencl_internal.h deshake_opencl_kernel.h unsharp_opencl_kernel.h

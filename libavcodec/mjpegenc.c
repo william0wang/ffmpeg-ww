@@ -84,10 +84,9 @@ void ff_mjpeg_encode_close(MpegEncContext *s)
 }
 
 /* table_class: 0 = DC coef, 1 = AC coefs */
-static int put_huffman_table(MpegEncContext *s, int table_class, int table_id,
+static int put_huffman_table(PutBitContext *p, int table_class, int table_id,
                              const uint8_t *bits_table, const uint8_t *value_table)
 {
-    PutBitContext *p = &s->pb;
     int n, i;
 
     put_bits(p, 4, table_class);
@@ -147,40 +146,38 @@ static void jpeg_table_header(MpegEncContext *s)
     ptr = put_bits_ptr(p);
     put_bits(p, 16, 0); /* patched later */
     size = 2;
-    size += put_huffman_table(s, 0, 0, avpriv_mjpeg_bits_dc_luminance,
+    size += put_huffman_table(p, 0, 0, avpriv_mjpeg_bits_dc_luminance,
                               avpriv_mjpeg_val_dc);
-    size += put_huffman_table(s, 0, 1, avpriv_mjpeg_bits_dc_chrominance,
+    size += put_huffman_table(p, 0, 1, avpriv_mjpeg_bits_dc_chrominance,
                               avpriv_mjpeg_val_dc);
 
-    size += put_huffman_table(s, 1, 0, avpriv_mjpeg_bits_ac_luminance,
+    size += put_huffman_table(p, 1, 0, avpriv_mjpeg_bits_ac_luminance,
                               avpriv_mjpeg_val_ac_luminance);
-    size += put_huffman_table(s, 1, 1, avpriv_mjpeg_bits_ac_chrominance,
+    size += put_huffman_table(p, 1, 1, avpriv_mjpeg_bits_ac_chrominance,
                               avpriv_mjpeg_val_ac_chrominance);
     AV_WB16(ptr, size);
 }
 
-static void jpeg_put_comments(MpegEncContext *s)
+static void jpeg_put_comments(AVCodecContext *avctx, PutBitContext *p)
 {
-    PutBitContext *p = &s->pb;
     int size;
     uint8_t *ptr;
 
-    if (s->avctx->sample_aspect_ratio.num /* && !lossless */)
-    {
-    /* JFIF header */
-    put_marker(p, APP0);
-    put_bits(p, 16, 16);
-    avpriv_put_string(p, "JFIF", 1); /* this puts the trailing zero-byte too */
-    put_bits(p, 16, 0x0102); /* v 1.02 */
-    put_bits(p, 8, 0); /* units type: 0 - aspect ratio */
-    put_bits(p, 16, s->avctx->sample_aspect_ratio.num);
-    put_bits(p, 16, s->avctx->sample_aspect_ratio.den);
-    put_bits(p, 8, 0); /* thumbnail width */
-    put_bits(p, 8, 0); /* thumbnail height */
+    if (avctx->sample_aspect_ratio.num > 0 && avctx->sample_aspect_ratio.den > 0) {
+        /* JFIF header */
+        put_marker(p, APP0);
+        put_bits(p, 16, 16);
+        avpriv_put_string(p, "JFIF", 1); /* this puts the trailing zero-byte too */
+        put_bits(p, 16, 0x0102);         /* v 1.02 */
+        put_bits(p,  8, 0);              /* units type: 0 - aspect ratio */
+        put_bits(p, 16, avctx->sample_aspect_ratio.num);
+        put_bits(p, 16, avctx->sample_aspect_ratio.den);
+        put_bits(p, 8, 0); /* thumbnail width */
+        put_bits(p, 8, 0); /* thumbnail height */
     }
 
     /* comment */
-    if(!(s->flags & CODEC_FLAG_BITEXACT)){
+    if (!(avctx->flags & CODEC_FLAG_BITEXACT)) {
         put_marker(p, COM);
         flush_put_bits(p);
         ptr = put_bits_ptr(p);
@@ -190,9 +187,9 @@ static void jpeg_put_comments(MpegEncContext *s)
         AV_WB16(ptr, size);
     }
 
-    if(  s->avctx->pix_fmt == AV_PIX_FMT_YUV420P
-       ||s->avctx->pix_fmt == AV_PIX_FMT_YUV422P
-       ||s->avctx->pix_fmt == AV_PIX_FMT_YUV444P){
+    if (avctx->pix_fmt == AV_PIX_FMT_YUV420P ||
+        avctx->pix_fmt == AV_PIX_FMT_YUV422P ||
+        avctx->pix_fmt == AV_PIX_FMT_YUV444P) {
         put_marker(p, COM);
         flush_put_bits(p);
         ptr = put_bits_ptr(p);
@@ -213,7 +210,7 @@ void ff_mjpeg_encode_picture_header(MpegEncContext *s)
     // hack for AMV mjpeg format
     if(s->avctx->codec_id == AV_CODEC_ID_AMV) goto end;
 
-    jpeg_put_comments(s);
+    jpeg_put_comments(s->avctx, &s->pb);
 
     jpeg_table_header(s);
 
@@ -441,7 +438,7 @@ static void encode_block(MpegEncContext *s, int16_t *block, int n)
                 mant--;
             }
 
-            nbits= av_log2(val) + 1;
+            nbits= av_log2_16bit(val) + 1;
             code = (run << 4) | nbits;
 
             put_bits(&s->pb, huff_size_ac[code], huff_code_ac[code]);

@@ -267,6 +267,7 @@ Advanced options (experts only):
   --nm=NM                  use nm tool NM [$nm_default]
   --ar=AR                  use archive tool AR [$ar_default]
   --as=AS                  use assembler AS [$as_default]
+  --windres=WINDRES        use windows resource compiler WINDRES [$windres_default]
   --yasmexe=EXE            use yasm-compatible assembler EXE [$yasmexe_default]
   --cc=CC                  use C compiler CC [$cc_default]
   --cxx=CXX                use C compiler CXX [$cxx_default]
@@ -730,6 +731,10 @@ add_ldflags(){
     append LDFLAGS $($ldflags_filter "$@")
 }
 
+add_stripflags(){
+    append ASMSTRIPFLAGS "$@"
+}
+
 add_extralibs(){
     prepend extralibs $($ldflags_filter "$@")
 }
@@ -890,6 +895,20 @@ EOF
 check_ldflags(){
     log check_ldflags "$@"
     test_ldflags "$@" && add_ldflags "$@"
+}
+
+test_stripflags(){
+    log test_stripflags "$@"
+    # call check_cc to get a fresh TMPO
+    check_cc <<EOF
+int main(void) { return 0; }
+EOF
+    check_cmd $strip $ASMSTRIPFLAGS "$@" $TMPO
+}
+
+check_stripflags(){
+    log check_stripflags "$@"
+    test_stripflags "$@" && add_stripflags "$@"
 }
 
 check_header(){
@@ -1165,7 +1184,15 @@ COMPONENT_LIST="
 "
 
 EXAMPLE_LIST="
+    decoding_encoding_example
+    demuxing_decoding_example
+    filtering_audio_example
+    filtering_video_example
+    metadata_example
     muxing_example
+    resampling_audio_example
+    scaling_video_example
+    transcode_aac_example
 "
 
 EXTERNAL_LIBRARY_LIST="
@@ -1483,6 +1510,7 @@ HAVE_LIST="
     gettimeofday
     glob
     gnu_as
+    gnu_windres
     gsm_h
     ibm_asm
     inet_aton
@@ -2275,7 +2303,15 @@ tinterlace_pad_test_deps="tinterlace_filter"
 zmq_filter_deps="libzmq"
 
 # examples
+decoding_encoding_example_deps="avcodec avutil"
+demuxing_decoding_example_deps="avcodec avformat avutil"
+filtering_audio_example_deps="avfilter avcodec avformat avutil"
+filtering_video_example_deps="avfilter avcodec avformat avutil"
+metadata_example_deps="avformat avutil"
 muxing_example_deps="avcodec avformat avutil swscale"
+resampling_audio_example_deps="avutil swresample"
+scaling_video_example_deps="avutil swscale"
+transcode_aac_example_deps="avcodec avformat swresample"
 
 # libraries
 avcodec_deps="avutil"
@@ -2333,6 +2369,7 @@ pkg_config_default=pkg-config
 ranlib="ranlib"
 strip_default="strip"
 yasmexe_default="yasm"
+windres_default="windres"
 
 nogas=":"
 
@@ -2603,6 +2640,7 @@ nm_default="${cross_prefix}${nm_default}"
 pkg_config_default="${cross_prefix}${pkg_config_default}"
 ranlib="${cross_prefix}${ranlib}"
 strip_default="${cross_prefix}${strip_default}"
+windres_default="${cross_prefix}${windres_default}"
 
 sysinclude_default="${sysroot}/usr/include"
 
@@ -3121,7 +3159,7 @@ test -n "$cc_type" && enable $cc_type ||
 : ${dep_cc_default:=$cc}
 : ${ld_default:=$cc}
 : ${host_ld_default:=$host_cc}
-set_default ar as dep_cc ld host_ld
+set_default ar as dep_cc ld host_ld windres
 
 probe_cc as "$as"
 asflags_filter=$_flags_filter
@@ -3603,6 +3641,7 @@ case $target_os in
         elif enabled arm; then
             LIBTARGET=arm-wince
         fi
+        enabled shared && ! enabled small && check_cmd $windres --version && enable gnu_windres
         check_ldflags -Wl,--nxcompat
         check_ldflags -Wl,--dynamicbase
         shlibdir_default="$bindir_default"
@@ -3664,6 +3703,7 @@ case $target_os in
         SHFLAGS='-shared -Wl,--out-implib,$(SUBDIR)lib$(FULLNAME).dll.a'
         objformat="win32"
         enable dos_paths
+        enabled shared && ! enabled small && check_cmd $windres --version && enable gnu_windres
         ;;
     *-dos|freedos|opendos)
         network_extralibs="-lsocket"
@@ -3774,7 +3814,7 @@ elif check_header _mingw.h; then
     else
         add_cppflags -D__USE_MINGW_ANSI_STDIO=1
     fi
-elif check_func_headers stdlib.h _get_doserrno; then
+elif check_cpp_condition crtversion.h "defined _VC_CRT_MAJOR_VERSION"; then
     libc_type=msvcrt
     add_compat strtod.o strtod=avpriv_strtod
     add_compat msvcrt/snprintf.o snprintf=avpriv_snprintf   \
@@ -4219,17 +4259,17 @@ fi
 # do this before the optional library checks as some of them require pthreads
 if ! disabled pthreads && ! enabled w32threads && ! enabled os2threads; then
     enable pthreads
-    if check_func pthread_create; then
+    if check_func pthread_join && check_func pthread_create; then
         :
-    elif check_func pthread_create -pthread; then
+    elif check_func pthread_join -pthread && check_func pthread_create -pthread; then
         add_cflags -pthread
         add_extralibs -pthread
-    elif check_func pthread_create -pthreads; then
+    elif check_func pthread_join -pthreads && check_func pthread_create -pthreads; then
         add_cflags -pthreads
         add_extralibs -pthreads
-    elif check_func pthread_create -lpthreadGC2; then
+    elif check_func pthread_join -lpthreadGC2 && check_func pthread_create -lpthreadGC2; then
         add_extralibs -lpthreadGC2
-    elif ! check_lib pthread.h pthread_create -lpthread; then
+    elif ! check_lib pthread.h pthread_join -lpthread && ! check_lib pthread.h pthread_create -lpthread; then
         disable pthreads
     fi
 fi
@@ -4385,7 +4425,7 @@ enabled sdl && add_cflags $sdl_cflags && add_extralibs $sdl_libs
 texi2html --help 2> /dev/null | grep -q 'init-file' && enable texi2html || disable texi2html
 makeinfo --version > /dev/null 2>&1 && enable makeinfo  || disable makeinfo
 perl -v            > /dev/null 2>&1 && enable perl      || disable perl
-pod2man --help > /dev/null 2>&1 && enable pod2man || disable pod2man
+pod2man --help     > /dev/null 2>&1 && enable pod2man   || disable pod2man
 rsync --help 2> /dev/null | grep -q 'contimeout' && enable rsync_contimeout || disable rsync_contimeout
 
 check_header linux/fb.h
@@ -4489,6 +4529,10 @@ check_ldflags -Wl,--warn-common
 check_ldflags -Wl,-rpath-link=libpostproc:libswresample:libswscale:libavfilter:libavdevice:libavformat:libavcodec:libavutil:libavresample
 enabled rpath && add_ldflags -Wl,-rpath=$libdir
 test_ldflags -Wl,-Bsymbolic && append SHFLAGS -Wl,-Bsymbolic
+
+# add some strip flags
+# -wN '..@*' is more selective than -x, but not available everywhere.
+check_stripflags -wN \'..@*\' || check_stripflags -x
 
 enabled xmm_clobber_test &&
     check_ldflags -Wl,--wrap,avcodec_open2              \
@@ -4685,6 +4729,10 @@ merge_deps libavfilter $FILTER_LIST
 echo "install prefix            $prefix"
 echo "source path               $source_path"
 echo "C compiler                $cc"
+if test "$host_cc" != "$cc"; then
+    echo "host C compiler           $host_cc"
+fi
+echo "C library                 $libc_type"
 echo "ARCH                      $arch ($cpu)"
 if test "$build_suffix" != ""; then
     echo "build suffix              $build_suffix"
@@ -4839,8 +4887,10 @@ LD_O=$LD_O
 LD_LIB=$LD_LIB
 LD_PATH=$LD_PATH
 DLLTOOL=$dlltool
+WINDRES=$windres
 LDFLAGS=$LDFLAGS
 SHFLAGS=$(echo $($ldflags_filter $SHFLAGS))
+ASMSTRIPFLAGS=$ASMSTRIPFLAGS
 YASMFLAGS=$YASMFLAGS
 BUILDSUF=$build_suffix
 PROGSSUF=$progs_suffix
@@ -4925,6 +4975,7 @@ cat > $TMPH <<EOF
 #define av_restrict $_restrict
 #define EXTERN_PREFIX "${extern_prefix}"
 #define EXTERN_ASM ${extern_prefix}
+#define BUILDSUF "$build_suffix"
 #define SLIBSUF "$SLIBSUF"
 #define HAVE_MMX2 HAVE_MMXEXT
 EOF

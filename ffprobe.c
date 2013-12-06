@@ -24,7 +24,7 @@
  */
 
 #include "config.h"
-#include "version.h"
+#include "libavutil/ffversion.h"
 
 #include <string.h>
 
@@ -364,6 +364,7 @@ static void writer_close(WriterContext **wctx)
     if ((*wctx)->writer->priv_class)
         av_opt_free((*wctx)->priv);
     av_freep(&((*wctx)->priv));
+    av_opt_free(*wctx);
     av_freep(wctx);
 }
 

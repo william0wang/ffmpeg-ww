@@ -69,9 +69,6 @@ const uint8_t ff_zigzag248_direct[64] = {
     53, 61, 54, 62, 39, 47, 55, 63,
 };
 
-/* not permutated inverse zigzag_direct + 1 for MMX quantizer */
-DECLARE_ALIGNED(16, uint16_t, ff_inv_zigzag_direct16)[64];
-
 const uint8_t ff_alternate_horizontal_scan[64] = {
     0,  1,   2,  3,  8,  9, 16, 17,
     10, 11,  4,  5,  6,  7, 15, 14,
@@ -1857,7 +1854,7 @@ void ff_set_cmp(DSPContext* c, me_cmp_func *cmp, int type){
 
 static void add_bytes_c(uint8_t *dst, uint8_t *src, int w){
     long i;
-    for(i=0; i<=w-(int)sizeof(long); i+=sizeof(long)){
+    for (i = 0; i <= w - (int)sizeof(long); i += sizeof(long)) {
         long a = *(long*)(src+i);
         long b = *(long*)(dst+i);
         *(long*)(dst+i) = ((a&pb_7f) + (b&pb_7f)) ^ ((a^b)&pb_80);
@@ -1882,7 +1879,7 @@ static void diff_bytes_c(uint8_t *dst, const uint8_t *src1, const uint8_t *src2,
         }
     }else
 #endif
-    for(i=0; i<=w-(int)sizeof(long); i+=sizeof(long)){
+    for (i = 0; i <= w - (int)sizeof(long); i += sizeof(long)) {
         long a = *(long*)(src1+i);
         long b = *(long*)(src2+i);
         *(long*)(dst+i) = ((a|pb_80) - (b&pb_7f)) ^ ((a^b^pb_80)&pb_80);
@@ -2577,8 +2574,6 @@ av_cold void ff_dsputil_static_init(void)
     for(i=0;i<512;i++) {
         ff_squareTbl[i] = (i - 256) * (i - 256);
     }
-
-    for(i=0; i<64; i++) ff_inv_zigzag_direct16[ff_zigzag_direct[i]]= i+1;
 }
 
 int ff_check_alignment(void){

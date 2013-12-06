@@ -350,6 +350,7 @@ void avcodec_register_all(void)
     REGISTER_DECODER(MP1FLOAT,          mp1float);
     REGISTER_ENCDEC (MP2,               mp2);
     REGISTER_DECODER(MP2FLOAT,          mp2float);
+    REGISTER_ENCODER(MP2FIXED,          mp2fixed);
     REGISTER_DECODER(MP3,               mp3);
     REGISTER_DECODER(MP3FLOAT,          mp3float);
     REGISTER_DECODER(MP3ADU,            mp3adu);
@@ -555,6 +556,7 @@ void avcodec_register_all(void)
     REGISTER_PARSER(VORBIS,             vorbis);
     REGISTER_PARSER(VP3,                vp3);
     REGISTER_PARSER(VP8,                vp8);
+    REGISTER_PARSER(VP9,                vp9);
 
     /* bitstream filters */
     REGISTER_BSF(AAC_ADTSTOASC,         aac_adtstoasc);
@@ -564,7 +566,6 @@ void avcodec_register_all(void)
     REGISTER_BSF(IMX_DUMP_HEADER,       imx_dump_header);
     REGISTER_BSF(MJPEG2JPEG,            mjpeg2jpeg);
     REGISTER_BSF(MJPEGA_DUMP_HEADER,    mjpega_dump_header);
-    REGISTER_BSF(MP3_HEADER_COMPRESS,   mp3_header_compress);
     REGISTER_BSF(MP3_HEADER_DECOMPRESS, mp3_header_decompress);
     REGISTER_BSF(MOV2TEXTSUB,           mov2textsub);
     REGISTER_BSF(NOISE,                 noise);

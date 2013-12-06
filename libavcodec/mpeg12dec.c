@@ -45,12 +45,15 @@ typedef struct Mpeg1Context {
     int mpeg_enc_ctx_allocated; /* true if decoding context allocated */
     int repeat_field; /* true if we must repeat the field */
     AVPanScan pan_scan;              /**< some temporary storage for the panscan */
+    uint8_t *a53_caption;
+    int a53_caption_size;
     int slice_count;
     int save_aspect_info;
     int save_width, save_height, save_progressive_seq;
     AVRational frame_rate_ext;       ///< MPEG-2 specific framerate modificator
     int sync;                        ///< Did we reach a sync point like a GOP/SEQ/KEYFrame?
     int tmpgexs;
+    int first_slice;
     int extradata_decoded;
 } Mpeg1Context;
 
@@ -1589,6 +1592,14 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
             return AVERROR(ENOMEM);
         memcpy(pan_scan->data, &s1->pan_scan, sizeof(s1->pan_scan));
 
+        if (s1->a53_caption) {
+            AVFrameSideData *sd = av_frame_new_side_data(
+                &s->current_picture_ptr->f, AV_FRAME_DATA_A53_CC,
+                s1->a53_caption_size);
+            if (sd)
+                memcpy(sd->data, s1->a53_caption, s1->a53_caption_size);
+            av_freep(&s1->a53_caption);
+        }
         if (HAVE_THREADS && (avctx->active_thread_type & FF_THREAD_FRAME))
             ff_thread_finish_setup(avctx);
     } else { // second field
@@ -1945,7 +1956,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #endif /* FF_API_XVMC */
 
     /* end of slice reached */
-    if (/*s->mb_y << field_pic == s->mb_height &&*/ !s->first_field && !s->first_slice) {
+    if (/*s->mb_y << field_pic == s->mb_height &&*/ !s->first_field && !s1->first_slice) {
         /* end of image */
 
         ff_er_frame_end(&s->er);
@@ -2115,6 +2126,60 @@ static int vcr2_init_sequence(AVCodecContext *avctx)
 }
 
 
+static int mpeg_decode_a53_cc(AVCodecContext *avctx,
+                              const uint8_t *p, int buf_size)
+{
+    Mpeg1Context *s1 = avctx->priv_data;
+
+    if (buf_size >= 6 &&
+        p[0] == 'G' && p[1] == 'A' && p[2] == '9' && p[3] == '4' &&
+        p[4] == 3 && (p[5] & 0x40)) {
+        /* extract A53 Part 4 CC data */
+        int cc_count = p[5] & 0x1f;
+        if (cc_count > 0 && buf_size >= 7 + cc_count * 3) {
+            av_freep(&s1->a53_caption);
+            s1->a53_caption_size = cc_count * 3;
+            s1->a53_caption = av_malloc(s1->a53_caption_size);
+            if (s1->a53_caption) {
+                memcpy(s1->a53_caption, p + 7, s1->a53_caption_size);
+            }
+        }
+        return 1;
+    } else if (buf_size >= 11 &&
+        p[0] == 'C' && p[1] == 'C' && p[2] == 0x01 && p[3] == 0xf8) {
+        /* extract DVD CC data */
+        int cc_count = 0;
+        int i;
+        // There is a caption count field in the data, but it is often
+        // incorect.  So count the number of captions present.
+        for (i = 5; i + 6 <= buf_size && ((p[i] & 0xfe) == 0xfe); i += 6)
+            cc_count++;
+        // Transform the DVD format into A53 Part 4 format
+        if (cc_count > 0) {
+            av_freep(&s1->a53_caption);
+            s1->a53_caption_size = cc_count * 6;
+            s1->a53_caption = av_malloc(s1->a53_caption_size);
+            if (s1->a53_caption) {
+                uint8_t field1 = !!(p[4] & 0x80);
+                uint8_t *cap = s1->a53_caption;
+                p += 5;
+                for (i = 0; i < cc_count; i++) {
+                    cap[0] = (p[0] == 0xff && field1) ? 0xfc : 0xfd;
+                    cap[1] = p[1];
+                    cap[2] = p[2];
+                    cap[3] = (p[3] == 0xff && !field1) ? 0xfc : 0xfd;
+                    cap[4] = p[4];
+                    cap[5] = p[5];
+                    cap += 6;
+                    p += 6;
+                }
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
 static void mpeg_decode_user_data(AVCodecContext *avctx,
                                   const uint8_t *p, int buf_size)
 {
@@ -2148,6 +2213,8 @@ static void mpeg_decode_user_data(AVCodecContext *avctx,
                 return;
             avctx->dtg_active_format = p[0] & 0x0f;
         }
+    } else if (mpeg_decode_a53_cc(avctx, p, buf_size)) {
+        return;
     }
 }
 
@@ -2286,7 +2353,7 @@ static int decode_chunks(AVCodecContext *avctx,
                 /* we have a complete image: we try to decompress it */
                 if (mpeg1_decode_picture(avctx, buf_ptr, input_size) < 0)
                     s2->pict_type = 0;
-                s2->first_slice = 1;
+                s->first_slice = 1;
                 last_code = PICTURE_START_CODE;
             } else {
                 av_log(avctx, AV_LOG_ERROR, "ignoring pic after %X\n", last_code);
@@ -2430,9 +2497,9 @@ static int decode_chunks(AVCodecContext *avctx,
                     break;
                 }
 
-                if (s2->first_slice) {
+                if (s->first_slice) {
                     skip_frame = 0;
-                    s2->first_slice = 0;
+                    s->first_slice = 0;
                     if (mpeg_field_start(s2, buf, buf_size) < 0)
                         return -1;
                 }
@@ -2564,6 +2631,7 @@ static av_cold int mpeg_decode_end(AVCodecContext *avctx)
 
     if (s->mpeg_enc_ctx_allocated)
         ff_MPV_common_end(&s->mpeg_enc_ctx);
+    av_freep(&s->a53_caption);
     return 0;
 }
 

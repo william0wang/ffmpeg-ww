@@ -85,15 +85,18 @@ static int open_input_file(const char *filename)
 static int init_filters(const char *filters_descr)
 {
     char args[512];
-    int ret;
+    int ret = 0;
     AVFilter *buffersrc  = avfilter_get_by_name("buffer");
     AVFilter *buffersink = avfilter_get_by_name("buffersink");
     AVFilterInOut *outputs = avfilter_inout_alloc();
     AVFilterInOut *inputs  = avfilter_inout_alloc();
     enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE };
-    AVBufferSinkParams *buffersink_params;
 
     filter_graph = avfilter_graph_alloc();
+    if (!outputs || !inputs || !filter_graph) {
+        ret = AVERROR(ENOMEM);
+        goto end;
+    }
 
     /* buffer video source: the decoded frames from the decoder will be inserted here. */
     snprintf(args, sizeof(args),
@@ -106,18 +109,22 @@ static int init_filters(const char *filters_descr)
                                        args, NULL, filter_graph);
     if (ret < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create buffer source\n");
-        return ret;
+        goto end;
     }
 
     /* buffer video sink: to terminate the filter chain. */
-    buffersink_params = av_buffersink_params_alloc();
-    buffersink_params->pixel_fmts = pix_fmts;
     ret = avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out",
-                                       NULL, buffersink_params, filter_graph);
-    av_free(buffersink_params);
+                                       NULL, NULL, filter_graph);
     if (ret < 0) {
         av_log(NULL, AV_LOG_ERROR, "Cannot create buffer sink\n");
-        return ret;
+        goto end;
+    }
+
+    ret = av_opt_set_int_list(buffersink_ctx, "pix_fmts", pix_fmts,
+                              AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Cannot set output pixel format\n");
+        goto end;
     }
 
     /* Endpoints for the filter graph. */
@@ -133,11 +140,16 @@ static int init_filters(const char *filters_descr)
 
     if ((ret = avfilter_graph_parse_ptr(filter_graph, filters_descr,
                                     &inputs, &outputs, NULL)) < 0)
-        return ret;
+        goto end;
 
     if ((ret = avfilter_graph_config(filter_graph, NULL)) < 0)
-        return ret;
-    return 0;
+        goto end;
+
+end:
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
+
+    return ret;
 }
 
 static void display_frame(const AVFrame *frame, AVRational time_base)
@@ -243,9 +255,7 @@ end:
     av_frame_free(&filt_frame);
 
     if (ret < 0 && ret != AVERROR_EOF) {
-        char buf[1024];
-        av_strerror(ret, buf, sizeof(buf));
-        fprintf(stderr, "Error occurred: %s\n", buf);
+        fprintf(stderr, "Error occurred: %s\n", av_err2str(ret));
         exit(1);
     }
 
