@@ -142,6 +142,7 @@ static int ogg_reset(AVFormatContext *s)
         if (start_pos <= s->data_offset) {
             os->lastpts = 0;
         }
+        os->end_trimming = 0;
     }
 
     ogg->page_pos = -1;
@@ -784,6 +785,7 @@ retry:
             return AVERROR(ENOMEM);
         }
         AV_WL32(side_data + 4, os->end_trimming);
+        os->end_trimming = 0;
     }
 
     return psize;

@@ -27,6 +27,7 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/internal.h"
+#include "libavutil/stereo3d.h"
 #include "internal.h"
 #include "avcodec.h"
 #include "dsputil.h"
@@ -665,14 +666,6 @@ static inline int get_qscale(MpegEncContext *s)
     }
 }
 
-static void exchange_uv(MpegEncContext *s)
-{
-    int16_t (*tmp)[64];
-
-    tmp           = s->pblocks[4];
-    s->pblocks[4] = s->pblocks[5];
-    s->pblocks[5] = tmp;
-}
 
 /* motion type (for MPEG-2) */
 #define MT_FIELD 1
@@ -776,17 +769,10 @@ static int mpeg_decode_mb(MpegEncContext *s, int16_t block[12][64])
         } else
             memset(s->last_mv, 0, sizeof(s->last_mv)); /* reset mv prediction */
         s->mb_intra = 1;
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
         // if 1, we memcpy blocks in xvmcvideo
-        if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration > 1) {
+        if (CONFIG_XVMC && s->pack_pblocks) {
             ff_xvmc_pack_pblocks(s, -1); // inter are always full blocks
-            if (s->swap_uv) {
-                exchange_uv(s);
-            }
         }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
 
         if (s->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
             if (s->flags2 & CODEC_FLAG2_FAST) {
@@ -999,17 +985,10 @@ FF_ENABLE_DEPRECATION_WARNINGS
                 return -1;
             }
 
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
             //if 1, we memcpy blocks in xvmcvideo
-            if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration > 1) {
+            if (CONFIG_XVMC && s->pack_pblocks) {
                 ff_xvmc_pack_pblocks(s, cbp);
-                if (s->swap_uv) {
-                    exchange_uv(s);
-                }
             }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
 
             if (s->codec_id == AV_CODEC_ID_MPEG2VIDEO) {
                 if (s->flags2 & CODEC_FLAG2_FAST) {
@@ -1133,12 +1112,9 @@ static void quant_matrix_rebuild(uint16_t *matrix, const uint8_t *old_perm,
 }
 
 static const enum AVPixelFormat mpeg1_hwaccel_pixfmt_list_420[] = {
-#if FF_API_XVMC
-#if CONFIG_MPEG_XVMC_DECODER
-    AV_PIX_FMT_XVMC_MPEG2_IDCT,
-    AV_PIX_FMT_XVMC_MPEG2_MC,
+#if CONFIG_MPEG1_XVMC_HWACCEL
+    AV_PIX_FMT_XVMC,
 #endif
-#endif /* FF_API_XVMC */
 #if CONFIG_MPEG1_VDPAU_HWACCEL
     AV_PIX_FMT_VDPAU_MPEG1,
     AV_PIX_FMT_VDPAU,
@@ -1148,12 +1124,9 @@ static const enum AVPixelFormat mpeg1_hwaccel_pixfmt_list_420[] = {
 };
 
 static const enum AVPixelFormat mpeg2_hwaccel_pixfmt_list_420[] = {
-#if FF_API_XVMC
-#if CONFIG_MPEG_XVMC_DECODER
-    AV_PIX_FMT_XVMC_MPEG2_IDCT,
-    AV_PIX_FMT_XVMC_MPEG2_MC,
+#if CONFIG_MPEG2_XVMC_HWACCEL
+    AV_PIX_FMT_XVMC,
 #endif
-#endif /* FF_API_XVMC */
 #if CONFIG_MPEG2_VDPAU_HWACCEL
     AV_PIX_FMT_VDPAU_MPEG2,
     AV_PIX_FMT_VDPAU,
@@ -1190,25 +1163,21 @@ static enum AVPixelFormat mpeg_get_pixelformat(AVCodecContext *avctx)
 
 static void setup_hwaccel_for_pixfmt(AVCodecContext *avctx)
 {
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (avctx->pix_fmt != AV_PIX_FMT_XVMC_MPEG2_IDCT && avctx->pix_fmt != AV_PIX_FMT_XVMC_MPEG2_MC) {
-        avctx->xvmc_acceleration = 0;
-    } else if (!avctx->xvmc_acceleration) {
-        avctx->xvmc_acceleration = 2;
-    }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
     avctx->hwaccel = ff_find_hwaccel(avctx);
     // until then pix_fmt may be changed right after codec init
-#if FF_API_XVMC
-    if (avctx->pix_fmt == AV_PIX_FMT_XVMC_MPEG2_IDCT ||
-#else
-    if (
-#endif
-        avctx->hwaccel || uses_vdpau(avctx))
+    if (avctx->hwaccel || uses_vdpau(avctx))
         if (avctx->idct_algo == FF_IDCT_AUTO)
             avctx->idct_algo = FF_IDCT_SIMPLE;
+
+    if (avctx->hwaccel && avctx->pix_fmt == AV_PIX_FMT_XVMC) {
+        Mpeg1Context *s1 = avctx->priv_data;
+        MpegEncContext *s = &s1->mpeg_enc_ctx;
+
+        s->pack_pblocks = 1;
+#if FF_API_XVMC
+        avctx->xvmc_acceleration = 2;
+#endif /* FF_API_XVMC */
+    }
 }
 
 /* Call this function when we know all parameters.
@@ -1629,16 +1598,6 @@ static int mpeg_field_start(MpegEncContext *s, const uint8_t *buf, int buf_size)
             return -1;
     }
 
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-// MPV_frame_start will call this function too,
-// but we need to call it on every field
-    if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration)
-        if (ff_xvmc_field_start(s, avctx) < 0)
-            return -1;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
-
     return 0;
 }
 
@@ -1710,7 +1669,7 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
         return -1;
     }
 
-    if (avctx->hwaccel) {
+    if (avctx->hwaccel && avctx->hwaccel->decode_slice) {
         const uint8_t *buf_end, *buf_start = *buf - 4; /* include start_code */
         int start_code = -1;
         buf_end = avpriv_find_start_code(buf_start + 2, *buf + buf_size, &start_code);
@@ -1740,13 +1699,9 @@ static int mpeg_decode_slice(MpegEncContext *s, int mb_y,
     }
 
     for (;;) {
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
         // If 1, we memcpy blocks in xvmcvideo.
-        if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration > 1)
+        if (CONFIG_XVMC && s->pack_pblocks)
             ff_xvmc_init_block(s); // set s->block
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
 
         if (mpeg_decode_mb(s, s->block) < 0)
             return -1;
@@ -1947,13 +1902,6 @@ static int slice_end(AVCodecContext *avctx, AVFrame *pict)
         if (s->avctx->hwaccel->end_frame(s->avctx) < 0)
             av_log(avctx, AV_LOG_ERROR, "hardware accelerator failed to decode picture\n");
     }
-
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration)
-        ff_xvmc_field_end(s);
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
 
     /* end of slice reached */
     if (/*s->mb_y << field_pic == s->mb_height &&*/ !s->first_field && !s1->first_slice) {
@@ -2212,6 +2160,41 @@ static void mpeg_decode_user_data(AVCodecContext *avctx,
             if (buf_end - p < 1)
                 return;
             avctx->dtg_active_format = p[0] & 0x0f;
+        }
+    } else if (buf_end - p >= 6 &&
+               p[0] == 'J' && p[1] == 'P' && p[2] == '3' && p[3] == 'D' &&
+               p[4] == 0x03) { // S3D_video_format_length
+        // the 0x7F mask ignores the reserved_bit value
+        const uint8_t S3D_video_format_type = p[5] & 0x7F;
+
+        if (S3D_video_format_type == 0x03 ||
+            S3D_video_format_type == 0x04 ||
+            S3D_video_format_type == 0x08 ||
+            S3D_video_format_type == 0x23) {
+            Mpeg1Context *s1   = avctx->priv_data;
+            MpegEncContext *s  = &s1->mpeg_enc_ctx;
+            AVStereo3D *stereo;
+            if (!s->current_picture_ptr)
+                return;
+
+            stereo = av_stereo3d_create_side_data(&s->current_picture_ptr->f);
+            if (!stereo)
+                return;
+
+            switch (S3D_video_format_type) {
+            case 0x03:
+                stereo->type = AV_STEREO3D_SIDEBYSIDE;
+                break;
+            case 0x04:
+                stereo->type = AV_STEREO3D_TOPBOTTOM;
+                break;
+            case 0x08:
+                stereo->type = AV_STEREO3D_2D;
+                break;
+            case 0x23:
+                stereo->type = AV_STEREO3D_SIDEBYSIDE_QUINCUNX;
+                break;
+            }
         }
     } else if (mpeg_decode_a53_cc(avctx, p, buf_size)) {
         return;

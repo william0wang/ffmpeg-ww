@@ -313,7 +313,7 @@ static void read_ttag(AVFormatContext *s, AVIOContext *pb, int taglen,
  * Parse GEOB tag into a ID3v2ExtraMetaGEOB struct.
  */
 static void read_geobtag(AVFormatContext *s, AVIOContext *pb, int taglen,
-                         char *tag, ID3v2ExtraMeta **extra_meta)
+                         char *tag, ID3v2ExtraMeta **extra_meta, int isv34)
 {
     ID3v2ExtraMetaGEOB *geob_data = NULL;
     ID3v2ExtraMeta *new_extra     = NULL;
@@ -445,7 +445,7 @@ static void free_apic(void *obj)
 }
 
 static void read_apic(AVFormatContext *s, AVIOContext *pb, int taglen,
-                      char *tag, ID3v2ExtraMeta **extra_meta)
+                      char *tag, ID3v2ExtraMeta **extra_meta, int isv34)
 {
     int enc, pic_type;
     char mimetype[64];
@@ -467,7 +467,12 @@ static void read_apic(AVFormatContext *s, AVIOContext *pb, int taglen,
     taglen--;
 
     /* mimetype */
+    if (isv34) {
     taglen -= avio_get_str(pb, taglen, mimetype, sizeof(mimetype));
+    } else {
+        avio_read(pb, mimetype, 3);
+        mimetype[3] = 0;
+    }
     while (mime->id != AV_CODEC_ID_NONE) {
         if (!av_strncasecmp(mime->str, mimetype, sizeof(mimetype))) {
             id = mime->id;
@@ -518,7 +523,7 @@ fail:
     avio_seek(pb, end, SEEK_SET);
 }
 
-static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len, char *ttag, ID3v2ExtraMeta **extra_meta)
+static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len, char *ttag, ID3v2ExtraMeta **extra_meta, int isv34)
 {
     AVRational time_base = {1, 1000};
     uint32_t start, end;
@@ -544,15 +549,14 @@ static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len, char *tta
 
     len -= 16;
     while (len > 10) {
-        avio_read(pb, tag, 4);
+        if (avio_read(pb, tag, 4) < 4)
+            goto end;
         tag[4] = 0;
         taglen = avio_rb32(pb);
         avio_skip(pb, 2);
         len -= 10;
-        if (taglen < 0 || taglen > len) {
-            av_free(dst);
-            return;
-        }
+        if (taglen < 0 || taglen > len)
+            goto end;
         if (tag[0] == 'T')
             read_ttag(s, pb, taglen, &chapter->metadata, tag);
         else
@@ -562,6 +566,7 @@ static void read_chapter(AVFormatContext *s, AVIOContext *pb, int len, char *tta
 
     ff_metadata_conv(&chapter->metadata, NULL, ff_id3v2_34_metadata_conv);
     ff_metadata_conv(&chapter->metadata, NULL, ff_id3v2_4_metadata_conv);
+end:
     av_free(dst);
 }
 
@@ -569,7 +574,7 @@ typedef struct ID3v2EMFunc {
     const char *tag3;
     const char *tag4;
     void (*read)(AVFormatContext *, AVIOContext *, int, char *,
-                 ID3v2ExtraMeta **);
+                 ID3v2ExtraMeta **, int isv34);
     void (*free)(void *obj);
 } ID3v2EMFunc;
 
@@ -667,7 +672,8 @@ static void id3v2_parse(AVFormatContext *s, int len, uint8_t version,
         unsigned long dlen;
 
         if (isv34) {
-            avio_read(s->pb, tag, 4);
+            if (avio_read(s->pb, tag, 4) < 4)
+                break;
             tag[4] = 0;
             if (version == 3) {
                 tlen = avio_rb32(s->pb);
@@ -676,7 +682,8 @@ static void id3v2_parse(AVFormatContext *s, int len, uint8_t version,
             tflags  = avio_rb16(s->pb);
             tunsync = tflags & ID3v2_FLAG_UNSYNCH;
         } else {
-            avio_read(s->pb, tag, 3);
+            if (avio_read(s->pb, tag, 3) < 3)
+                break;
             tag[3] = 0;
             tlen   = avio_rb24(s->pb);
         }
@@ -788,7 +795,7 @@ static void id3v2_parse(AVFormatContext *s, int len, uint8_t version,
                 read_ttag(s, pbx, tlen, &s->metadata, tag);
             else
                 /* parse special meta tag */
-                extra_func->read(s, pbx, tlen, tag, extra_meta);
+                extra_func->read(s, pbx, tlen, tag, extra_meta, isv34);
         } else if (!tag[0]) {
             if (tag[1])
                 av_log(s, AV_LOG_WARNING, "invalid frame id, assuming padding\n");

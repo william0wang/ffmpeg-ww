@@ -237,7 +237,7 @@ static int init_muxer(AVFormatContext *s, AVDictionary **options)
 
     // some sanity checks
     if (s->nb_streams == 0 && !(of->flags & AVFMT_NOSTREAMS)) {
-        av_log(s, AV_LOG_ERROR, "no streams\n");
+        av_log(s, AV_LOG_ERROR, "No streams to mux were specified\n");
         ret = AVERROR(EINVAL);
         goto fail;
     }
@@ -339,6 +339,8 @@ static int init_muxer(AVFormatContext *s, AVDictionary **options)
     /* set muxer identification string */
     if (s->nb_streams && !(s->streams[0]->codec->flags & CODEC_FLAG_BITEXACT)) {
         av_dict_set(&s->metadata, "encoder", LIBAVFORMAT_IDENT, 0);
+    } else {
+        av_dict_set(&s->metadata, "encoder", NULL, 0);
     }
 
     if (options) {

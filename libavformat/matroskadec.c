@@ -1803,7 +1803,7 @@ static int matroska_read_header(AVFormatContext *s)
             track->audio.sub_packet_h    = avio_rb16(&b);
             track->audio.frame_size      = avio_rb16(&b);
             track->audio.sub_packet_size = avio_rb16(&b);
-            if (flavor <= 0 || track->audio.coded_framesize <= 0 ||
+            if (flavor < 0 || track->audio.coded_framesize <= 0 ||
                 track->audio.sub_packet_h <= 0 || track->audio.frame_size <= 0 ||
                 track->audio.sub_packet_size <= 0)
                 return AVERROR_INVALIDDATA;
@@ -1834,7 +1834,7 @@ static int matroska_read_header(AVFormatContext *s)
         avpriv_set_pts_info(st, 64, matroska->time_scale*track->time_scale, 1000*1000*1000); /* 64 bit pts in ns */
 
         st->codec->codec_id = codec_id;
-        st->start_time = 0;
+
         if (strcmp(track->language, "und"))
             av_dict_set(&st->metadata, "language", track->language, 0);
         av_dict_set(&st->metadata, "title", track->name, 0);

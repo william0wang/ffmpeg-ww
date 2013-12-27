@@ -351,13 +351,13 @@ static int process_ea_header(AVFormatContext *s)
     int i;
 
     for (i = 0; i < 5 && (!ea->audio_codec || !ea->video_codec); i++) {
-        unsigned int startpos = avio_tell(pb);
+        uint64_t startpos     = avio_tell(pb);
         int err               = 0;
 
         blockid = avio_rl32(pb);
         size    = avio_rl32(pb);
         if (i == 0)
-            ea->big_endian = size > 0x000FFFFF;
+            ea->big_endian = size > av_bswap32(size);
         if (ea->big_endian)
             size = av_bswap32(size);
 

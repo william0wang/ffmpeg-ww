@@ -897,22 +897,31 @@ The required syntax for a TCP url is:
 tcp://@var{hostname}:@var{port}[?@var{options}]
 @end example
 
-@table @option
+@var{options} contains a list of &-separated options of the form
+@var{key}=@var{val}.
 
-@item listen
-Listen for an incoming connection
+The list of supported options follows.
+
+@table @option
+@item listen=@var{1|0}
+Listen for an incoming connection. Default value is 0.
 
 @item timeout=@var{microseconds}
-In read mode: if no data arrived in more than this time interval, raise error.
-In write mode: if socket cannot be written in more than this time interval, raise error.
-This also sets timeout on TCP connection establishing.
+Set raise error timeout, expressed in microseconds.
 
+This option is only relevant in read mode: if no data arrived in more
+than this time interval, raise error.
+
+@item listen_timeout=@var{microseconds}
+Set listen timeout, expressed in microseconds.
+@end table
+
+The following example shows how to setup a listening TCP connection
+with @command{ffmpeg}, which is then accessed with @command{ffplay}:
 @example
 ffmpeg -i @var{input} -f @var{format} tcp://@var{hostname}:@var{port}?listen
 ffplay tcp://@var{hostname}:@var{port}
 @end example
-
-@end table
 
 @section tls
 
@@ -979,7 +988,7 @@ ffplay tls://@var{hostname}:@var{port}
 
 User Datagram Protocol.
 
-The required syntax for a UDP url is:
+The required syntax for an UDP URL is:
 @example
 udp://@var{hostname}:@var{port}[?@var{options}]
 @end example
@@ -994,7 +1003,6 @@ UDP socket buffer overruns. The @var{fifo_size} and
 The list of supported options follows.
 
 @table @option
-
 @item buffer_size=@var{size}
 Set the UDP socket buffer size in bytes. This is used both for the
 receiving and the sending buffer size.
@@ -1044,25 +1052,34 @@ Survive in case of UDP receiving circular buffer overrun. Default
 value is 0.
 
 @item timeout=@var{microseconds}
-In read mode: if no data arrived in more than this time interval, raise error.
+Set raise error timeout, expressed in microseconds.
+
+This option is only relevant in read mode: if no data arrived in more
+than this time interval, raise error.
 @end table
 
-Some usage examples of the UDP protocol with @command{ffmpeg} follow.
+@section Examples
 
-To stream over UDP to a remote endpoint:
+@itemize
+@item
+Use @command{ffmpeg} to stream over UDP to a remote endpoint:
 @example
 ffmpeg -i @var{input} -f @var{format} udp://@var{hostname}:@var{port}
 @end example
 
-To stream in mpegts format over UDP using 188 sized UDP packets, using a large input buffer:
+@item
+Use @command{ffmpeg} to stream in mpegts format over UDP using 188
+sized UDP packets, using a large input buffer:
 @example
 ffmpeg -i @var{input} -f mpegts udp://@var{hostname}:@var{port}?pkt_size=188&buffer_size=65535
 @end example
 
-To receive over UDP from a remote endpoint:
+@item
+Use @command{ffmpeg} to receive over UDP from a remote endpoint:
 @example
-ffmpeg -i udp://[@var{multicast-address}]:@var{port}
+ffmpeg -i udp://[@var{multicast-address}]:@var{port} ...
 @end example
+@end itemize
 
 @section unix
 

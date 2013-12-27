@@ -107,6 +107,7 @@ Configuration options:
   --disable-all            disable building components, libraries and programs
   --enable-incompatible-libav-abi enable incompatible Libav fork ABI [no]
   --enable-incompatible-fork-abi  enable incompatible Libav fork ABI (deprecated) [no]
+  --enable-raise-major     increase major version numbers in sonames [no]
 
 Program options:
   --disable-programs       do not build command line programs
@@ -241,6 +242,7 @@ External library support:
                            native implementation exists [no]
   --enable-libvpx          enable VP8 and VP9 de/encoding via libvpx [no]
   --enable-libwavpack      enable wavpack encoding via libwavpack [no]
+  --enable-libwebp         enable WebP encoding via libwebp [no]
   --enable-libx264         enable H.264 encoding via x264 [no]
   --enable-libxavs         enable AVS encoding via xavs [no]
   --enable-libxvid         enable Xvid encoding via xvidcore,
@@ -1128,6 +1130,30 @@ require_pkg_config(){
     add_extralibs $(get_safe ${pkg}_libs)
 }
 
+require_libfreetype(){
+    log require_libfreetype "$@"
+    pkg="freetype2"
+    check_cmd $pkg_config --exists --print-errors $pkg \
+      || die "ERROR: $pkg not found"
+    pkg_cflags=$($pkg_config --cflags $pkg)
+    pkg_libs=$($pkg_config --libs $pkg)
+    {
+        echo "#include <ft2build.h>"
+        echo "#include FT_FREETYPE_H"
+        echo "long check_func(void) { return (long) FT_Init_FreeType; }"
+        echo "int main(void) { return 0; }"
+    } | check_ld "cc" $pkg_cflags $pkg_libs \
+      && set_safe ${pkg}_cflags $pkg_cflags \
+      && set_safe ${pkg}_libs   $pkg_libs \
+      || die "ERROR: $pkg not found"
+    add_cflags    $(get_safe ${pkg}_cflags)
+    add_extralibs $(get_safe ${pkg}_libs)
+}
+
+hostcc_e(){
+    eval printf '%s\\n' $HOSTCC_E
+}
+
 hostcc_o(){
     eval printf '%s\\n' $HOSTCC_O
 }
@@ -1137,6 +1163,13 @@ check_host_cc(){
     cat > $TMPC
     log_file $TMPC
     check_cmd $host_cc $host_cflags "$@" $HOSTCC_C $(hostcc_o $TMPO) $TMPC
+}
+
+check_host_cpp(){
+    log check_host_cpp "$@"
+    cat > $TMPC
+    log_file $TMPC
+    check_cmd $host_cc $HOSTCPPFLAGS $HOSTCFLAGS "$@" $(hostcc_e $TMPO) $TMPC
 }
 
 check_host_cppflags(){
@@ -1151,6 +1184,19 @@ check_host_cflags(){
     set -- $($host_cflags_filter "$@")
     check_host_cc "$@" <<EOF && append host_cflags "$@"
 int x;
+EOF
+}
+
+check_host_cpp_condition(){
+    log check_host_cpp_condition "$@"
+    header=$1
+    condition=$2
+    shift 2
+    check_host_cpp "$@" <<EOF
+#include <$header>
+#if !($condition)
+#error "unsatisfied condition: $condition"
+#endif
 EOF
 }
 
@@ -1246,6 +1292,7 @@ EXTERNAL_LIBRARY_LIST="
     libvorbis
     libvpx
     libwavpack
+    libwebp
     libx264
     libxavs
     libxvid
@@ -1271,6 +1318,7 @@ HWACCEL_LIST="
     vaapi
     vda
     vdpau
+    xvmc
 "
 
 LIBRARY_LIST="
@@ -1319,6 +1367,7 @@ CONFIG_LIST="
     network
     nonfree
     pic
+    raise_major
     rdft
     runtime_cpudetect
     safe_bitstream_reader
@@ -1520,6 +1569,7 @@ HAVE_LIST="
     jack_port_get_latency_range
     kbhit
     ldbrx
+    libc_msvcrt
     libdc1394_1
     libdc1394_2
     local_aligned_16
@@ -1539,7 +1589,6 @@ HAVE_LIST="
     mm_empty
     mmap
     mprotect
-    msvcrt
     nanosleep
     openjpeg_1_5_openjpeg_h
     PeekNamedPipe
@@ -1769,12 +1818,19 @@ fast_64bit_if_any="alpha ia64 mips64 parisc64 ppc64 sparc64 x86_64"
 fast_clz_if_any="alpha avr32 mips ppc x86"
 fast_unaligned_if_any="ppc x86"
 
-inline_asm_deps="!tms470"
 need_memalign="altivec neon sse"
+
+# system capabilities
+log2_deps="!libc_msvcrt"
 
 symver_if_any="symver_asm_label symver_gnu_asm"
 
-log2_deps="!msvcrt"
+# threading support
+atomics_gcc_if="sync_val_compare_and_swap"
+atomics_suncc_if="atomic_cas_ptr machine_rw_barrier"
+atomics_win32_if="MemoryBarrier"
+atomics_native_if_any="$ATOMICS_LIST"
+threads_if_any="$THREADS_LIST"
 
 # subsystems
 dct_select="rdft"
@@ -1984,6 +2040,7 @@ vaapi_deps="va_va_h"
 vda_deps="VideoDecodeAcceleration_VDADecoder_h pthreads"
 vda_extralibs="-framework CoreFoundation -framework VideoDecodeAcceleration -framework QuartzCore"
 vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
+xvmc_deps="X11_extensions_XvMClib_h"
 
 h263_vaapi_hwaccel_deps="vaapi"
 h263_vaapi_hwaccel_select="h263_decoder"
@@ -2004,10 +2061,14 @@ h264_vdpau_hwaccel_deps="vdpau"
 h264_vdpau_hwaccel_select="h264_decoder"
 mpeg_vdpau_decoder_deps="vdpau"
 mpeg_vdpau_decoder_select="mpeg2video_decoder"
+mpeg_xvmc_hwaccel_deps="xvmc"
+mpeg_xvmc_hwaccel_select="mpeg2video_decoder"
 mpeg1_vdpau_decoder_deps="vdpau"
 mpeg1_vdpau_decoder_select="mpeg1video_decoder"
 mpeg1_vdpau_hwaccel_deps="vdpau"
 mpeg1_vdpau_hwaccel_select="mpeg1video_decoder"
+mpeg1_xvmc_hwaccel_deps="xvmc"
+mpeg1_xvmc_hwaccel_select="mpeg1video_decoder"
 mpeg2_crystalhd_decoder_select="crystalhd"
 mpeg2_dxva2_hwaccel_deps="dxva2"
 mpeg2_dxva2_hwaccel_select="mpeg2video_decoder"
@@ -2015,6 +2076,8 @@ mpeg2_vaapi_hwaccel_deps="vaapi"
 mpeg2_vaapi_hwaccel_select="mpeg2video_decoder"
 mpeg2_vdpau_hwaccel_deps="vdpau"
 mpeg2_vdpau_hwaccel_select="mpeg2video_decoder"
+mpeg2_xvmc_hwaccel_deps="xvmc"
+mpeg2_xvmc_hwaccel_select="mpeg2video_decoder"
 mpeg4_crystalhd_decoder_select="crystalhd"
 mpeg4_vaapi_hwaccel_deps="vaapi"
 mpeg4_vaapi_hwaccel_select="mpeg4_decoder"
@@ -2094,6 +2157,7 @@ libvpx_vp8_encoder_deps="libvpx"
 libvpx_vp9_decoder_deps="libvpx"
 libvpx_vp9_encoder_deps="libvpx"
 libwavpack_encoder_deps="libwavpack"
+libwebp_encoder_deps="libwebp"
 libx264_encoder_deps="libx264"
 libx264rgb_encoder_deps="libx264"
 libxavs_encoder_deps="libxavs"
@@ -2337,8 +2401,8 @@ ffserver_extralibs='$ldl'
 # documentation
 podpages_deps="perl"
 manpages_deps="perl pod2man"
-htmlpages_deps="texi2html"
-txtpages_deps="makeinfo"
+htmlpages_deps="perl texi2html"
+txtpages_deps="perl makeinfo"
 doc_deps_any="manpages htmlpages podpages txtpages"
 
 # default parameters
@@ -2398,7 +2462,7 @@ enable static
 enable swscale_alpha
 
 # Enable hwaccels by default.
-enable dxva2 vaapi vdpau
+enable dxva2 vaapi vdpau xvmc
 
 # build settings
 SHFLAGS='-shared -Wl,-soname,$$(@F)'
@@ -2430,11 +2494,12 @@ LD_O='-o $@'
 LD_LIB='-l%'
 LD_PATH='-L'
 HOSTCC_C='-c'
+HOSTCC_E='-E -o $@'
 HOSTCC_O='-o $@'
 HOSTLD_O='-o $@'
 
-host_cflags='-O3 -g'
-host_cppflags='-D_ISOC99_SOURCE -D_XOPEN_SOURCE=600'
+host_cflags='-O3'
+host_cppflags='-D_ISOC99_SOURCE'
 host_libs='-lm'
 host_cflags_filter=echo
 host_ldflags_filter=echo
@@ -3580,7 +3645,6 @@ case $target_os in
         SHFLAGS='-shared -Wl,-h,$$(@F)'
         enabled x86 && SHFLAGS="-mimpure-text $SHFLAGS"
         network_extralibs="-lsocket -lnsl"
-        add_cppflags -D__EXTENSIONS__ -D_XOPEN_SOURCE=600
         # When using suncc to build, the Solaris linker will mark
         # an executable with each instruction set encountered by
         # the Solaris assembler.  As our libraries contain their own
@@ -3789,56 +3853,79 @@ esac
 
 # determine libc flavour
 
-# uclibc defines __GLIBC__, so it needs to be checked before glibc.
-if check_cpp_condition features.h "defined __UCLIBC__"; then
-    libc_type=uclibc
-    add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
-elif check_cpp_condition features.h "defined __GLIBC__"; then
-    libc_type=glibc
-    add_cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
-# MinGW headers can be installed on Cygwin, so check for newlib first.
-elif check_cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
-    libc_type=newlib
-    add_cppflags -U__STRICT_ANSI__
-elif check_header _mingw.h; then
-    libc_type=mingw
-    check_cpp_condition _mingw.h \
-        "defined (__MINGW64_VERSION_MAJOR) || (__MINGW32_MAJOR_VERSION > 3) || \
+probe_libc(){
+    pfx=$1
+    pfx_no_=${pfx%_}
+    # uclibc defines __GLIBC__, so it needs to be checked before glibc.
+    if check_${pfx}cpp_condition features.h "defined __UCLIBC__"; then
+        eval ${pfx}libc_type=uclibc
+        add_${pfx}cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
+    elif check_${pfx}cpp_condition features.h "defined __GLIBC__"; then
+        eval ${pfx}libc_type=glibc
+        add_${pfx}cppflags -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600
+    # MinGW headers can be installed on Cygwin, so check for newlib first.
+    elif check_${pfx}cpp_condition newlib.h "defined _NEWLIB_VERSION"; then
+        eval ${pfx}libc_type=newlib
+        add_${pfx}cppflags -U__STRICT_ANSI__
+    # MinGW64 is backwards compatible with MinGW32, so check for it first.
+    elif check_${pfx}cpp_condition _mingw.h "defined __MINGW64_VERSION_MAJOR"; then
+        eval ${pfx}libc_type=mingw64
+        if check_${pfx}cpp_condition _mingw.h "__MINGW64_VERSION_MAJOR < 3"; then
+            add_compat msvcrt/snprintf.o
+            add_cflags "-include $source_path/compat/msvcrt/snprintf.h"
+        fi
+        add_${pfx}cppflags -U__STRICT_ANSI__ -D__USE_MINGW_ANSI_STDIO=1
+        eval test \$${pfx_no_}cc_type = "gcc" &&
+            add_${pfx}cppflags -D__printf__=__gnu_printf__
+    elif check_${pfx}cpp_condition _mingw.h "defined __MINGW_VERSION"  ||
+         check_${pfx}cpp_condition _mingw.h "defined __MINGW32_VERSION"; then
+        eval ${pfx}libc_type=mingw32
+        check_${pfx}cpp_condition _mingw.h "__MINGW32_MAJOR_VERSION > 3 || \
             (__MINGW32_MAJOR_VERSION == 3 && __MINGW32_MINOR_VERSION >= 15)" ||
-        die "ERROR: MinGW runtime version must be >= 3.15."
-    add_cppflags -U__STRICT_ANSI__
-    if check_cpp_condition _mingw.h "defined(__MINGW64_VERSION_MAJOR) && \
-            __MINGW64_VERSION_MAJOR < 3"; then
-        add_compat msvcrt/snprintf.o
-        add_cflags "-include $source_path/compat/msvcrt/snprintf.h"
-    else
-        add_cppflags -D__USE_MINGW_ANSI_STDIO=1
+            die "ERROR: MinGW32 runtime version must be >= 3.15."
+        add_${pfx}cppflags -U__STRICT_ANSI__ -D__USE_MINGW_ANSI_STDIO=1
+        eval test \$${pfx_no_}cc_type = "gcc" &&
+            add_${pfx}cppflags -D__printf__=__gnu_printf__
+    elif check_${pfx}cpp_condition crtversion.h "defined _VC_CRT_MAJOR_VERSION"; then
+        eval ${pfx}libc_type=msvcrt
+        # The MSVC 2010 headers (Win 7.0 SDK) set _WIN32_WINNT to
+        # 0x601 by default unless something else is set by the user.
+        # This can easily lead to us detecting functions only present
+        # in such new versions and producing binaries requiring windows 7.0.
+        # Therefore explicitly set the default to XP unless the user has
+        # set something else on the command line.
+        check_${pfx}cpp_condition stdlib.h "defined(_WIN32_WINNT)" ||
+            add_${pfx}cppflags -D_WIN32_WINNT=0x0502
+    elif check_${pfx}cpp_condition stddef.h "defined __KLIBC__"; then
+        eval ${pfx}libc_type=klibc
+    elif check_${pfx}cpp_condition sys/cdefs.h "defined __BIONIC__"; then
+        eval ${pfx}libc_type=bionic
+    elif check_${pfx}cpp_condition sys/brand.h "defined LABELED_BRAND_NAME"; then
+        eval ${pfx}libc_type=solaris
+        add_${pfx}cppflags -D__EXTENSIONS__ -D_XOPEN_SOURCE=600
     fi
-elif check_cpp_condition crtversion.h "defined _VC_CRT_MAJOR_VERSION"; then
-    libc_type=msvcrt
-    add_compat strtod.o strtod=avpriv_strtod
-    add_compat msvcrt/snprintf.o snprintf=avpriv_snprintf   \
-                                 _snprintf=avpriv_snprintf  \
-                                 vsnprintf=avpriv_vsnprintf
-    # The MSVC 2010 headers (Win 7.0 SDK) set _WIN32_WINNT to
-    # 0x601 by default unless something else is set by the user.
-    # This can easily lead to us detecting functions only present
-    # in such new versions and producing binaries requiring windows 7.0.
-    # Therefore explicitly set the default to XP unless the user has
-    # set something else on the command line.
-    check_cpp_condition stdlib.h "defined(_WIN32_WINNT)" || add_cppflags -D_WIN32_WINNT=0x0502
-elif check_cpp_condition stddef.h "defined __KLIBC__"; then
-    libc_type=klibc
-elif check_cpp_condition sys/cdefs.h "defined __BIONIC__"; then
-    libc_type=bionic
-    add_compat strtod.o strtod=avpriv_strtod
-fi
+}
 
-test -n "$libc_type" && enable $libc_type
+probe_libc
+test -n "$libc_type" && enable libc_$libc_type
+probe_libc host_
+test -n "$host_libc_type" && enable host_libc_$host_libc_type
+
+case $libc_type in
+    bionic)
+        add_compat strtod.o strtod=avpriv_strtod
+        ;;
+    msvcrt)
+        add_compat strtod.o strtod=avpriv_strtod
+        add_compat msvcrt/snprintf.o snprintf=avpriv_snprintf   \
+                                     _snprintf=avpriv_snprintf  \
+                                     vsnprintf=avpriv_vsnprintf
+        ;;
+esac
 
 # hacks for compiler/libc/os combinations
 
-if enabled_all tms470 glibc; then
+if enabled_all tms470 libc_glibc; then
     CPPFLAGS="-I${source_path}/compat/tms470 ${CPPFLAGS}"
     add_cppflags -D__USER_LABEL_PREFIX__=
     add_cppflags -D__builtin_memset=memset
@@ -3846,7 +3933,7 @@ if enabled_all tms470 glibc; then
     add_cflags   -pds=48    # incompatible redefinition of macro
 fi
 
-if enabled_all ccc glibc; then
+if enabled_all ccc libc_glibc; then
     add_ldflags -Wl,-z,now  # calls to libots crash without this
 fi
 
@@ -4248,20 +4335,16 @@ check_header windows.h
 check_header X11/extensions/XvMClib.h
 check_header asm/types.h
 
-disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
-disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
-
 if ! disabled w32threads && ! enabled pthreads; then
-    check_func_headers "windows.h process.h" _beginthreadex && enable w32threads
+    check_func_headers "windows.h process.h" _beginthreadex &&
+        enable w32threads || disable w32threads
 fi
 
 # check for some common methods of building with pthread support
 # do this before the optional library checks as some of them require pthreads
 if ! disabled pthreads && ! enabled w32threads && ! enabled os2threads; then
     enable pthreads
-    if check_func pthread_join && check_func pthread_create; then
-        :
-    elif check_func pthread_join -pthread && check_func pthread_create -pthread; then
+    if check_func pthread_join -pthread && check_func pthread_create -pthread; then
         add_cflags -pthread
         add_extralibs -pthread
     elif check_func pthread_join -pthreads && check_func pthread_create -pthreads; then
@@ -4269,7 +4352,9 @@ if ! disabled pthreads && ! enabled w32threads && ! enabled os2threads; then
         add_extralibs -pthreads
     elif check_func pthread_join -lpthreadGC2 && check_func pthread_create -lpthreadGC2; then
         add_extralibs -lpthreadGC2
-    elif ! check_lib pthread.h pthread_join -lpthread && ! check_lib pthread.h pthread_create -lpthread; then
+    elif check_lib pthread.h pthread_join -lpthread && check_lib pthread.h pthread_create -lpthread; then
+        :
+    elif ! check_func pthread_join && ! check_func pthread_create; then
         disable pthreads
     fi
 fi
@@ -4286,9 +4371,8 @@ if enabled pthreads; then
   check_func pthread_cancel
 fi
 
-enabled sync_val_compare_and_swap && enable atomics_gcc
-enabled_all atomic_cas_ptr machine_rw_barrier && enable atomics_suncc
-enabled MemoryBarrier && enable atomics_win32
+disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
+disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
 
 check_lib math.h sin -lm && LIBM="-lm"
 disabled crystalhd || check_lib libcrystalhd/libcrystalhd_if.h DtsCrystalHDVersion -lcrystalhd || disable crystalhd
@@ -4321,7 +4405,7 @@ enabled libfaac           && require2 libfaac "stdint.h faac.h" faacEncGetVersio
 enabled libfdk_aac        && require libfdk_aac fdk-aac/aacenc_lib.h aacEncOpen -lfdk-aac
 flite_libs="-lflite_cmu_time_awb -lflite_cmu_us_awb -lflite_cmu_us_kal -lflite_cmu_us_kal16 -lflite_cmu_us_rms -lflite_cmu_us_slt -lflite_usenglish -lflite_cmulex -lflite"
 enabled libflite          && require2 libflite "flite/flite.h" flite_init $flite_libs
-enabled libfreetype       && require_pkg_config freetype2 "ft2build.h freetype/freetype.h" FT_Init_FreeType
+enabled libfreetype       && require_libfreetype
 enabled libgme            && require  libgme gme/gme.h gme_new_emu -lgme -lstdc++
 enabled libgsm            && { for gsm_hdr in "gsm.h" "gsm/gsm.h"; do
                                    check_lib "${gsm_hdr}" gsm_create -lgsm && break;
@@ -4364,8 +4448,9 @@ enabled libvpx            && {
     enabled libvpx_vp8_encoder && { check_lib2 "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_enc_init_ver VP8E_SET_MAX_INTRA_BITRATE_PCT" -lvpx ||
                                     die "ERROR: libvpx encoder version must be >=0.9.7"; }
     enabled libvpx_vp9_decoder && { check_lib2 "vpx/vpx_decoder.h vpx/vp8dx.h" "vpx_codec_vp9_dx" -lvpx || disable libvpx_vp9_decoder; }
-    enabled libvpx_vp9_encoder && { check_lib2 "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_vp9_cx" -lvpx || disable libvpx_vp9_encoder; } }
+    enabled libvpx_vp9_encoder && { check_lib2 "vpx/vpx_encoder.h vpx/vp8cx.h" "vpx_codec_vp9_cx VP9E_SET_SVC" -lvpx || disable libvpx_vp9_encoder; } }
 enabled libwavpack        && require libwavpack wavpack/wavpack.h WavpackOpenFileOutput  -lwavpack
+enabled libwebp           && require_pkg_config libwebp webp/encode.h WebPGetEncoderVersion
 enabled libx264           && require libx264 x264.h x264_encoder_encode -lx264 &&
                              { check_cpp_condition x264.h "X264_BUILD >= 118" ||
                                die "ERROR: libx264 must be installed and version must be >= 0.118."; }
@@ -4649,6 +4734,7 @@ elif enabled armcc; then
     add_cflags -W${armcc_opt},--diag_suppress=513  # pointer sign
 elif enabled tms470; then
     add_cflags -pds=824 -pds=837
+    disable inline_asm
 elif enabled pathscale; then
     add_cflags -fstrict-overflow -OPT:wrap_around_unsafe_opt=OFF
 elif enabled_any msvc icl; then
@@ -4678,10 +4764,6 @@ case $target_os in
 esac
 
 enable frame_thread_encoder
-enabled_any $THREADS_LIST      && enable threads
-enabled_any $ATOMICS_LIST      && enable atomics_native
-
-enabled threads && ! enabled pthreads && ! enabled atomics_native && die "non pthread threading without atomics not supported, try adding --enable-pthreads or --cpu=i486 or higher if you are on x86"
 
 enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
@@ -4689,6 +4771,8 @@ check_deps $CONFIG_LIST       \
            $CONFIG_EXTRA      \
            $HAVE_LIST         \
            $ALL_COMPONENTS    \
+
+enabled threads && ! enabled pthreads && ! enabled atomics_native && die "non pthread threading without atomics not supported, try adding --enable-pthreads or --cpu=i486 or higher if you are on x86"
 
 
 if test $target_os = "haiku"; then
@@ -4729,10 +4813,11 @@ merge_deps libavfilter $FILTER_LIST
 echo "install prefix            $prefix"
 echo "source path               $source_path"
 echo "C compiler                $cc"
+echo "C library                 $libc_type"
 if test "$host_cc" != "$cc"; then
     echo "host C compiler           $host_cc"
+    echo "host C library            $host_libc_type"
 fi
-echo "C library                 $libc_type"
 echo "ARCH                      $arch ($cpu)"
 if test "$build_suffix" != ""; then
     echo "build suffix              $build_suffix"
@@ -4888,6 +4973,7 @@ LD_LIB=$LD_LIB
 LD_PATH=$LD_PATH
 DLLTOOL=$dlltool
 WINDRES=$windres
+DEPWINDRES=$dep_cc
 LDFLAGS=$LDFLAGS
 SHFLAGS=$(echo $($ldflags_filter $SHFLAGS))
 ASMSTRIPFLAGS=$ASMSTRIPFLAGS
@@ -4954,6 +5040,7 @@ get_version(){
     name=$(toupper $lcname)
     file=$source_path/$lcname/version.h
     eval $(awk "/#define ${name}_VERSION_M/ { print \$2 \"=\" \$3 }" "$file")
+    enabled raise_major && eval ${name}_VERSION_MAJOR=$((${name}_VERSION_MAJOR+100))
     eval ${name}_VERSION=\$${name}_VERSION_MAJOR.\$${name}_VERSION_MINOR.\$${name}_VERSION_MICRO
     eval echo "${lcname}_VERSION=\$${name}_VERSION" >> config.mak
     eval echo "${lcname}_VERSION_MAJOR=\$${name}_VERSION_MAJOR" >> config.mak

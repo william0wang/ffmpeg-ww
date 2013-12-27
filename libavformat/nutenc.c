@@ -337,7 +337,9 @@ static void write_mainheader(NUTContext *nut, AVIOContext *bc)
         tmp_head_idx;
     int64_t tmp_match;
 
-    ff_put_v(bc, NUT_VERSION);
+    ff_put_v(bc, nut->version = NUT_VERSION);
+    if (nut->version > 3)
+        ff_put_v(bc, nut->minor_version);
     ff_put_v(bc, nut->avf->nb_streams);
     ff_put_v(bc, nut->max_distance);
     ff_put_v(bc, nut->time_base_count);
@@ -586,8 +588,15 @@ static int write_index(NUTContext *nut, AVIOContext *bc) {
         int64_t last_pts= -1;
         int j, k;
         for (j=0; j<nut->sp_count; j++) {
-            int flag = (nus->keyframe_pts[j] != AV_NOPTS_VALUE) ^ (j+1 == nut->sp_count);
+            int flag;
             int n = 0;
+
+            if (j && nus->keyframe_pts[j] == nus->keyframe_pts[j-1]) {
+                av_log(nut->avf, AV_LOG_WARNING, "Multiple keyframes with same PTS\n");
+                nus->keyframe_pts[j] = AV_NOPTS_VALUE;
+            }
+
+            flag = (nus->keyframe_pts[j] != AV_NOPTS_VALUE) ^ (j+1 == nut->sp_count);
             for (; j<nut->sp_count && (nus->keyframe_pts[j] != AV_NOPTS_VALUE) == flag; j++)
                 n++;
 

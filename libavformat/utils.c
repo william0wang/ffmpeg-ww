@@ -1079,7 +1079,8 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
     // Note, if this is misbehaving for a H.264 file then possibly presentation_delayed is not set correctly.
     if(delay==1 && pkt->dts == pkt->pts && pkt->dts != AV_NOPTS_VALUE && presentation_delayed){
         av_log(s, AV_LOG_DEBUG, "invalid dts/pts combination %"PRIi64"\n", pkt->dts);
-        if(strcmp(s->iformat->name, "mov,mp4,m4a,3gp,3g2,mj2")) // otherwise we discard correct timestamps for vc1-wmapro.ism
+        if (    strcmp(s->iformat->name, "mov,mp4,m4a,3gp,3g2,mj2")
+             && strcmp(s->iformat->name, "flv")) // otherwise we discard correct timestamps for vc1-wmapro.ism
             pkt->dts= AV_NOPTS_VALUE;
     }
 
@@ -2503,7 +2504,6 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st, AVPacket *avpkt, A
            !has_decode_delay_been_guessed(st) ||
            (!st->codec_info_nb_frames && st->codec->codec->capabilities & CODEC_CAP_CHANNEL_CONF))) {
         got_picture = 0;
-        avcodec_get_frame_defaults(frame);
         switch(st->codec->codec_type) {
         case AVMEDIA_TYPE_VIDEO:
             ret = avcodec_decode_video2(st->codec, frame,
@@ -2533,7 +2533,7 @@ static int try_decode_frame(AVFormatContext *s, AVStream *st, AVPacket *avpkt, A
         ret = -1;
 
 fail:
-    avcodec_free_frame(&frame);
+    av_frame_free(&frame);
     return ret;
 }
 
@@ -2701,6 +2701,22 @@ int ff_alloc_extradata(AVCodecContext *avctx, int size)
     return ret;
 }
 
+int ff_get_extradata(AVCodecContext *avctx, AVIOContext *pb, int size)
+{
+    int ret = ff_alloc_extradata(avctx, size);
+    if (ret < 0)
+        return ret;
+    ret = avio_read(pb, avctx->extradata, size);
+    if (ret != size) {
+        av_freep(&avctx->extradata);
+        avctx->extradata_size = 0;
+        av_log(avctx, AV_LOG_ERROR, "Failed to read extradata of size %d\n", size);
+        return ret < 0 ? ret : AVERROR_INVALIDDATA;
+    }
+
+    return ret;
+}
+
 int ff_rfps_add_frame(AVFormatContext *ic, AVStream *st, int64_t ts)
 {
     int i, j;
@@ -2719,16 +2735,36 @@ int ff_rfps_add_frame(AVFormatContext *ic, AVStream *st, int64_t ts)
 //         if(st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
 //             av_log(NULL, AV_LOG_ERROR, "%f\n", dts);
         for (i=0; i<MAX_STD_TIMEBASES; i++) {
-            int framerate= get_std_framerate(i);
-            double sdts= dts*framerate/(1001*12);
-            for(j=0; j<2; j++){
-                int64_t ticks= llrint(sdts+j*0.5);
-                double error= sdts - ticks + j*0.5;
-                st->info->duration_error[j][0][i] += error;
-                st->info->duration_error[j][1][i] += error*error;
+            if (st->info->duration_error[0][1][i] < 1e10) {
+                int framerate= get_std_framerate(i);
+                double sdts= dts*framerate/(1001*12);
+                for(j=0; j<2; j++){
+                    int64_t ticks= llrint(sdts+j*0.5);
+                    double error= sdts - ticks + j*0.5;
+                    st->info->duration_error[j][0][i] += error;
+                    st->info->duration_error[j][1][i] += error*error;
+                }
             }
         }
         st->info->duration_count++;
+        st->info->rfps_duration_sum += duration;
+
+        if (st->info->duration_count % 10 == 0) {
+            int n = st->info->duration_count;
+            for (i=0; i<MAX_STD_TIMEBASES; i++) {
+                if (st->info->duration_error[0][1][i] < 1e10) {
+                    double a0     = st->info->duration_error[0][0][i] / n;
+                    double error0 = st->info->duration_error[0][1][i] / n - a0*a0;
+                    double a1     = st->info->duration_error[1][0][i] / n;
+                    double error1 = st->info->duration_error[1][1][i] / n - a1*a1;
+                    if (error0 > 0.04 && error1 > 0.04) {
+                        st->info->duration_error[0][1][i] = 2e10;
+                        st->info->duration_error[1][1][i] = 2e10;
+                    }
+                }
+            }
+        }
+
         // ignore the first 4 values, they might have some random jitter
         if (st->info->duration_count > 3 && is_relative(ts) == is_relative(last))
             st->info->duration_gcd = av_gcd(st->info->duration_gcd, duration);
@@ -2765,6 +2801,10 @@ void ff_rfps_calculate(AVFormatContext *ic)
                     continue;
                 if(!st->info->codec_info_duration && 1.0 < (1001*12.0)/get_std_framerate(j))
                     continue;
+
+                if (av_q2d(st->time_base) * st->info->rfps_duration_sum / st->info->duration_count < (1001*12.0 * 0.8)/get_std_framerate(j))
+                    continue;
+
                 for(k=0; k<2; k++){
                     int n= st->info->duration_count;
                     double a= st->info->duration_error[k][0][j] / n;
@@ -2786,6 +2826,7 @@ void ff_rfps_calculate(AVFormatContext *ic)
         av_freep(&st->info->duration_error);
         st->info->last_dts = AV_NOPTS_VALUE;
         st->info->duration_count = 0;
+        st->info->rfps_duration_sum = 0;
     }
 }
 
@@ -2838,15 +2879,16 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 
         /* Ensure that subtitle_header is properly set. */
         if (st->codec->codec_type == AVMEDIA_TYPE_SUBTITLE
-            && codec && !st->codec->codec)
-            avcodec_open2(st->codec, codec, options ? &options[i]
-                              : &thread_opt);
+            && codec && !st->codec->codec) {
+            if (avcodec_open2(st->codec, codec, options ? &options[i] : &thread_opt) < 0)
+                av_log(ic, AV_LOG_WARNING, "Failed to open codec in av_find_stream_info\n");
+        }
 
         //try to just open decoders, in case this is enough to get parameters
         if (!has_codec_parameters(st, NULL) && st->request_probe <= 0) {
             if (codec && !st->codec->codec)
-                avcodec_open2(st->codec, codec, options ? &options[i]
-                              : &thread_opt);
+                if (avcodec_open2(st->codec, codec, options ? &options[i] : &thread_opt) < 0)
+                    av_log(ic, AV_LOG_WARNING, "Failed to open codec in av_find_stream_info\n");
         }
         if (!options)
             av_dict_free(&thread_opt);

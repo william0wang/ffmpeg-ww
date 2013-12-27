@@ -39,7 +39,6 @@
 #include "mpegvideo.h"
 #include "mjpegenc.h"
 #include "msmpeg4.h"
-#include "xvmc_internal.h"
 #include "thread.h"
 #include <limits.h>
 
@@ -1047,14 +1046,14 @@ av_cold int ff_MPV_common_init(MpegEncContext *s)
     FF_ALLOCZ_OR_GOTO(s->avctx, s->picture,
                       MAX_PICTURE_COUNT * sizeof(Picture), fail);
     for (i = 0; i < MAX_PICTURE_COUNT; i++) {
-        avcodec_get_frame_defaults(&s->picture[i].f);
+        av_frame_unref(&s->picture[i].f);
     }
     memset(&s->next_picture, 0, sizeof(s->next_picture));
     memset(&s->last_picture, 0, sizeof(s->last_picture));
     memset(&s->current_picture, 0, sizeof(s->current_picture));
-    avcodec_get_frame_defaults(&s->next_picture.f);
-    avcodec_get_frame_defaults(&s->last_picture.f);
-    avcodec_get_frame_defaults(&s->current_picture.f);
+    av_frame_unref(&s->next_picture.f);
+    av_frame_unref(&s->last_picture.f);
+    av_frame_unref(&s->current_picture.f);
 
         if (init_context_frame(s))
             goto fail;
@@ -1423,7 +1422,6 @@ int ff_find_unused_picture(MpegEncContext *s, int shared)
             s->picture[ret].needs_realloc = 0;
             ff_free_picture_tables(&s->picture[ret]);
             ff_mpeg_unref_picture(s, &s->picture[ret]);
-            avcodec_get_frame_defaults(&s->picture[ret].f);
         }
     }
     return ret;
@@ -1674,28 +1672,12 @@ int ff_MPV_frame_start(MpegEncContext *s, AVCodecContext *avctx)
         update_noise_reduction(s);
     }
 
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration)
-        return ff_xvmc_field_start(s, avctx);
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
-
     return 0;
 }
 
 /* called after a frame has been decoded. */
 void ff_MPV_frame_end(MpegEncContext *s)
 {
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-    /* redraw edges for the frame if decoding didn't complete */
-    // just to make sure that all data is rendered.
-    if (CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration) {
-        ff_xvmc_field_end(s);
-    } else
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
     if ((s->er.error_count || !(s->avctx->codec->capabilities&CODEC_CAP_DRAW_HORIZ_BAND)) &&
         !s->avctx->hwaccel &&
         !(s->avctx->codec->capabilities & CODEC_CAP_HWACCEL_VDPAU) &&
@@ -2619,14 +2601,11 @@ void MPV_decode_mb_internal(MpegEncContext *s, int16_t block[12][64],
 {
     const int mb_xy = s->mb_y * s->mb_stride + s->mb_x;
 
-#if FF_API_XVMC
-FF_DISABLE_DEPRECATION_WARNINGS
-    if(CONFIG_MPEG_XVMC_DECODER && s->avctx->xvmc_acceleration){
-        ff_xvmc_decode_mb(s);//xvmc uses pblocks
+    if (CONFIG_XVMC &&
+        s->avctx->hwaccel && s->avctx->hwaccel->decode_mb) {
+        s->avctx->hwaccel->decode_mb(s);//xvmc uses pblocks
         return;
     }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif /* FF_API_XVMC */
 
     if(s->avctx->debug&FF_DEBUG_DCT_COEFF) {
        /* print DCT coefficients */
@@ -2656,7 +2635,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
     else if (!is_mpeg12 && (s->h263_pred || s->h263_aic))
         s->mbintra_table[mb_xy]=1;
 
-    if ((s->flags&CODEC_FLAG_PSNR) || !(s->encoding && (s->intra_only || s->pict_type==AV_PICTURE_TYPE_B) && s->avctx->mb_decision != FF_MB_DECISION_RD)) { //FIXME precalc
+    if (   (s->flags&CODEC_FLAG_PSNR)
+        || s->avctx->frame_skip_threshold || s->avctx->frame_skip_factor
+        || !(s->encoding && (s->intra_only || s->pict_type==AV_PICTURE_TYPE_B) && s->avctx->mb_decision != FF_MB_DECISION_RD)) { //FIXME precalc
         uint8_t *dest_y, *dest_cb, *dest_cr;
         int dct_linesize, dct_offset;
         op_pixels_func (*op_pix)[4];

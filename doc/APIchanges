@@ -4,7 +4,7 @@ since the last major version increase or the API was added.
 The last version increases were:
 libavcodec:    2013-03-xx
 libavdevice:   2013-03-xx
-libavfilter:   2012-06-22
+libavfilter:   2013-12-xx
 libavformat:   2013-03-xx
 libavresample: 2012-10-05
 libpostproc:   2011-04-18
@@ -15,9 +15,24 @@ libavutil:     2012-10-22
 
 API changes, most recent first:
 
+2013-12-22 - xxxxxxx - lavu 52.59.100 - avstring.h
+  Add av_strnlen() function.
+
+2013-12-xx - xxxxxxx - lavu 52.57.100 - opencl.h
+  Add av_opencl_benchmark() function.
+
 2013-11-xx - xxxxxxx - lavu 52.56.100 - ffversion.h
   Moves version.h to libavutil/ffversion.h.
   Install ffversion.h and make it public.
+
+2013-12-xx - xxxxxxx - lavc 55.28.1 - avcodec.h
+  av_frame_alloc(), av_frame_unref() and av_frame_free() now can and should be
+  used instead of avcodec_alloc_frame(), avcodec_get_frame_defaults() and
+  avcodec_free_frame() respectively. The latter three functions are deprecated.
+
+2013-11-xx - xxxxxxx- - lavu 52.20.0 - frame.h
+  Add AV_FRAME_DATA_STEREO3D value to the AVFrameSideDataType enum and
+  stereo3d.h API, that identify codec-independent stereo3d information.
 
 2013-11-xx - xxxxxxx- - lavu 52.19.0 - frame.h
   Add AV_FRAME_DATA_A53_CC value to the AVFrameSideDataType enum, which
@@ -25,6 +40,9 @@ API changes, most recent first:
 
 2013-11-XX - xxxxxxx - lavu 52.54.100 - avstring.h
   Add av_utf8_decode() function.
+
+2013-11-22 - fb7d70c - lavc 55.44.100 - avcodec.h
+  Add HEVC profiles
 
 2013-11-xx - xxxxxxx - lavc 55.44.100 - avcodec.h
   Add av_packet_{un,}pack_dictionary()

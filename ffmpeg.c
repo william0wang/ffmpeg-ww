@@ -468,7 +468,7 @@ static void ffmpeg_cleanup(int ret)
             bsfc = next;
         }
         output_streams[i]->bitstream_filters = NULL;
-        avcodec_free_frame(&output_streams[i]->filtered_frame);
+        av_frame_free(&output_streams[i]->filtered_frame);
 
         av_parser_close(output_streams[i]->parser);
 
@@ -1080,8 +1080,7 @@ static int reap_filters(void)
 
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
             return AVERROR(ENOMEM);
-        } else
-            avcodec_get_frame_defaults(ost->filtered_frame);
+        }
         filtered_frame = ost->filtered_frame;
 
         while (1) {
@@ -2376,6 +2375,7 @@ static int transcode_init(void)
                 codec->frame_size         = icodec->frame_size;
                 codec->audio_service_type = icodec->audio_service_type;
                 codec->block_align        = icodec->block_align;
+                codec->delay              = icodec->delay;
                 if((codec->block_align == 1 || codec->block_align == 1152 || codec->block_align == 576) && codec->codec_id == AV_CODEC_ID_MP3)
                     codec->block_align= 0;
                 if(codec->codec_id == AV_CODEC_ID_AC3)
@@ -3170,7 +3170,7 @@ static int process_input(int file_index)
         if(delta < -1LL*dts_delta_threshold*AV_TIME_BASE ||
             (delta > 1LL*dts_delta_threshold*AV_TIME_BASE &&
                 ist->st->codec->codec_type != AVMEDIA_TYPE_SUBTITLE) ||
-            pkt_dts + AV_TIME_BASE/10 < ist->pts){
+            pkt_dts + AV_TIME_BASE/10 < FFMAX(ist->pts, ist->dts)){
             ifile->ts_offset -= delta;
             av_log(NULL, AV_LOG_DEBUG,
                    "timestamp discontinuity %"PRId64", new offset= %"PRId64"\n",
