@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/attributes.h"
 #include "libavutil/cpu.h"
 #include "libavutil/mem.h"
 #include "libavutil/x86/asm.h"
@@ -37,8 +38,8 @@ fpel_func(put,  8, mmx);
 fpel_func(put, 16, sse);
 fpel_func(put, 32, sse);
 fpel_func(put, 64, sse);
-fpel_func(avg,  4, sse);
-fpel_func(avg,  8, sse);
+fpel_func(avg,  4, mmxext);
+fpel_func(avg,  8, mmxext);
 fpel_func(avg, 16, sse2);
 fpel_func(avg, 32, sse2);
 fpel_func(avg, 64, sse2);
@@ -56,6 +57,9 @@ mc_func(avg, sz, v, ssse3)
 
 mc_funcs(4);
 mc_funcs(8);
+#if ARCH_X86_64
+mc_funcs(16);
+#endif
 
 #undef mc_funcs
 #undef mc_func
@@ -78,7 +82,9 @@ mc_rep_func(avg, sz, hsz, h, ssse3); \
 mc_rep_func(put, sz, hsz, v, ssse3); \
 mc_rep_func(avg, sz, hsz, v, ssse3)
 
+#if ARCH_X86_32
 mc_rep_funcs(16, 8);
+#endif
 mc_rep_funcs(32, 16);
 mc_rep_funcs(64, 32);
 
@@ -151,9 +157,37 @@ filters_8tap_1d_fn3(avg)
 #undef filters_8tap_1d_fn3
 #undef filter_8tap_1d_fn
 
-void ff_vp9_idct_idct_4x4_add_ssse3(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
-void ff_vp9_idct_idct_8x8_add_ssse3(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
-void ff_vp9_idct_idct_16x16_add_ssse3(uint8_t *dst, ptrdiff_t stride, int16_t *block, int eob);
+#define itxfm_func(typea, typeb, size, opt) \
+void ff_vp9_##typea##_##typeb##_##size##x##size##_add_##opt(uint8_t *dst, ptrdiff_t stride, \
+                                                            int16_t *block, int eob)
+#define itxfm_funcs(size, opt) \
+itxfm_func(idct,  idct,  size, opt); \
+itxfm_func(iadst, idct,  size, opt); \
+itxfm_func(idct,  iadst, size, opt); \
+itxfm_func(iadst, iadst, size, opt)
+
+itxfm_func(idct, idct,  4, ssse3);
+itxfm_func(idct, idct,  8, ssse3);
+itxfm_func(idct, idct,  8, avx);
+itxfm_funcs(16, ssse3);
+itxfm_funcs(16, avx);
+itxfm_func(idct, idct, 32, ssse3);
+itxfm_func(idct, idct, 32, avx);
+
+#undef itxfm_func
+#undef itxfm_funcs
+
+#define lpf_funcs(size1, size2, opt) \
+void ff_vp9_loop_filter_v_##size1##_##size2##_##opt(uint8_t *dst, ptrdiff_t stride, \
+                                                    int E, int I, int H); \
+void ff_vp9_loop_filter_h_##size1##_##size2##_##opt(uint8_t *dst, ptrdiff_t stride, \
+                                                    int E, int I, int H)
+
+lpf_funcs(16, 16, sse2);
+lpf_funcs(16, 16, ssse3);
+lpf_funcs(16, 16, avx);
+
+#undef lpf_funcs
 
 #endif /* HAVE_YASM */
 
@@ -191,18 +225,25 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
         init_fpel(3, 0,  8, put, mmx);
     }
 
+    if (EXTERNAL_MMXEXT(cpu_flags)) {
+        init_fpel(4, 1,  4, avg, mmxext);
+        init_fpel(3, 1,  8, avg, mmxext);
+    }
+
     if (EXTERNAL_SSE(cpu_flags)) {
         init_fpel(2, 0, 16, put, sse);
         init_fpel(1, 0, 32, put, sse);
         init_fpel(0, 0, 64, put, sse);
-        init_fpel(4, 1,  4, avg, sse);
-        init_fpel(3, 1,  8, avg, sse);
     }
 
     if (EXTERNAL_SSE2(cpu_flags)) {
         init_fpel(2, 1, 16, avg, sse2);
         init_fpel(1, 1, 32, avg, sse2);
         init_fpel(0, 1, 64, avg, sse2);
+        if (ARCH_X86_64) {
+            dsp->loop_filter_16[0] = ff_vp9_loop_filter_h_16_16_sse2;
+            dsp->loop_filter_16[1] = ff_vp9_loop_filter_v_16_16_sse2;
+        }
     }
 
     if (EXTERNAL_SSSE3(cpu_flags)) {
@@ -211,7 +252,32 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
         dsp->itxfm_add[TX_4X4][DCT_DCT] = ff_vp9_idct_idct_4x4_add_ssse3;
         if (ARCH_X86_64) {
             dsp->itxfm_add[TX_8X8][DCT_DCT] = ff_vp9_idct_idct_8x8_add_ssse3;
-            dsp->itxfm_add[TX_16X16][DCT_DCT] = ff_vp9_idct_idct_16x16_add_ssse3;
+            dsp->itxfm_add[TX_16X16][DCT_DCT]   = ff_vp9_idct_idct_16x16_add_ssse3;
+            dsp->itxfm_add[TX_16X16][ADST_DCT]  = ff_vp9_idct_iadst_16x16_add_ssse3;
+            dsp->itxfm_add[TX_16X16][DCT_ADST]  = ff_vp9_iadst_idct_16x16_add_ssse3;
+            dsp->itxfm_add[TX_16X16][ADST_ADST] = ff_vp9_iadst_iadst_16x16_add_ssse3;
+            dsp->itxfm_add[TX_32X32][ADST_ADST] =
+            dsp->itxfm_add[TX_32X32][ADST_DCT] =
+            dsp->itxfm_add[TX_32X32][DCT_ADST] =
+            dsp->itxfm_add[TX_32X32][DCT_DCT] = ff_vp9_idct_idct_32x32_add_ssse3;
+            dsp->loop_filter_16[0] = ff_vp9_loop_filter_h_16_16_ssse3;
+            dsp->loop_filter_16[1] = ff_vp9_loop_filter_v_16_16_ssse3;
+        }
+    }
+
+    if (EXTERNAL_AVX(cpu_flags)) {
+        if (ARCH_X86_64) {
+            dsp->itxfm_add[TX_8X8][DCT_DCT] = ff_vp9_idct_idct_8x8_add_avx;
+            dsp->itxfm_add[TX_16X16][DCT_DCT] = ff_vp9_idct_idct_16x16_add_avx;
+            dsp->itxfm_add[TX_16X16][ADST_DCT]  = ff_vp9_idct_iadst_16x16_add_avx;
+            dsp->itxfm_add[TX_16X16][DCT_ADST]  = ff_vp9_iadst_idct_16x16_add_avx;
+            dsp->itxfm_add[TX_16X16][ADST_ADST] = ff_vp9_iadst_iadst_16x16_add_avx;
+            dsp->itxfm_add[TX_32X32][ADST_ADST] =
+            dsp->itxfm_add[TX_32X32][ADST_DCT] =
+            dsp->itxfm_add[TX_32X32][DCT_ADST] =
+            dsp->itxfm_add[TX_32X32][DCT_DCT] = ff_vp9_idct_idct_32x32_add_avx;
+            dsp->loop_filter_16[0] = ff_vp9_loop_filter_h_16_16_avx;
+            dsp->loop_filter_16[1] = ff_vp9_loop_filter_v_16_16_avx;
         }
     }
 

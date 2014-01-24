@@ -52,7 +52,7 @@ typedef struct {
     int64_t chunksize;      /**< Used if "Transfer-Encoding: chunked" otherwise -1. */
     char *content_type;
     char *user_agent;
-    int64_t off, filesize;
+    int64_t off, filesize, req_end_offset;
     int icy_data_read;      ///< how much data was read since last ICY metadata packet
     int icy_metaint;        ///< after how many bytes of read data a new metadata packet will be found
     char *location;
@@ -105,6 +105,8 @@ static const AVOption options[] = {
 {"basic", "HTTP basic authentication", 0, AV_OPT_TYPE_CONST, {.i64 = HTTP_AUTH_BASIC}, 0, 0, D|E, "auth_type" },
 {"send_expect_100", "Force sending an Expect: 100-continue header for POST", OFFSET(send_expect_100), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, E },
 {"location", "The actual location of the data received", OFFSET(location), AV_OPT_TYPE_STRING, { 0 }, 0, 0, D|E },
+{"offset", "initial byte offset", OFFSET(off), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, D },
+{"end_offset", "try to limit the request to bytes preceding this offset", OFFSET(req_end_offset), AV_OPT_TYPE_INT64, {.i64 = 0}, 0, INT64_MAX, D },
 {NULL}
 };
 #define HTTP_CLASS(flavor)\
@@ -488,8 +490,11 @@ static int get_cookies(HTTPContext *s, char **cookies, const char *path,
                 av_free(cpath);
                 cpath = av_strdup(&param[5]);
             } else if (!av_strncasecmp("domain=", param, 7)) {
+                // if the cookie specifies a sub-domain, skip the leading dot thereby
+                // supporting URLs that point to sub-domains and the master domain
+                int leading_dot = (param[7] == '.');
                 av_free(cdomain);
-                cdomain = av_strdup(&param[7]);
+                cdomain = av_strdup(&param[7+leading_dot]);
             } else if (!av_strncasecmp("secure",  param, 6) ||
                        !av_strncasecmp("comment", param, 7) ||
                        !av_strncasecmp("max-age", param, 7) ||
@@ -643,9 +648,15 @@ static int http_connect(URLContext *h, const char *path, const char *local_path,
     // Note: we send this on purpose even when s->off is 0 when we're probing,
     // since it allows us to detect more reliably if a (non-conforming)
     // server supports seeking by analysing the reply headers.
-    if (!has_header(s->headers, "\r\nRange: ") && !post && (s->off > 0 || s->seekable == -1))
+    if (!has_header(s->headers, "\r\nRange: ") && !post && (s->off > 0 || s->req_end_offset || s->seekable == -1)) {
         len += av_strlcatf(headers + len, sizeof(headers) - len,
-                           "Range: bytes=%"PRId64"-\r\n", s->off);
+                           "Range: bytes=%"PRId64"-", s->off);
+        if (s->req_end_offset)
+            len += av_strlcatf(headers + len, sizeof(headers) - len,
+                               "%"PRId64, s->req_end_offset - 1);
+        len += av_strlcpy(headers + len, "\r\n",
+                          sizeof(headers) - len);
+    }
     if (send_expect_100 && !has_header(s->headers, "\r\nExpect: "))
         len += av_strlcatf(headers + len, sizeof(headers) - len,
                            "Expect: 100-continue\r\n");
@@ -939,6 +950,8 @@ static int64_t http_seek(URLContext *h, int64_t off, int whence)
 
     if (whence == AVSEEK_SIZE)
         return s->filesize;
+    else if ((whence == SEEK_CUR && off == 0) || (whence == SEEK_SET && off == s->off))
+        return s->off;
     else if ((s->filesize == -1 && whence == SEEK_END) || h->is_streamed)
         return -1;
 

@@ -72,6 +72,8 @@
 #define EPEL_EXTRA_AFTER  2
 #define EPEL_EXTRA        3
 
+#define EDGE_EMU_BUFFER_STRIDE 80
+
 /**
  * Value of the luma sample at position (x, y) in the 2D array tab.
  */
@@ -257,7 +259,7 @@ enum ScanType {
 };
 
 typedef struct ShortTermRPS {
-    int num_negative_pics;
+    unsigned int num_negative_pics;
     int num_delta_pocs;
     int32_t delta_poc[32];
     uint8_t used[32];
@@ -509,10 +511,10 @@ typedef struct HEVCPPS {
     uint8_t slice_header_extension_present_flag;
 
     // Inferred parameters
-    int *column_width;  ///< ColumnWidth
-    int *row_height;    ///< RowHeight
-    int *col_bd;        ///< ColBd
-    int *row_bd;        ///< RowBd
+    unsigned int *column_width;  ///< ColumnWidth
+    unsigned int *row_height;    ///< RowHeight
+    unsigned int *col_bd;        ///< ColBd
+    unsigned int *row_bd;        ///< RowBd
     int *col_idxX;
 
     int *ctb_addr_rs_to_ts; ///< CtbAddrRSToTS
@@ -524,7 +526,7 @@ typedef struct HEVCPPS {
 } HEVCPPS;
 
 typedef struct SliceHeader {
-    int pps_id;
+    unsigned int pps_id;
 
     ///< address (in raster order) of the first block in the current slice segment
     unsigned int   slice_segment_addr;
@@ -730,8 +732,8 @@ typedef struct HEVCLocalContext {
     int     start_of_tiles_x;
     int     end_of_tiles_x;
     int     end_of_tiles_y;
-    uint8_t *edge_emu_buffer;
-    int      edge_emu_buffer_size;
+    /* +7 is for subpixel interpolation, *2 for high bit depths */
+    DECLARE_ALIGNED(32, uint8_t, edge_emu_buffer)[(MAX_PB_SIZE + 7) * EDGE_EMU_BUFFER_STRIDE * 2];
     CodingTree ct;
     CodingUnit cu;
     PredictionUnit pu;

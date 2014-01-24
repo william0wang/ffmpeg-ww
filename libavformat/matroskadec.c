@@ -253,6 +253,7 @@ typedef struct {
     uint64_t time_scale;
     double   duration;
     char    *title;
+    char    *muxingapp;
     EbmlBin date_utc;
     EbmlList tracks;
     EbmlList attachments;
@@ -317,7 +318,7 @@ static EbmlSyntax matroska_info[] = {
     { MATROSKA_ID_DURATION,           EBML_FLOAT, 0, offsetof(MatroskaDemuxContext,duration) },
     { MATROSKA_ID_TITLE,              EBML_UTF8,  0, offsetof(MatroskaDemuxContext,title) },
     { MATROSKA_ID_WRITINGAPP,         EBML_NONE },
-    { MATROSKA_ID_MUXINGAPP,          EBML_NONE },
+    { MATROSKA_ID_MUXINGAPP,          EBML_UTF8, 0, offsetof(MatroskaDemuxContext,muxingapp) },
     { MATROSKA_ID_DATEUTC,            EBML_BIN,  0, offsetof(MatroskaDemuxContext,date_utc) },
     { MATROSKA_ID_SEGMENTUID,         EBML_NONE },
     { 0 }
@@ -1587,6 +1588,7 @@ static int matroska_read_header(AVFormatContext *s)
         matroska->ctx->duration = matroska->duration * matroska->time_scale
                                   * 1000 / AV_TIME_BASE;
     av_dict_set(&s->metadata, "title", matroska->title, 0);
+    av_dict_set(&s->metadata, "encoder", matroska->muxingapp, 0);
 
     if (matroska->date_utc.size == 8)
         matroska_metadata_creation_time(&s->metadata, AV_RB64(matroska->date_utc.data));
@@ -1720,11 +1722,26 @@ static int matroska_read_header(AVFormatContext *s)
                 return ret;
             codec_id = st->codec->codec_id;
             extradata_offset = FFMIN(track->codec_priv.size, 18);
-        } else if (!strcmp(track->codec_id, "V_QUICKTIME")
+        } else if (!strcmp(track->codec_id, "A_QUICKTIME")
                    && (track->codec_priv.size >= 86)
                    && (track->codec_priv.data != NULL)) {
-            fourcc = AV_RL32(track->codec_priv.data);
+            fourcc = AV_RL32(track->codec_priv.data + 4);
+            codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
+            if (ff_codec_get_id(ff_codec_movaudio_tags, AV_RL32(track->codec_priv.data))) {
+                fourcc = AV_RL32(track->codec_priv.data);
+                codec_id = ff_codec_get_id(ff_codec_movaudio_tags, fourcc);
+            }
+        } else if (!strcmp(track->codec_id, "V_QUICKTIME")
+                   && (track->codec_priv.size >= 21)
+                   && (track->codec_priv.data != NULL)) {
+            fourcc = AV_RL32(track->codec_priv.data + 4);
             codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
+            if (ff_codec_get_id(ff_codec_movvideo_tags, AV_RL32(track->codec_priv.data))) {
+                fourcc = AV_RL32(track->codec_priv.data);
+                codec_id = ff_codec_get_id(ff_codec_movvideo_tags, fourcc);
+            }
+            if (codec_id == AV_CODEC_ID_NONE && AV_RL32(track->codec_priv.data+4) == AV_RL32("SMI "))
+                codec_id = AV_CODEC_ID_SVQ3;
         } else if (codec_id == AV_CODEC_ID_PCM_S16BE) {
             switch (track->audio.bitdepth) {
             case  8:  codec_id = AV_CODEC_ID_PCM_U8;     break;
@@ -1907,6 +1924,7 @@ static int matroska_read_header(AVFormatContext *s)
             st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
             st->codec->sample_rate = track->audio.out_samplerate;
             st->codec->channels = track->audio.channels;
+            if (!st->codec->bits_per_coded_sample)
             st->codec->bits_per_coded_sample = track->audio.bitdepth;
             if (st->codec->codec_id != AV_CODEC_ID_AAC)
             st->need_parsing = AVSTREAM_PARSE_HEADERS;
@@ -2179,7 +2197,7 @@ static int matroska_parse_rm_audio(MatroskaDemuxContext *matroska,
             }
             memcpy(track->audio.buf + y*w, data, w);
         } else {
-            if (size < sps * w / sps || h<=0) {
+            if (size < sps * w / sps || h<=0 || w%sps) {
                 av_log(matroska->ctx, AV_LOG_ERROR,
                        "Corrupt generic RM-style audio packet size\n");
                 return AVERROR_INVALIDDATA;

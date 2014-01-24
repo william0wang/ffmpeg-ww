@@ -662,6 +662,7 @@ static const StreamType REGD_types[] = {
 
 static const StreamType METADATA_types[] = {
     { MKTAG('K','L','V','A'), AVMEDIA_TYPE_DATA, AV_CODEC_ID_SMPTE_KLV },
+    { MKTAG('I','D','3',' '), AVMEDIA_TYPE_DATA, AV_CODEC_ID_TIMED_ID3 },
     { 0 },
 };
 
@@ -1256,6 +1257,11 @@ static int parse_MP4SLDescrTag(MP4DescrParseContext *d, int64_t off, int len)
         descr->sl.timestamp_res      = avio_rb32(&d->pb);
                                        avio_rb32(&d->pb);
         descr->sl.timestamp_len      = avio_r8(&d->pb);
+        if (descr->sl.timestamp_len > 64) {
+            avpriv_request_sample(NULL, "timestamp_len > 64");
+            descr->sl.timestamp_len = 64;
+            return AVERROR_PATCHWELCOME;
+        }
         descr->sl.ocr_len            = avio_r8(&d->pb);
         descr->sl.au_len             = avio_r8(&d->pb);
         descr->sl.inst_bitrate_len   = avio_r8(&d->pb);

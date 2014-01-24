@@ -270,6 +270,8 @@ static int rm_read_audio_stream_info(AVFormatContext *s, AVIOContext *pb,
             if (ast->sub_packet_size <= 0 ||
                 ast->sub_packet_size > ast->audio_framesize)
                 return AVERROR_INVALIDDATA;
+            if (ast->audio_framesize % ast->sub_packet_size)
+                return AVERROR_INVALIDDATA;
             break;
         case DEINT_ID_SIPR:
         case DEINT_ID_INT0:
@@ -787,6 +789,16 @@ rm_ac3_swap_bytes (AVStream *st, AVPacket *pkt)
     }
 }
 
+static int readfull(AVFormatContext *s, AVIOContext *pb, uint8_t *dst, int n) {
+    int ret = avio_read(pb, dst, n);
+    if (ret != n) {
+        if (ret >= 0) memset(dst + ret, 0, n - ret);
+        else          memset(dst      , 0, n);
+        av_log(s, AV_LOG_ERROR, "Failed to fully read block\n");
+    }
+    return ret;
+}
+
 int
 ff_rm_parse_packet (AVFormatContext *s, AVIOContext *pb,
                     AVStream *st, RMStream *ast, int len, AVPacket *pkt,
@@ -819,14 +831,14 @@ ff_rm_parse_packet (AVFormatContext *s, AVIOContext *pb,
             switch (ast->deint_id) {
                 case DEINT_ID_INT4:
                     for (x = 0; x < h/2; x++)
-                        avio_read(pb, ast->pkt.data+x*2*w+y*cfs, cfs);
+                        readfull(s, pb, ast->pkt.data+x*2*w+y*cfs, cfs);
                     break;
                 case DEINT_ID_GENR:
                     for (x = 0; x < w/sps; x++)
-                        avio_read(pb, ast->pkt.data+sps*(h*x+((h+1)/2)*(y&1)+(y>>1)), sps);
+                        readfull(s, pb, ast->pkt.data+sps*(h*x+((h+1)/2)*(y&1)+(y>>1)), sps);
                     break;
                 case DEINT_ID_SIPR:
-                    avio_read(pb, ast->pkt.data + y * w, w);
+                    readfull(s, pb, ast->pkt.data + y * w, w);
                     break;
             }
 

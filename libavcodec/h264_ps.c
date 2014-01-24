@@ -252,7 +252,9 @@ static inline int decode_vui_parameters(H264Context *h, SPS *sps)
         if (sps->num_reorder_frames > 16U
             /* max_dec_frame_buffering || max_dec_frame_buffering > 16 */) {
             av_log(h->avctx, AV_LOG_ERROR,
-                   "illegal num_reorder_frames %d\n", sps->num_reorder_frames);
+                   "Clipping illegal num_reorder_frames %d\n",
+                   sps->num_reorder_frames);
+            sps->num_reorder_frames = 16;
             return AVERROR_INVALIDDATA;
         }
     }
@@ -376,7 +378,12 @@ int ff_h264_decode_seq_parameter_set(H264Context *h)
         }
         sps->bit_depth_luma   = get_ue_golomb(&h->gb) + 8;
         sps->bit_depth_chroma = get_ue_golomb(&h->gb) + 8;
-        if (sps->bit_depth_luma > 14U || sps->bit_depth_chroma > 14U || sps->bit_depth_luma != sps->bit_depth_chroma) {
+        if (sps->bit_depth_chroma != sps->bit_depth_luma) {
+            avpriv_request_sample(h->avctx,
+                                  "Different chroma and luma bit depth");
+            goto fail;
+        }
+        if (sps->bit_depth_luma > 14U || sps->bit_depth_chroma > 14U) {
             av_log(h->avctx, AV_LOG_ERROR, "illegal bit depth value (%d, %d)\n",
                    sps->bit_depth_luma, sps->bit_depth_chroma);
             goto fail;

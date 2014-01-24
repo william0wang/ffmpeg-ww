@@ -1144,32 +1144,111 @@ transient response is a higher bitrate.
 
 @end table
 
+@anchor{libwavpack}
 @section libwavpack
 
 A wrapper providing WavPack encoding through libwavpack.
 
 Only lossless mode using 32-bit integer samples is supported currently.
-The @option{compression_level} option can be used to control speed vs.
-compression tradeoff, with the values mapped to libwavpack as follows:
+
+Requires the presence of the libwavpack headers and library during
+configuration. You need to explicitly configure the build with
+@code{--enable-libwavpack}.
+
+Note that a libavcodec-native encoder for the WavPack codec exists so users can
+encode audios with this codec without using this encoder. See @ref{wavpackenc}.
+
+@subsection Options
+
+@command{wavpack} command line utility's corresponding options are listed in
+parentheses, if any.
 
 @table @option
+@item frame_size (@emph{--blocksize})
+Default is 32768.
 
-@item 0
-Fast mode - corresponding to the wavpack @option{-f} option.
+@item compression_level
+Set speed vs. compression tradeoff. Acceptable arguments are listed below:
+
+@table @samp
+@item 0 (@emph{-f})
+Fast mode.
 
 @item 1
 Normal (default) settings.
 
-@item 2
-High quality - corresponding to the wavpack @option{-h} option.
+@item 2 (@emph{-h})
+High quality.
 
-@item 3
-Very high quality - corresponding to the wavpack @option{-hh} option.
+@item 3 (@emph{-hh})
+Very high quality.
 
-@item 4-8
-Same as 3, but with extra processing enabled - corresponding to the wavpack
-@option{-x} option. I.e. 4 is the same as @option{-x2} and 8 is the same as
-@option{-x6}.
+@item 4-8 (@emph{-hh -x}@var{EXTRAPROC})
+Same as @samp{3}, but with extra processing enabled.
+
+@samp{4} is the same as @option{-x2} and @samp{8} is the same as @option{-x6}.
+
+@end table
+@end table
+
+@anchor{wavpackenc}
+@section wavpack
+
+WavPack lossless audio encoder.
+
+This is a libavcodec-native WavPack encoder. There is also an encoder based on
+libwavpack, but there is virtually no reason to use that encoder.
+
+See also @ref{libwavpack}.
+
+@subsection Options
+
+The equivalent options for @command{wavpack} command line utility are listed in
+parentheses.
+
+@subsubsection Shared options
+
+The following shared options are effective for this encoder. Only special notes
+about this particular encoder will be documented here. For the general meaning
+of the options, see @ref{codec-options,,the Codec Options chapter}.
+
+@table @option
+@item frame_size (@emph{--blocksize})
+For this encoder, the range for this option is between 128 and 131072. Default
+is automatically decided based on sample rate and number of channel.
+
+For the complete formula of calculating default, see
+@file{libavcodec/wavpackenc.c}.
+
+@item compression_level (@emph{-f}, @emph{-h}, @emph{-hh}, and @emph{-x})
+This option's syntax is consistent with @ref{libwavpack}'s.
+@end table
+
+@subsubsection Private options
+
+@table @option
+@item joint_stereo (@emph{-j})
+Set whether to enable joint stereo. Valid values are:
+
+@table @samp
+@item on (@emph{1})
+Force mid/side audio encoding.
+@item off (@emph{0})
+Force left/right audio encoding.
+@item auto
+Let the encoder decide automatically.
+@end table
+
+@item optimize_mono
+Set whether to enable optimization for mono. This option is only effective for
+non-mono streams. Available values:
+
+@table @samp
+@item on
+enabled
+@item off
+disabled
+@end table
 
 @end table
 
@@ -1427,7 +1506,7 @@ Text-like
 
 @end table
 
-@section libx264
+@section libx264, libx264rgb
 
 x264 H.264/MPEG-4 AVC encoder wrapper.
 
@@ -1448,6 +1527,16 @@ by the libx264 @code{x264_param_parse} function.
 
 The x264 project website is at
 @url{http://www.videolan.org/developers/x264.html}.
+
+The libx264rgb encoder is the same as libx264, except it accepts packed RGB
+pixel formats as input instead of YUV.
+
+@subsection Supported Pixel Formats
+
+x264 supports 8- to 10-bit color spaces. The exact bit depth is controlled at
+x264's configure time. FFmpeg only supports one bit depth in one particular
+build. In other words, it is not possible to build one FFmpeg with multiple
+versions of x264 with different bit depths.
 
 @subsection Options
 

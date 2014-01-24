@@ -15,6 +15,12 @@ version <next>
 - aeval filter
 - stereoscopic 3d metadata handling
 - WebP encoding via libwebp
+- ATRAC3+ decoder
+- VP8 in Ogg demuxing
+- side & metadata support in NUT
+- framepack filter
+- XYZ12 rawvideo support in NUT
+- Exif metadata support in WebP decoder
 
 
 version 2.1:

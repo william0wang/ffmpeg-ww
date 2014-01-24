@@ -401,10 +401,10 @@ static void avisynth_next_stream(AVFormatContext *s, AVStream **st,
 {
     AviSynthContext *avs = s->priv_data;
 
-    pkt->stream_index = avs->curr_stream++;
+    avs->curr_stream++;
     avs->curr_stream %= s->nb_streams;
 
-    *st = s->streams[pkt->stream_index];
+    *st = s->streams[avs->curr_stream];
     if ((*st)->discard == AVDISCARD_ALL)
         *discard = 1;
     else
@@ -432,10 +432,6 @@ static int avisynth_read_packet_video(AVFormatContext *s, AVPacket *pkt,
     if (discard)
         return 0;
 
-    pkt->pts      = n;
-    pkt->dts      = n;
-    pkt->duration = 1;
-
 #ifdef USING_AVISYNTH
     /* Define the bpp values for the new AviSynth 2.6 colorspaces.
      * Since AvxSynth doesn't have these functions, special-case
@@ -459,17 +455,21 @@ static int avisynth_read_packet_video(AVFormatContext *s, AVPacket *pkt,
                   (int64_t)avs->vi->height) * bits) / 8;
     if (!pkt->size)
         return AVERROR_UNKNOWN;
-    if (av_new_packet(pkt, (int)pkt->size) < 0) {
-        av_free(pkt);
+
+    if (av_new_packet(pkt, pkt->size) < 0)
         return AVERROR(ENOMEM);
-    }
+
+    pkt->pts      = n;
+    pkt->dts      = n;
+    pkt->duration = 1;
+    pkt->stream_index = avs->curr_stream;
 
     frame = avs_library.avs_get_frame(avs->clip, n);
     error = avs_library.avs_clip_get_error(avs->clip);
     if (error) {
         av_log(s, AV_LOG_ERROR, "%s\n", error);
         avs->error = 1;
-        av_freep(&pkt->data);
+        av_packet_unref(pkt);
         return AVERROR_UNKNOWN;
     }
 
@@ -550,24 +550,25 @@ static int avisynth_read_packet_audio(AVFormatContext *s, AVPacket *pkt,
     if (discard)
         return 0;
 
-    pkt->pts      = n;
-    pkt->dts      = n;
-    pkt->duration = samples;
-
     pkt->size = avs_bytes_per_channel_sample(avs->vi) *
                 samples * avs->vi->nchannels;
     if (!pkt->size)
         return AVERROR_UNKNOWN;
-    pkt->data = av_malloc(pkt->size);
-    if (!pkt->data)
+
+    if (av_new_packet(pkt, pkt->size) < 0)
         return AVERROR(ENOMEM);
+
+    pkt->pts      = n;
+    pkt->dts      = n;
+    pkt->duration = samples;
+    pkt->stream_index = avs->curr_stream;
 
     avs_library.avs_get_audio(avs->clip, pkt->data, n, samples);
     error = avs_library.avs_clip_get_error(avs->clip);
     if (error) {
         av_log(s, AV_LOG_ERROR, "%s\n", error);
         avs->error = 1;
-        av_freep(&pkt->data);
+        av_packet_unref(pkt);
         return AVERROR_UNKNOWN;
     }
     return 0;
@@ -599,8 +600,6 @@ static int avisynth_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     if (avs->error)
         return AVERROR_UNKNOWN;
-
-    av_free_packet(pkt);
 
     /* If either stream reaches EOF, try to read the other one before
      * giving up. */

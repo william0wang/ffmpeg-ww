@@ -293,6 +293,7 @@ int ff_vc1_decode_sequence_header(AVCodecContext *avctx, VC1Context *v, GetBitCo
         v->zz_4x8 = ff_vc1_adv_progressive_4x8_zz;
         return decode_sequence_header_adv(v, gb);
     } else {
+        v->chromaformat = 1;
         v->zz_8x4 = ff_wmv2_scantableA;
         v->zz_4x8 = ff_wmv2_scantableB;
         v->res_y411   = get_bits1(gb);
@@ -603,7 +604,7 @@ static void rotate_luts(VC1Context *v)
         }                                                     \
     } while(0)
 
-    ROTATE(int *tmp,            &v->last_use_ic, &v->next_use_ic, v->curr_use_ic, &v->aux_use_ic);
+    ROTATE(int tmp,             &v->last_use_ic, &v->next_use_ic, v->curr_use_ic, &v->aux_use_ic);
     ROTATE(uint8_t tmp[2][256], v->last_luty,   v->next_luty,   v->curr_luty,   v->aux_luty);
     ROTATE(uint8_t tmp[2][256], v->last_lutuv,  v->next_lutuv,  v->curr_lutuv,  v->aux_lutuv);
 
@@ -836,7 +837,7 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
     int mbmodetab, imvtab, icbptab, twomvbptab, fourmvbptab; /* useful only for debugging */
     int field_mode, fcm;
 
-    v->numref=0;
+    v->numref          = 0;
     v->p_frame_skipped = 0;
     if (v->second_field) {
         if(v->fcm!=2 || v->field_mode!=1)
@@ -1015,8 +1016,6 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
                 v->reffield          = get_bits1(gb);
                 v->ref_field_type[0] = v->reffield ^ !v->cur_field_type;
             }
-        } else {
-            v->numref = 0;
         }
         if (v->extended_mv)
             v->mvrange = get_unary(gb, 0, 3);

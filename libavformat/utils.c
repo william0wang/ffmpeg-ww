@@ -342,8 +342,8 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
                           const char *filename, void *logctx,
                           unsigned int offset, unsigned int max_probe_size)
 {
-    AVProbeData pd = { filename ? filename : "", NULL, -offset };
-    unsigned char *buf = NULL;
+    AVProbeData pd = { filename ? filename : "" };
+    uint8_t *buf = NULL;
     uint8_t *mime_type;
     int ret = 0, probe_size, buf_offset = 0;
     int score = 0;
@@ -371,10 +371,6 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
 
     for(probe_size= PROBE_BUF_MIN; probe_size<=max_probe_size && !*fmt;
         probe_size = FFMIN(probe_size<<1, FFMAX(max_probe_size, probe_size+1))) {
-
-        if (probe_size < offset) {
-            continue;
-        }
         score = probe_size < max_probe_size ? AVPROBE_SCORE_RETRY : 0;
 
         /* read probe data */
@@ -389,7 +385,10 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
             score = 0;
             ret = 0;            /* error was end of file, nothing read */
         }
-        pd.buf_size = buf_offset += ret;
+        buf_offset += ret;
+        if (buf_offset < offset)
+            continue;
+        pd.buf_size = buf_offset - offset;
         pd.buf = &buf[offset];
 
         memset(pd.buf + pd.buf_size, 0, AVPROBE_PADDING_SIZE);
@@ -415,7 +414,7 @@ int av_probe_input_buffer2(AVIOContext *pb, AVInputFormat **fmt,
     }
 
     /* rewind. reuse probe buffer to avoid seeking */
-    ret = ffio_rewind_with_probe_data(pb, &buf, pd.buf_size);
+    ret = ffio_rewind_with_probe_data(pb, &buf, buf_offset);
 
     return ret < 0 ? ret : score;
 }
@@ -938,8 +937,8 @@ static AVPacketList *get_next_pkt(AVFormatContext *s, AVStream *st, AVPacketList
 {
     if (pktl->next)
         return pktl->next;
-    if (pktl == s->parse_queue_end)
-        return s->packet_buffer;
+    if (pktl == s->packet_buffer_end)
+        return s->parse_queue;
     return NULL;
 }
 
@@ -947,7 +946,7 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
                                       int64_t dts, int64_t pts, AVPacket *pkt)
 {
     AVStream *st= s->streams[stream_index];
-    AVPacketList *pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
+    AVPacketList *pktl= s->packet_buffer ? s->packet_buffer : s->parse_queue;
     int64_t pts_buffer[MAX_REORDER_DELAY+1];
     int64_t shift;
     int i, delay;
@@ -994,10 +993,13 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
 static void update_initial_durations(AVFormatContext *s, AVStream *st,
                                      int stream_index, int duration)
 {
-    AVPacketList *pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
+    AVPacketList *pktl= s->packet_buffer ? s->packet_buffer : s->parse_queue;
     int64_t cur_dts= RELATIVE_TS_BASE;
 
     if(st->first_dts != AV_NOPTS_VALUE){
+        if (st->update_initial_durations_done)
+            return;
+        st->update_initial_durations_done = 1;
         cur_dts= st->first_dts;
         for(; pktl; pktl= get_next_pkt(s, st, pktl)){
             if(pktl->pkt.stream_index == stream_index){
@@ -1015,7 +1017,7 @@ static void update_initial_durations(AVFormatContext *s, AVStream *st,
             av_log(s, AV_LOG_DEBUG, "first_dts %s but no packet with dts in the queue\n", av_ts2str(st->first_dts));
             return;
         }
-        pktl= s->parse_queue ? s->parse_queue : s->packet_buffer;
+        pktl= s->packet_buffer ? s->packet_buffer : s->parse_queue;
         st->first_dts = cur_dts;
     }else if(st->cur_dts != RELATIVE_TS_BASE)
         return;
@@ -1043,6 +1045,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
 {
     int num, den, presentation_delayed, delay, i;
     int64_t offset;
+    AVRational duration;
 
     if (s->flags & AVFMT_FLAG_NOFILLIN)
         return;
@@ -1084,12 +1087,15 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
             pkt->dts= AV_NOPTS_VALUE;
     }
 
+    duration = av_mul_q((AVRational){pkt->duration, 1}, st->time_base);
     if (pkt->duration == 0) {
         ff_compute_frame_duration(&num, &den, st, pc, pkt);
         if (den && num) {
+            duration = (AVRational){num, den};
             pkt->duration = av_rescale_rnd(1, num * (int64_t)st->time_base.den, den * (int64_t)st->time_base.num, AV_ROUND_DOWN);
         }
     }
+
     if(pkt->duration != 0 && (s->packet_buffer || s->parse_queue))
         update_initial_durations(s, st, pkt->stream_index, pkt->duration);
 
@@ -1135,7 +1141,6 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         } else if (pkt->pts != AV_NOPTS_VALUE ||
                    pkt->dts != AV_NOPTS_VALUE ||
                    pkt->duration                ) {
-            int duration = pkt->duration;
 
             /* presentation is not delayed : PTS and DTS are the same */
             if (pkt->pts == AV_NOPTS_VALUE)
@@ -1146,7 +1151,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
                 pkt->pts = st->cur_dts;
             pkt->dts = pkt->pts;
             if (pkt->pts != AV_NOPTS_VALUE)
-                st->cur_dts = pkt->pts + duration;
+                st->cur_dts = av_add_stable(st->time_base, pkt->pts, duration, 1);
         }
     }
 
@@ -3200,7 +3205,7 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
  find_stream_info_err:
     for (i=0; i < ic->nb_streams; i++) {
         st = ic->streams[i];
-        if (ic->streams[i]->codec && ic->streams[i]->codec->codec_type != AVMEDIA_TYPE_AUDIO)
+        if (ic->streams[i]->codec->codec_type != AVMEDIA_TYPE_AUDIO)
             ic->streams[i]->codec->thread_count = 0;
         if (st->info)
             av_freep(&st->info->duration_error);
@@ -3257,6 +3262,8 @@ int av_find_best_stream(AVFormatContext *ic,
         if (wanted_stream_nb >= 0 && real_stream_index != wanted_stream_nb)
             continue;
         if (st->disposition & (AV_DISPOSITION_HEARING_IMPAIRED|AV_DISPOSITION_VISUAL_IMPAIRED))
+            continue;
+        if (type == AVMEDIA_TYPE_AUDIO && !avctx->channels)
             continue;
         if (decoder_ret) {
             decoder = find_decoder(ic, st, st->codec->codec_id);

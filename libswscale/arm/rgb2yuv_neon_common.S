@@ -170,7 +170,7 @@ endfunc
 .endm
 
 .macro store_y8_16x1            dst, count
-.if \count == 0
+.ifc "\count",""
     vstmia      \dst!,  {y8x16}
 .else
     vstmia      \dst,   {y8x16}
@@ -179,7 +179,7 @@ endfunc
 .endm
 
 .macro store_chroma_nv12_8x1    dst, count
-.if \count == 0
+.ifc "\count",""
     vst2.i8     {u8x8, v8x8},   [\dst]!
 .else
     vst2.i8     {u8x8, v8x8},   [\dst], \count
@@ -187,7 +187,7 @@ endfunc
 .endm
 
 .macro store_chroma_nv21_8x1    dst, count
-.if \count == 0
+.ifc "\count",""
     vst2.i8     {v8x8, u8x8},   [\dst]!
 .else
     vst2.i8     {v8x8, u8x8},   [\dst], \count
@@ -195,7 +195,7 @@ endfunc
 .endm
 
 .macro load_8888_16x1   a, b, c, d, src, count
-.if \count == 0
+.ifc "\count",""
     vld4.8      {\a\()8x16_l, \b\()8x16_l, \c\()8x16_l, \d\()8x16_l},  [\src]!
     vld4.8      {\a\()8x16_h, \b\()8x16_h, \c\()8x16_h, \d\()8x16_h},  [\src]!
 .else
@@ -214,20 +214,20 @@ endfunc
     load_8888_16x1  b, g, r, x, \src, \count
 .endm
 
-.macro alias_src_rgbx   set
+.macro alias_src_rgbx   set=1
     alias_src_8888  r, g, b, x, \set
 .endm
 
-.macro alias_src_bgrx   set
+.macro alias_src_bgrx   set=1
     alias_src_8888  b, g, r, x, \set
 .endm
 
-.macro alias_dst_nv12   set
+.macro alias_dst_nv12   set=1
     alias   u8x8, c8x8x2_l, \set
     alias   v8x8, c8x8x2_h, \set
 .endm
 
-.macro alias_dst_nv21   set
+.macro alias_dst_nv21   set=1
     alias   v8x8, c8x8x2_l, \set
     alias   u8x8, c8x8x2_h, \set
 .endm
@@ -265,7 +265,7 @@ alias   BIAS_Y, q2
     alias_qw  \d\()8x16, q6, \set
 .endm
 
-.macro kernel_420_16x2  rgb_fmt, yuv_fmt, rgb0, rgb1, y0, y1, chroma, count=0
+.macro kernel_420_16x2  rgb_fmt, yuv_fmt, rgb0, rgb1, y0, y1, chroma, count
     alias_src_\rgb_fmt
     alias_dst_\yuv_fmt
 

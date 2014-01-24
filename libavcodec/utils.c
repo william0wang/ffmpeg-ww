@@ -222,10 +222,12 @@ av_cold void avcodec_register(AVCodec *codec)
         codec->init_static_data(codec);
 }
 
+#if FF_API_EMU_EDGE
 unsigned avcodec_get_edge_width(void)
 {
     return EDGE_WIDTH;
 }
+#endif
 
 #if FF_API_SET_DIMENSIONS
 void avcodec_set_dimensions(AVCodecContext *s, int width, int height)
@@ -250,6 +252,26 @@ int ff_set_dimensions(AVCodecContext *s, int width, int height)
     s->height       = FF_CEIL_RSHIFT(height, s->lowres);
 
     return ret;
+}
+
+int ff_side_data_update_matrix_encoding(AVFrame *frame,
+                                        enum AVMatrixEncoding matrix_encoding)
+{
+    AVFrameSideData *side_data;
+    enum AVMatrixEncoding *data;
+
+    side_data = av_frame_get_side_data(frame, AV_FRAME_DATA_MATRIXENCODING);
+    if (!side_data)
+        side_data = av_frame_new_side_data(frame, AV_FRAME_DATA_MATRIXENCODING,
+                                           sizeof(enum AVMatrixEncoding));
+
+    if (!side_data)
+        return AVERROR(ENOMEM);
+
+    data  = (enum AVMatrixEncoding*)side_data->data;
+    *data = matrix_encoding;
+
+    return 0;
 }
 
 #if HAVE_NEON || ARCH_PPC || HAVE_MMX
@@ -294,6 +316,12 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case AV_PIX_FMT_YUV420P14BE:
     case AV_PIX_FMT_YUV420P16LE:
     case AV_PIX_FMT_YUV420P16BE:
+    case AV_PIX_FMT_YUVA420P9LE:
+    case AV_PIX_FMT_YUVA420P9BE:
+    case AV_PIX_FMT_YUVA420P10LE:
+    case AV_PIX_FMT_YUVA420P10BE:
+    case AV_PIX_FMT_YUVA420P16LE:
+    case AV_PIX_FMT_YUVA420P16BE:
     case AV_PIX_FMT_YUV422P9LE:
     case AV_PIX_FMT_YUV422P9BE:
     case AV_PIX_FMT_YUV422P10LE:
@@ -304,6 +332,12 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case AV_PIX_FMT_YUV422P14BE:
     case AV_PIX_FMT_YUV422P16LE:
     case AV_PIX_FMT_YUV422P16BE:
+    case AV_PIX_FMT_YUVA422P9LE:
+    case AV_PIX_FMT_YUVA422P9BE:
+    case AV_PIX_FMT_YUVA422P10LE:
+    case AV_PIX_FMT_YUVA422P10BE:
+    case AV_PIX_FMT_YUVA422P16LE:
+    case AV_PIX_FMT_YUVA422P16BE:
     case AV_PIX_FMT_YUV444P9LE:
     case AV_PIX_FMT_YUV444P9BE:
     case AV_PIX_FMT_YUV444P10LE:
@@ -314,18 +348,6 @@ void avcodec_align_dimensions2(AVCodecContext *s, int *width, int *height,
     case AV_PIX_FMT_YUV444P14BE:
     case AV_PIX_FMT_YUV444P16LE:
     case AV_PIX_FMT_YUV444P16BE:
-    case AV_PIX_FMT_YUVA420P9LE:
-    case AV_PIX_FMT_YUVA420P9BE:
-    case AV_PIX_FMT_YUVA420P10LE:
-    case AV_PIX_FMT_YUVA420P10BE:
-    case AV_PIX_FMT_YUVA420P16LE:
-    case AV_PIX_FMT_YUVA420P16BE:
-    case AV_PIX_FMT_YUVA422P9LE:
-    case AV_PIX_FMT_YUVA422P9BE:
-    case AV_PIX_FMT_YUVA422P10LE:
-    case AV_PIX_FMT_YUVA422P10BE:
-    case AV_PIX_FMT_YUVA422P16LE:
-    case AV_PIX_FMT_YUVA422P16BE:
     case AV_PIX_FMT_YUVA444P9LE:
     case AV_PIX_FMT_YUVA444P9BE:
     case AV_PIX_FMT_YUVA444P10LE:
@@ -744,8 +766,6 @@ int ff_init_buffer_info(AVCodecContext *avctx, AVFrame *frame)
 
     switch (avctx->codec->type) {
     case AVMEDIA_TYPE_VIDEO:
-        frame->width  = FFMAX(avctx->width,  FF_CEIL_RSHIFT(avctx->coded_width,  avctx->lowres));
-        frame->height = FFMAX(avctx->height, FF_CEIL_RSHIFT(avctx->coded_height, avctx->lowres));
         if (frame->format < 0)
             frame->format              = avctx->pix_fmt;
         if (!frame->sample_aspect_ratio.num)
@@ -814,12 +834,20 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
 static int get_buffer_internal(AVCodecContext *avctx, AVFrame *frame, int flags)
 {
+    int override_dimensions = 1;
     int ret;
 
     if (avctx->codec_type == AVMEDIA_TYPE_VIDEO) {
         if ((ret = av_image_check_size(avctx->width, avctx->height, 0, avctx)) < 0 || avctx->pix_fmt<0) {
             av_log(avctx, AV_LOG_ERROR, "video_get_buffer: image parameters invalid\n");
             return AVERROR(EINVAL);
+        }
+    }
+    if (avctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+        if (frame->width <= 0 || frame->height <= 0) {
+            frame->width  = FFMAX(avctx->width,  FF_CEIL_RSHIFT(avctx->coded_width,  avctx->lowres));
+            frame->height = FFMAX(avctx->height, FF_CEIL_RSHIFT(avctx->coded_height, avctx->lowres));
+            override_dimensions = 0;
         }
     }
     if ((ret = ff_init_buffer_info(avctx, frame)) < 0)
@@ -944,7 +972,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
     ret = avctx->get_buffer2(avctx, frame, flags);
 
-    if (avctx->codec_type == AVMEDIA_TYPE_VIDEO) {
+    if (avctx->codec_type == AVMEDIA_TYPE_VIDEO && !override_dimensions) {
         frame->width  = avctx->width;
         frame->height = avctx->height;
     }
@@ -1478,8 +1506,8 @@ free_and_end:
     av_dict_free(&tmp);
     av_freep(&avctx->priv_data);
     if (avctx->internal) {
-        av_freep(&avctx->internal->pool);
         av_frame_free(&avctx->internal->to_free);
+        av_freep(&avctx->internal->pool);
     }
     av_freep(&avctx->internal);
     avctx->codec = NULL;
@@ -1721,6 +1749,8 @@ int attribute_align_arg avcodec_encode_audio(AVCodecContext *avctx,
 
     if (samples) {
         frame = av_frame_alloc();
+        if (!frame)
+            return AVERROR(ENOMEM);
 
         if (avctx->frame_size) {
             frame->nb_samples = avctx->frame_size;
@@ -2158,6 +2188,8 @@ int attribute_align_arg avcodec_decode_audio3(AVCodecContext *avctx, int16_t *sa
     AVFrame *frame = av_frame_alloc();
     int ret, got_frame = 0;
 
+    if (!frame)
+        return AVERROR(ENOMEM);
     if (avctx->get_buffer != avcodec_default_get_buffer) {
         av_log(avctx, AV_LOG_ERROR, "Custom get_buffer() for use with"
                                     "avcodec_decode_audio3() detected. Overriding with avcodec_default_get_buffer\n");
