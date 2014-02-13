@@ -36,6 +36,7 @@ DOCS-$(CONFIG_MANPAGES)  += $(MANPAGES)
 DOCS-$(CONFIG_TXTPAGES)  += $(TXTPAGES)
 DOCS = $(DOCS-yes)
 
+DOC_EXAMPLES-$(CONFIG_AVIO_READING_EXAMPLE)      += avio_reading
 DOC_EXAMPLES-$(CONFIG_DECODING_ENCODING_EXAMPLE) += decoding_encoding
 DOC_EXAMPLES-$(CONFIG_DEMUXING_DECODING_EXAMPLE) += demuxing_decoding
 DOC_EXAMPLES-$(CONFIG_FILTERING_AUDIO_EXAMPLE)   += filtering_audio
@@ -103,7 +104,7 @@ doc/%.3: doc/%.pod $(GENTEXI)
 	$(M)pod2man --section=3 --center=" " --release=" " $< > $@
 
 $(DOCS) doc/doxy/html: | doc/
-$(DOC_EXAMPLES:%=%.o): | doc/examples
+$(DOC_EXAMPLES:%$(EXESUF)=%.o): | doc/examples
 OBJDIRS += doc/examples
 
 doc/doxy/html: $(SRC_PATH)/doc/Doxyfile $(INSTHEADERS)

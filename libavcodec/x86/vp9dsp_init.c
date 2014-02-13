@@ -166,13 +166,14 @@ itxfm_func(iadst, idct,  size, opt); \
 itxfm_func(idct,  iadst, size, opt); \
 itxfm_func(iadst, iadst, size, opt)
 
-itxfm_func(idct, idct,  4, ssse3);
-itxfm_func(idct, idct,  8, ssse3);
-itxfm_func(idct, idct,  8, avx);
+itxfm_funcs(4, ssse3);
+itxfm_funcs(8, ssse3);
+itxfm_funcs(8, avx);
 itxfm_funcs(16, ssse3);
 itxfm_funcs(16, avx);
 itxfm_func(idct, idct, 32, ssse3);
 itxfm_func(idct, idct, 32, avx);
+itxfm_func(iwht, iwht, 4, mmx);
 
 #undef itxfm_func
 #undef itxfm_funcs
@@ -186,6 +187,18 @@ void ff_vp9_loop_filter_h_##size1##_##size2##_##opt(uint8_t *dst, ptrdiff_t stri
 lpf_funcs(16, 16, sse2);
 lpf_funcs(16, 16, ssse3);
 lpf_funcs(16, 16, avx);
+lpf_funcs(44, 16, sse2);
+lpf_funcs(44, 16, ssse3);
+lpf_funcs(44, 16, avx);
+lpf_funcs(84, 16, sse2);
+lpf_funcs(84, 16, ssse3);
+lpf_funcs(84, 16, avx);
+lpf_funcs(48, 16, sse2);
+lpf_funcs(48, 16, ssse3);
+lpf_funcs(48, 16, avx);
+lpf_funcs(88, 16, sse2);
+lpf_funcs(88, 16, ssse3);
+lpf_funcs(88, 16, avx);
 
 #undef lpf_funcs
 
@@ -220,9 +233,28 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
     init_subpel2(idx, 0, 1, v, type, opt); \
     init_subpel2(idx, 1, 0, h, type, opt)
 
+#define init_lpf(opt) do { \
+    if (ARCH_X86_64) { \
+        dsp->loop_filter_16[0] = ff_vp9_loop_filter_h_16_16_##opt; \
+        dsp->loop_filter_16[1] = ff_vp9_loop_filter_v_16_16_##opt; \
+        dsp->loop_filter_mix2[0][0][0] = ff_vp9_loop_filter_h_44_16_##opt; \
+        dsp->loop_filter_mix2[0][0][1] = ff_vp9_loop_filter_v_44_16_##opt; \
+        dsp->loop_filter_mix2[0][1][0] = ff_vp9_loop_filter_h_48_16_##opt; \
+        dsp->loop_filter_mix2[0][1][1] = ff_vp9_loop_filter_v_48_16_##opt; \
+        dsp->loop_filter_mix2[1][0][0] = ff_vp9_loop_filter_h_84_16_##opt; \
+        dsp->loop_filter_mix2[1][0][1] = ff_vp9_loop_filter_v_84_16_##opt; \
+        dsp->loop_filter_mix2[1][1][0] = ff_vp9_loop_filter_h_88_16_##opt; \
+        dsp->loop_filter_mix2[1][1][1] = ff_vp9_loop_filter_v_88_16_##opt; \
+    } \
+} while (0)
+
     if (EXTERNAL_MMX(cpu_flags)) {
         init_fpel(4, 0,  4, put, mmx);
         init_fpel(3, 0,  8, put, mmx);
+        dsp->itxfm_add[4 /* lossless */][DCT_DCT] =
+        dsp->itxfm_add[4 /* lossless */][ADST_DCT] =
+        dsp->itxfm_add[4 /* lossless */][DCT_ADST] =
+        dsp->itxfm_add[4 /* lossless */][ADST_ADST] = ff_vp9_iwht_iwht_4x4_add_mmx;
     }
 
     if (EXTERNAL_MMXEXT(cpu_flags)) {
@@ -240,18 +272,21 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
         init_fpel(2, 1, 16, avg, sse2);
         init_fpel(1, 1, 32, avg, sse2);
         init_fpel(0, 1, 64, avg, sse2);
-        if (ARCH_X86_64) {
-            dsp->loop_filter_16[0] = ff_vp9_loop_filter_h_16_16_sse2;
-            dsp->loop_filter_16[1] = ff_vp9_loop_filter_v_16_16_sse2;
-        }
+        init_lpf(sse2);
     }
 
     if (EXTERNAL_SSSE3(cpu_flags)) {
         init_subpel3(0, put, ssse3);
         init_subpel3(1, avg, ssse3);
         dsp->itxfm_add[TX_4X4][DCT_DCT] = ff_vp9_idct_idct_4x4_add_ssse3;
+        dsp->itxfm_add[TX_4X4][ADST_DCT]  = ff_vp9_idct_iadst_4x4_add_ssse3;
+        dsp->itxfm_add[TX_4X4][DCT_ADST]  = ff_vp9_iadst_idct_4x4_add_ssse3;
+        dsp->itxfm_add[TX_4X4][ADST_ADST] = ff_vp9_iadst_iadst_4x4_add_ssse3;
         if (ARCH_X86_64) {
             dsp->itxfm_add[TX_8X8][DCT_DCT] = ff_vp9_idct_idct_8x8_add_ssse3;
+            dsp->itxfm_add[TX_8X8][ADST_DCT]  = ff_vp9_idct_iadst_8x8_add_ssse3;
+            dsp->itxfm_add[TX_8X8][DCT_ADST]  = ff_vp9_iadst_idct_8x8_add_ssse3;
+            dsp->itxfm_add[TX_8X8][ADST_ADST] = ff_vp9_iadst_iadst_8x8_add_ssse3;
             dsp->itxfm_add[TX_16X16][DCT_DCT]   = ff_vp9_idct_idct_16x16_add_ssse3;
             dsp->itxfm_add[TX_16X16][ADST_DCT]  = ff_vp9_idct_iadst_16x16_add_ssse3;
             dsp->itxfm_add[TX_16X16][DCT_ADST]  = ff_vp9_iadst_idct_16x16_add_ssse3;
@@ -260,14 +295,16 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
             dsp->itxfm_add[TX_32X32][ADST_DCT] =
             dsp->itxfm_add[TX_32X32][DCT_ADST] =
             dsp->itxfm_add[TX_32X32][DCT_DCT] = ff_vp9_idct_idct_32x32_add_ssse3;
-            dsp->loop_filter_16[0] = ff_vp9_loop_filter_h_16_16_ssse3;
-            dsp->loop_filter_16[1] = ff_vp9_loop_filter_v_16_16_ssse3;
         }
+        init_lpf(ssse3);
     }
 
     if (EXTERNAL_AVX(cpu_flags)) {
         if (ARCH_X86_64) {
             dsp->itxfm_add[TX_8X8][DCT_DCT] = ff_vp9_idct_idct_8x8_add_avx;
+            dsp->itxfm_add[TX_8X8][ADST_DCT]  = ff_vp9_idct_iadst_8x8_add_avx;
+            dsp->itxfm_add[TX_8X8][DCT_ADST]  = ff_vp9_iadst_idct_8x8_add_avx;
+            dsp->itxfm_add[TX_8X8][ADST_ADST] = ff_vp9_iadst_iadst_8x8_add_avx;
             dsp->itxfm_add[TX_16X16][DCT_DCT] = ff_vp9_idct_idct_16x16_add_avx;
             dsp->itxfm_add[TX_16X16][ADST_DCT]  = ff_vp9_idct_iadst_16x16_add_avx;
             dsp->itxfm_add[TX_16X16][DCT_ADST]  = ff_vp9_iadst_idct_16x16_add_avx;
@@ -276,9 +313,8 @@ av_cold void ff_vp9dsp_init_x86(VP9DSPContext *dsp)
             dsp->itxfm_add[TX_32X32][ADST_DCT] =
             dsp->itxfm_add[TX_32X32][DCT_ADST] =
             dsp->itxfm_add[TX_32X32][DCT_DCT] = ff_vp9_idct_idct_32x32_add_avx;
-            dsp->loop_filter_16[0] = ff_vp9_loop_filter_h_16_16_avx;
-            dsp->loop_filter_16[1] = ff_vp9_loop_filter_v_16_16_avx;
         }
+        init_lpf(avx);
     }
 
 #undef init_fpel

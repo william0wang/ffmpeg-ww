@@ -34,6 +34,7 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/opt.h"
+#include "libavutil/timer.h"
 #include "avcodec.h"
 #include "dct.h"
 #include "dsputil.h"
@@ -1602,7 +1603,7 @@ static int frame_start(MpegEncContext *s)
 }
 
 int ff_MPV_encode_picture(AVCodecContext *avctx, AVPacket *pkt,
-                          AVFrame *pic_arg, int *got_packet)
+                          const AVFrame *pic_arg, int *got_packet)
 {
     MpegEncContext *s = avctx->priv_data;
     int i, stuffing_count, ret;

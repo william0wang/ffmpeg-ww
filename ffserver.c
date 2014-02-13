@@ -506,8 +506,8 @@ static void start_children(FFStream *feed)
                 char *slash;
                 int i;
 
-                /* replace "ffserver" with "ffmpeg" in the path of current program,
-                 * ignore user provided path */
+                /* replace "ffserver" with "ffmpeg" in the path of current
+                 * program. Ignore user provided path */
                 av_strlcpy(pathname, my_program_name, sizeof(pathname));
                 slash = strrchr(pathname, '/');
                 if (!slash)
@@ -628,17 +628,16 @@ static void start_multicast(void)
                 }
             }
 
-            /* change state to send data */
             rtp_c->state = HTTPSTATE_SEND_DATA;
         }
     }
 }
 
-/* main loop of the http server */
+/* main loop of the HTTP server */
 static int http_server(void)
 {
     int server_fd = 0, rtsp_server_fd = 0;
-    int ret, delay, delay1;
+    int ret, delay;
     struct pollfd *poll_table, *poll_entry;
     HTTPContext *c, *c_next;
 
@@ -702,18 +701,19 @@ static int http_server(void)
             case HTTPSTATE_SEND_DATA:
             case HTTPSTATE_SEND_DATA_TRAILER:
                 if (!c->is_packetized) {
-                    /* for TCP, we output as much as we can (may need to put a limit) */
+                    /* for TCP, we output as much as we can
+                     * (may need to put a limit) */
                     c->poll_entry = poll_entry;
                     poll_entry->fd = fd;
                     poll_entry->events = POLLOUT;
                     poll_entry++;
                 } else {
                     /* when ffserver is doing the timing, we work by
-                       looking at which packet need to be sent every
+                       looking at which packet needs to be sent every
                        10 ms */
-                    delay1 = 10; /* one tick wait XXX: 10 ms assumed */
-                    if (delay1 < delay)
-                        delay = delay1;
+                    /* one tick wait XXX: 10 ms assumed */
+                    if (delay > 10)
+                        delay = 10;
                 }
                 break;
             case HTTPSTATE_WAIT_REQUEST:
@@ -753,8 +753,8 @@ static int http_server(void)
         for(c = first_http_ctx; c != NULL; c = c_next) {
             c_next = c->next;
             if (handle_connection(c) < 0) {
-                /* close and free the connection */
                 log_connection(c);
+                /* close and free the connection */
                 close_connection(c);
             }
         }
@@ -1017,7 +1017,8 @@ static int handle_connection(HTTPContext *c)
                 /* if error, exit */
                 if (c->http_error)
                     return -1;
-                /* all the buffer was sent : synchronize to the incoming stream */
+                /* all the buffer was sent : synchronize to the incoming
+                 * stream */
                 c->state = HTTPSTATE_SEND_DATA_HEADER;
                 c->buffer_ptr = c->buffer_end = c->buffer;
             }
@@ -1028,7 +1029,7 @@ static int handle_connection(HTTPContext *c)
     case HTTPSTATE_SEND_DATA_HEADER:
     case HTTPSTATE_SEND_DATA_TRAILER:
         /* for packetized output, we consider we can always write (the
-           input streams sets the speed). It may be better to verify
+           input streams set the speed). It may be better to verify
            that we do not rely too much on the kernel queues */
         if (!c->is_packetized) {
             if (c->poll_entry->revents & (POLLERR | POLLHUP))
@@ -1458,7 +1459,7 @@ static int validate_acl(FFStream *stream, HTTPContext *c)
 }
 
 /* compute the real filename of a file by matching it without its
-   extensions to all the stream filenames */
+   extensions to all the stream's filenames */
 static void compute_real_filename(char *filename, int max_size)
 {
     char file1[1024];
@@ -1492,7 +1493,7 @@ enum RedirType {
     REDIR_SDP,
 };
 
-/* parse http request and prepare header */
+/* parse HTTP request and prepare header */
 static int http_parse_request(HTTPContext *c)
 {
     const char *p;
@@ -1863,7 +1864,7 @@ static int http_parse_request(HTTPContext *c)
         goto send_error;
     }
 
-    /* prepare http header */
+    /* prepare HTTP header */
     c->buffer[0] = 0;
     av_strlcatf(c->buffer, c->buffer_size, "HTTP/1.0 200 OK\r\n");
     mime_type = c->stream->fmt->mime_type;
@@ -2275,7 +2276,9 @@ static int http_prepare_data(HTTPContext *c)
     av_freep(&c->pb_buffer);
     switch(c->state) {
     case HTTPSTATE_SEND_DATA_HEADER:
-        memset(&c->fmt_ctx, 0, sizeof(c->fmt_ctx));
+        ctx = avformat_alloc_context();
+        c->fmt_ctx = *ctx;
+        av_freep(&ctx);
         av_dict_copy(&(c->fmt_ctx.metadata), c->stream->metadata, 0);
         c->fmt_ctx.streams = av_mallocz(sizeof(AVStream *) * c->stream->nb_streams);
 
@@ -3507,7 +3510,8 @@ static int rtp_new_av_stream(HTTPContext *c,
              ipaddr, ntohs(dest_addr->sin_port),
              c->stream->filename, stream_index, c->protocol);
 
-    /* normally, no packets should be output here, but the packet size may be checked */
+    /* normally, no packets should be output here, but the packet size may
+     * be checked */
     if (ffio_open_dyn_packet_buf(&ctx->pb, max_packet_size) < 0) {
         /* XXX: close stream */
         goto fail;
@@ -3818,7 +3822,7 @@ static void build_feed_streams(void)
             }
         }
         if (avio_check(feed->feed_filename, AVIO_FLAG_WRITE) <= 0) {
-            AVFormatContext s1 = {0}, *s = &s1;
+            AVFormatContext *s = avformat_alloc_context();
 
             if (feed->readonly) {
                 http_log("Unable to create feed file '%s' as it is marked readonly\n",
@@ -3842,6 +3846,9 @@ static void build_feed_streams(void)
             /* XXX: need better api */
             av_freep(&s->priv_data);
             avio_close(s->pb);
+            s->streams = NULL;
+            s->nb_streams = 0;
+            avformat_free_context(s);
         }
         /* get feed size and write index */
         fd = open(feed->feed_filename, O_RDONLY);

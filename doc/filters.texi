@@ -217,29 +217,45 @@ Follows a BNF description for the filtergraph syntax:
 
 @section Notes on filtergraph escaping
 
-Some filter arguments require the use of special characters, typically
-@code{:} to separate key=value pairs in a named options list. In this
-case the user should perform a first level escaping when specifying
-the filter arguments. For example, consider the following literal
-string to be embedded in the @ref{drawtext} filter arguments:
+Filtergraph description composition entails several levels of
+escaping. See @ref{quoting_and_escaping,,the "Quoting and escaping"
+section in the ffmpeg-utils(1) manual,ffmpeg-utils} for more
+information about the employed escaping procedure.
+
+A first level escaping affects the content of each filter option
+value, which may contain the special character @code{:} used to
+separate values, or one of the escaping characters @code{\'}.
+
+A second level escaping affects the whole filter description, which
+may contain the escaping characters @code{\'} or the special
+characters @code{[],;} used by the filtergraph description.
+
+Finally, when you specify a filtergraph on a shell commandline, you
+need to perform a third level escaping for the shell special
+characters contained within it.
+
+For example, consider the following string to be embedded in
+the @ref{drawtext} filter description @option{text} value:
 @example
 this is a 'string': may contain one, or more, special characters
 @end example
 
-Since @code{:} is special for the filter arguments syntax, it needs to
-be escaped, so you get:
+This string contains the @code{'} special escaping character, and the
+@code{:} special character, so it needs to be escaped in this way:
 @example
 text=this is a \'string\'\: may contain one, or more, special characters
 @end example
 
 A second level of escaping is required when embedding the filter
-arguments in a filtergraph description, in order to escape all the
+description in a filtergraph description, in order to escape all the
 filtergraph special characters. Thus the example above becomes:
 @example
 drawtext=text=this is a \\\'string\\\'\\: may contain one\, or more\, special characters
 @end example
+(note that in addition to the @code{\'} escaping special characters,
+also @code{,} needs to be escaped).
 
-Finally an additional level of escaping may be needed when writing the
+Finally an additional level of escaping is needed when writing the
 filtergraph description in a shell command, which depends on the
 escaping rules of the adopted shell. For example, assuming that
 @code{\} is special and needs to be escaped with another @code{\}, the
@@ -247,26 +263,6 @@ previous string will finally result in:
 @example
 -vf "drawtext=text=this is a \\\\\\'string\\\\\\'\\\\: may contain one\\, or more\\, special characters"
 @end example
-
-Sometimes, it might be more convenient to employ quoting in place of
-escaping. For example the string:
-@example
-Caesar: tu quoque, Brute, fili mi
-@end example
-
-Can be quoted in the filter arguments as:
-@example
-text='Caesar: tu quoque, Brute, fili mi'
-@end example
-
-And finally inserted in a filtergraph like:
-@example
-drawtext=text=\'Caesar: tu quoque\, Brute\, fili mi\'
-@end example
-
-See the ``Quoting and escaping'' section in the ffmpeg-utils manual
-for more information about the escaping and quoting rules adopted by
-FFmpeg.
 
 @chapter Timeline editing
 
@@ -3548,6 +3544,16 @@ option, check the "Color" section in the ffmpeg-utils manual.
 
 The default value of @var{boxcolor} is "white".
 
+@item borderw
+Set the width of the border to be drawn around the text using @var{bordercolor}.
+The default value of @var{borderw} is 0.
+
+@item bordercolor
+Set the color to be used for drawing border around text. For the syntax of this
+option, check the "Color" section in the ffmpeg-utils manual.
+
+The default value of @var{bordercolor} is "black".
+
 @item expansion
 Select how the @var{text} is expanded. Can be either @code{none},
 @code{strftime} (deprecated) or
@@ -3594,7 +3600,7 @@ a combination of the following values:
 @item no_autohint
 @end table
 
-Default value is "render".
+Default value is "default".
 
 For more information consult the documentation for the FT_LOAD_*
 libfreetype flags.
@@ -5903,6 +5909,19 @@ on the main video. Default value is "0" for both expressions. In case
 the expression is invalid, it is set to a huge value (meaning that the
 overlay will not be displayed within the output visible area).
 
+@item eof_action
+The action to take when EOF is encountered on the secondary input, accepts one
+of the following values:
+
+@table @option
+@item repeat
+repeat the last frame (the default)
+@item endall
+end both streams
+@item pass
+pass through the main input
+@end table
+
 @item eval
 Set when the expressions for @option{x}, and @option{y} are evaluated.
 
@@ -5929,6 +5948,9 @@ It accepts the following values:
 @table @samp
 @item yuv420
 force YUV420 output
+
+@item yuv422
+force YUV422 output
 
 @item yuv444
 force YUV444 output
@@ -5981,6 +6003,7 @@ the position in the file of the input frame, NAN if unknown
 
 @item t
 timestamp expressed in seconds, NAN if the input timestamp is unknown
+
 @end table
 
 Note that the @var{n}, @var{pos}, @var{t} variables are available only
@@ -6074,6 +6097,14 @@ nullsrc=size=200x100 [background];
 [background][left]       overlay=shortest=1       [background+left];
 [background+left][right] overlay=shortest=1:x=100 [left+right]
 "
+@end example
+
+@item
+mask 10-20 seconds of a video by applying the delogo filter to a section
+@example
+ffmpeg -i test.avi -codec:v:0 wmv2 -ar 11025 -b:v 9000k
+-vf '[in]split[split_main][split_delogo];[split_delogo]trim=start=360:end=371,delogo=0:0:640:480[delogoed];[split_main][delogoed]overlay=eof_action=pass[out]'
+masked.avi
 @end example
 
 @item
@@ -6755,11 +6786,11 @@ pixel format "yuv422p" @var{hsub} is 2 and @var{vsub} is 1.
 
 @item in_w, iw
 @item in_h, ih
-the input video width and heigth
+the input video width and height
 
 @item out_w, ow
 @item out_h, oh
-the output width and heigth, that is the size of the padded area as
+the output width and height, that is the size of the padded area as
 specified by the @var{width} and @var{height} expressions
 
 @item rotw(a)
@@ -6900,6 +6931,11 @@ If one of the values is -1, the scale filter will use a value that
 maintains the aspect ratio of the input image, calculated from the
 other specified dimension. If both of them are -1, the input size is
 used
+
+If one of the values is -n with n > 1, the scale filter will also use a value
+that maintains the aspect ratio of the input image, calculated from the other
+specified dimension. After that it will, however, make sure that the calculated
+dimension is divisible by n and adjust the value if necessary.
 
 See below for the list of accepted constants for use in the dimension
 expression.
@@ -9308,6 +9344,29 @@ verbose logging level
 
 By default, the logging level is set to @var{info}. If the @option{video} or
 the @option{metadata} options are set, it switches to @var{verbose}.
+
+@item peak
+Set peak mode(s).
+
+Available modes can be cumulated (the option is a @code{flag} type). Possible
+values are:
+@table @samp
+@item none
+Disable any peak mode (default).
+@item sample
+Enable sample-peak mode.
+
+Simple peak mode looking for the higher sample value. It logs a message
+for sample-peak (identified by @code{SPK}).
+@item true
+Enable true-peak mode.
+
+If enabled, the peak lookup is done on an over-sampled version of the input
+stream for better peak accuracy. It logs a message for true-peak.
+(identified by @code{TPK}) and true-peak per frame (identified by @code{FTPK}).
+This mode requires a build with @code{libswresample}.
+@end table
+
 @end table
 
 @subsection Examples

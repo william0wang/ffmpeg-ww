@@ -356,6 +356,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_G2M,          MKTAG('G', '2', 'M', '2') },
     { AV_CODEC_ID_G2M,          MKTAG('G', '2', 'M', '3') },
     { AV_CODEC_ID_G2M,          MKTAG('G', '2', 'M', '4') },
+    { AV_CODEC_ID_FIC,          MKTAG('F', 'I', 'C', 'V') },
     { AV_CODEC_ID_NONE,         0 }
 };
 
@@ -413,6 +414,8 @@ const AVCodecTag ff_codec_wav_tags[] = {
     { AV_CODEC_ID_AAC,             0x1600 },
     { AV_CODEC_ID_AAC_LATM,        0x1602 },
     { AV_CODEC_ID_AC3,             0x2000 },
+    /* There is no Microsoft Format Tag for E-AC3, the GUID has to be used */
+    { AV_CODEC_ID_EAC3,            0x2000 },
     { AV_CODEC_ID_DTS,             0x2001 },
     { AV_CODEC_ID_SONIC,           0x2048 },
     { AV_CODEC_ID_SONIC_LS,        0x2048 },
@@ -456,3 +459,11 @@ const struct AVCodecTag *avformat_get_riff_audio_tags(void)
 {
     return ff_codec_wav_tags;
 }
+
+const AVCodecGuid ff_codec_wav_guids[] = {
+    { AV_CODEC_ID_AC3,      { 0x2C, 0x80, 0x6D, 0xE0, 0x46, 0xDB, 0xCF, 0x11, 0xB4, 0xD1, 0x00, 0x80, 0x5F, 0x6C, 0xBB, 0xEA } },
+    { AV_CODEC_ID_ATRAC3P,  { 0xBF, 0xAA, 0x23, 0xE9, 0x58, 0xCB, 0x71, 0x44, 0xA1, 0x19, 0xFF, 0xFA, 0x01, 0xE4, 0xCE, 0x62 } },
+    { AV_CODEC_ID_EAC3,     { 0xAF, 0x87, 0xFB, 0xA7, 0x02, 0x2D, 0xFB, 0x42, 0xA4, 0xD4, 0x05, 0xCD, 0x93, 0x84, 0x3B, 0xDD } },
+    { AV_CODEC_ID_MP2,      { 0x2B, 0x80, 0x6D, 0xE0, 0x46, 0xDB, 0xCF, 0x11, 0xB4, 0xD1, 0x00, 0x80, 0x5F, 0x6C, 0xBB, 0xEA } },
+    { AV_CODEC_ID_NONE }
+};

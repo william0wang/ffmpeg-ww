@@ -21,6 +21,12 @@ version <next>
 - framepack filter
 - XYZ12 rawvideo support in NUT
 - Exif metadata support in WebP decoder
+- OpenGL device
+- Use metadata_header_padding to control padding in ID3 tags (currently used in
+  MP3, AIFF, and OMA files), FLAC header, and the AVI "junk" block.
+- Mirillis FIC video decoder
+- Support DNx444
+- libx265 encoder
 
 
 version 2.1:
