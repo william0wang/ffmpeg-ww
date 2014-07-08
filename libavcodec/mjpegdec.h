@@ -34,9 +34,10 @@
 #include "libavutil/stereo3d.h"
 
 #include "avcodec.h"
+#include "blockdsp.h"
 #include "get_bits.h"
-#include "dsputil.h"
 #include "hpeldsp.h"
+#include "idctdsp.h"
 
 #define MAX_COMPONENTS 4
 
@@ -69,6 +70,7 @@ typedef struct MJpegDecodeContext {
     int bits;           /* bits per component */
     int colr;
     int xfrm;
+    int adobe_transform;
 
     int maxval;
     int near;         ///< near lossless bound (si 0 for lossless)
@@ -101,9 +103,11 @@ typedef struct MJpegDecodeContext {
     int16_t (*blocks[MAX_COMPONENTS])[64]; ///< intermediate sums (progressive mode)
     uint8_t *last_nnz[MAX_COMPONENTS];
     uint64_t coefs_finished[MAX_COMPONENTS]; ///< bitmask of which coefs have been completely decoded (progressive mode)
+    int palette_index;
     ScanTable scantable;
-    DSPContext dsp;
+    BlockDSPContext bdsp;
     HpelDSPContext hdsp;
+    IDCTDSPContext idsp;
 
     int restart_interval;
     int restart_count;

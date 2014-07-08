@@ -20,33 +20,6 @@
 
 #include "libavutil/arm/asm.S"
 
-function ff_add_pixels_clamped_armv6, export=1
-        push            {r4-r8,lr}
-        mov             r3,  #8
-1:
-        ldm             r0!, {r4,r5,r12,lr}
-        ldrd            r6,  r7,  [r1]
-        pkhbt           r8,  r4,  r5,  lsl #16
-        pkhtb           r5,  r5,  r4,  asr #16
-        pkhbt           r4,  r12, lr,  lsl #16
-        pkhtb           lr,  lr,  r12, asr #16
-        pld             [r1, r2]
-        uxtab16         r8,  r8,  r6
-        uxtab16         r5,  r5,  r6,  ror #8
-        uxtab16         r4,  r4,  r7
-        uxtab16         lr,  lr,  r7,  ror #8
-        usat16          r8,  #8,  r8
-        usat16          r5,  #8,  r5
-        usat16          r4,  #8,  r4
-        usat16          lr,  #8,  lr
-        orr             r6,  r8,  r5,  lsl #8
-        orr             r7,  r4,  lr,  lsl #8
-        subs            r3,  r3,  #1
-        strd_post       r6,  r7,  r1,  r2
-        bgt             1b
-        pop             {r4-r8,pc}
-endfunc
-
 function ff_get_pixels_armv6, export=1
         pld             [r1, r2]
         push            {r4-r8, lr}
@@ -323,59 +296,4 @@ function ff_sse16_armv6, export=1
         bgt             1b
 
         pop             {r4-r9, pc}
-endfunc
-
-function ff_pix_norm1_armv6, export=1
-        push            {r4-r6, lr}
-        mov             r12, #16
-        mov             lr,  #0
-1:
-        ldm             r0,  {r2-r5}
-        uxtb16          r6,  r2
-        uxtb16          r2,  r2,  ror #8
-        smlad           lr,  r6,  r6,  lr
-        uxtb16          r6,  r3
-        smlad           lr,  r2,  r2,  lr
-        uxtb16          r3,  r3,  ror #8
-        smlad           lr,  r6,  r6,  lr
-        uxtb16          r6,  r4
-        smlad           lr,  r3,  r3,  lr
-        uxtb16          r4,  r4,  ror #8
-        smlad           lr,  r6,  r6,  lr
-        uxtb16          r6,  r5
-        smlad           lr,  r4,  r4,  lr
-        uxtb16          r5,  r5,  ror #8
-        smlad           lr,  r6,  r6,  lr
-        subs            r12, r12, #1
-        add             r0,  r0,  r1
-        smlad           lr,  r5,  r5,  lr
-        bgt             1b
-
-        mov             r0,  lr
-        pop             {r4-r6, pc}
-endfunc
-
-function ff_pix_sum_armv6, export=1
-        push            {r4-r7, lr}
-        mov             r12, #16
-        mov             r2,  #0
-        mov             r3,  #0
-        mov             lr,  #0
-        ldr             r4,  [r0]
-1:
-        subs            r12, r12, #1
-        ldr             r5,  [r0, #4]
-        usada8          r2,  r4,  lr,  r2
-        ldr             r6,  [r0, #8]
-        usada8          r3,  r5,  lr,  r3
-        ldr             r7,  [r0, #12]
-        usada8          r2,  r6,  lr,  r2
-        beq             2f
-        ldr_pre         r4,  r0,  r1
-        usada8          r3,  r7,  lr,  r3
-        bgt             1b
-2:
-        usada8          r3,  r7,  lr,  r3
-        add             r0,  r2,  r3
-        pop             {r4-r7, pc}
 endfunc

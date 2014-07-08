@@ -25,7 +25,7 @@
  * libavformat/libavcodec demuxing and muxing API example.
  *
  * Remux streams from one container format to another.
- * @example doc/examples/remuxing.c
+ * @example remuxing.c
  */
 
 #include <libavutil/timestamp.h>
@@ -99,6 +99,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "Failed to copy context from input to output stream codec context\n");
             goto end;
         }
+        out_stream->codec->codec_tag = 0;
         if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
             out_stream->codec->flags |= CODEC_FLAG_GLOBAL_HEADER;
     }

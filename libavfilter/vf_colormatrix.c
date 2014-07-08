@@ -17,7 +17,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
 /**
@@ -37,7 +37,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/avstring.h"
 
-#define NS(n) n < 0 ? (int)(n*65536.0-0.5+DBL_EPSILON) : (int)(n*65536.0+0.5)
+#define NS(n) ((n) < 0 ? (int)((n)*65536.0-0.5+DBL_EPSILON) : (int)((n)*65536.0+0.5))
 #define CB(n) av_clip_uint8(n)
 
 static const double yuv_coeff[4][3][3] = {
@@ -353,6 +353,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *in)
         case AVCOL_SPC_BT470BG   : source = COLOR_MODE_BT601     ; break;
         default :
             av_log(ctx, AV_LOG_ERROR, "Input frame does not specify a supported colorspace, and none has been specified as source either\n");
+            av_frame_free(&out);
             return AVERROR(EINVAL);
         }
         color->mode = source * 4 + color->dest;

@@ -19,6 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <inttypes.h>
+
 #include "libavutil/attributes.h"
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
@@ -266,7 +268,7 @@ static void get_id3_tag(AVFormatContext *s, int len)
 {
     ID3v2ExtraMeta *id3v2_extra_meta = NULL;
 
-    ff_id3v2_read(s, ID3v2_DEFAULT_MAGIC, &id3v2_extra_meta);
+    ff_id3v2_read(s, ID3v2_DEFAULT_MAGIC, &id3v2_extra_meta, len);
     if (id3v2_extra_meta)
         ff_id3v2_parse_apic(s, &id3v2_extra_meta);
     ff_id3v2_free_extra_meta(&id3v2_extra_meta);
@@ -370,7 +372,8 @@ static int asf_read_stream_properties(AVFormatContext *s, int64_t size)
 
     if (!(asf->hdr.flags & 0x01)) { // if we aren't streaming...
         int64_t fsize = avio_size(pb);
-        if (fsize <= 0 || (int64_t)asf->hdr.file_size <= 0 || FFABS(fsize - (int64_t)asf->hdr.file_size) < 10000)
+        if (fsize <= 0 || (int64_t)asf->hdr.file_size <= 0 ||
+            FFABS(fsize - (int64_t)asf->hdr.file_size) / (float)FFMIN(fsize, asf->hdr.file_size) < 0.05)
             st->duration = asf->hdr.play_time /
                        (10000000 / 1000) - start_time;
     }
@@ -498,6 +501,8 @@ static int asf_read_stream_properties(AVFormatContext *s, int64_t size)
             st->codec->extradata_size = 0;
         }
         if (st->codec->codec_id == AV_CODEC_ID_H264)
+            st->need_parsing = AVSTREAM_PARSE_FULL_ONCE;
+        if (st->codec->codec_id == AV_CODEC_ID_MPEG4)
             st->need_parsing = AVSTREAM_PARSE_FULL_ONCE;
     }
     pos2 = avio_tell(pb);
@@ -943,13 +948,13 @@ static int asf_get_packet(AVFormatContext *s, AVIOContext *pb)
     // the following checks prevent overflows and infinite loops
     if (!packet_length || packet_length >= (1U << 29)) {
         av_log(s, AV_LOG_ERROR,
-               "invalid packet_length %d at:%"PRId64"\n",
+               "invalid packet_length %"PRIu32" at:%"PRId64"\n",
                packet_length, avio_tell(pb));
         return AVERROR_INVALIDDATA;
     }
     if (padsize >= packet_length) {
         av_log(s, AV_LOG_ERROR,
-               "invalid padsize %d at:%"PRId64"\n", padsize, avio_tell(pb));
+               "invalid padsize %"PRIu32" at:%"PRId64"\n", padsize, avio_tell(pb));
         return AVERROR_INVALIDDATA;
     }
 
@@ -968,7 +973,7 @@ static int asf_get_packet(AVFormatContext *s, AVIOContext *pb)
     if (rsize > packet_length - padsize) {
         asf->packet_size_left = 0;
         av_log(s, AV_LOG_ERROR,
-               "invalid packet header length %d for pktlen %d-%d at %"PRId64"\n",
+               "invalid packet header length %d for pktlen %"PRIu32"-%"PRIu32" at %"PRId64"\n",
                rsize, packet_length, padsize, avio_tell(pb));
         return AVERROR_INVALIDDATA;
     }

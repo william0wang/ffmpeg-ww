@@ -5,7 +5,7 @@
 ;*
 ;* Authors: Loren Merritt <lorenm@u.washington.edu>
 ;*          Anton Mitrofanov <BugMaster@narod.ru>
-;*          Jason Garrett-Glaser <darkshikari@gmail.com>
+;*          Fiona Glaser <fiona@x264.com>
 ;*          Henrik Gramner <henrik@gramner.com>
 ;*
 ;* Permission to use, copy, modify, and/or distribute this software for any
@@ -1406,21 +1406,6 @@ AVX_INSTR pfmul, 1, 0, 1
 %endrep
 %undef i
 %undef j
-
-%macro FMA_INSTR 3
-    %macro %1 4-7 %1, %2, %3
-        %if cpuflag(xop)
-            v%5 %1, %2, %3, %4
-        %else
-            %6 %1, %2, %3
-            %7 %1, %4
-        %endif
-    %endmacro
-%endmacro
-
-FMA_INSTR  pmacsdd,  pmulld, paddd
-FMA_INSTR  pmacsww,  pmullw, paddw
-FMA_INSTR pmadcswd, pmaddwd, paddd
 
 ; tzcnt is equivalent to "rep bsf" and is backwards-compatible with bsf.
 ; This lets us use tzcnt without bumping the yasm version requirement yet.

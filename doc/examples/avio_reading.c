@@ -26,7 +26,7 @@
  *
  * Make libavformat demuxer access media content through a custom
  * AVIOContext read callback.
- * @example doc/examples/avio_reading.c
+ * @example avio_reading.c
  */
 
 #include <libavcodec/avcodec.h>
@@ -119,8 +119,10 @@ int main(int argc, char *argv[])
 end:
     avformat_close_input(&fmt_ctx);
     /* note: the internal buffer could have changed, and be != avio_ctx_buffer */
-    av_freep(&avio_ctx->buffer);
-    av_freep(&avio_ctx);
+    if (avio_ctx) {
+        av_freep(&avio_ctx->buffer);
+        av_freep(&avio_ctx);
+    }
     av_file_unmap(buffer, buffer_size);
 
     if (ret < 0) {

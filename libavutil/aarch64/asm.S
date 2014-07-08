@@ -23,24 +23,33 @@
 #ifdef __ELF__
 #   define ELF
 #else
-#   define ELF //
+#   define ELF  #
+#endif
+
+#if HAVE_AS_FUNC
+#   define FUNC
+#else
+#   define FUNC #
 #endif
 
 .macro  function name, export=0, align=2
     .macro endfunc
 ELF     .size   \name, . - \name
-        .endfunc
+FUNC    .endfunc
         .purgem endfunc
     .endm
         .text
         .align          \align
     .if \export
         .global EXTERN_ASM\name
+ELF     .type   EXTERN_ASM\name, %function
+FUNC    .func   EXTERN_ASM\name
 EXTERN_ASM\name:
-    .endif
+    .else
 ELF     .type   \name, %function
-        .func   \name
+FUNC    .func   \name
 \name:
+    .endif
 .endm
 
 .macro  const   name, align=2
@@ -54,10 +63,17 @@ ELF     .size   \name, . - \name
 .endm
 
 .macro  movrel rd, val
-#if CONFIG_PIC
-        adrp            \rd, #:pg_hi21:\val
-        add             \rd, \rd, #:lo12:\val
+#if CONFIG_PIC && defined(__APPLE__)
+        adrp            \rd, \val@PAGE
+        add             \rd, \rd, \val@PAGEOFF
+#elif CONFIG_PIC
+        adrp            \rd, \val
+        add             \rd, \rd, :lo12:\val
 #else
         ldr             \rd, =\val
 #endif
 .endm
+
+#define GLUE(a, b) a ## b
+#define JOIN(a, b) GLUE(a, b)
+#define X(s) JOIN(EXTERN_ASM, s)

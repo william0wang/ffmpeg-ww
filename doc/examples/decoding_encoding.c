@@ -24,10 +24,10 @@
  * @file
  * libavcodec API use example.
  *
+ * @example decoding_encoding.c
  * Note that libavcodec only handles codecs (mpeg, mpeg4, etc...),
  * not file formats (avi, vob, mp4, mov, mkv, mxf, flv, mpegts, mpegps, etc...). See library 'libavformat' for the
  * format handling
- * @example doc/examples/decoding_encoding.c
  */
 
 #include <math.h>
@@ -375,7 +375,13 @@ static void video_encode_example(const char *filename, int codec_id)
     c->height = 288;
     /* frames per second */
     c->time_base = (AVRational){1,25};
-    c->gop_size = 10; /* emit one intra frame every ten frames */
+    /* emit one intra frame every ten frames
+     * check frame pict_type before passing frame
+     * to encoder, if frame->pict_type is AV_PICTURE_TYPE_I
+     * then gop_size is ignored and the output of encoder
+     * will always be I frame irrespective to gop_size
+     */
+    c->gop_size = 10;
     c->max_b_frames = 1;
     c->pix_fmt = AV_PIX_FMT_YUV420P;
 
@@ -634,7 +640,7 @@ int main(int argc, char **argv)
                "This program generates a synthetic stream and encodes it to a file\n"
                "named test.h264, test.mp2 or test.mpg depending on output_type.\n"
                "The encoded stream is then decoded and written to a raw data output.\n"
-               "output_type must be choosen between 'h264', 'mp2', 'mpg'.\n",
+               "output_type must be chosen between 'h264', 'mp2', 'mpg'.\n",
                argv[0]);
         return 1;
     }

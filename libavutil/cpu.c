@@ -40,13 +40,33 @@
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
-#if HAVE_SYSCONF
+#if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 
 static int flags, checked;
 
 void av_force_cpu_flags(int arg){
+    if (   (arg & ( AV_CPU_FLAG_3DNOW    |
+                    AV_CPU_FLAG_3DNOWEXT |
+                    AV_CPU_FLAG_SSE      |
+                    AV_CPU_FLAG_SSE2     |
+                    AV_CPU_FLAG_SSE2SLOW |
+                    AV_CPU_FLAG_SSE3     |
+                    AV_CPU_FLAG_SSE3SLOW |
+                    AV_CPU_FLAG_SSSE3    |
+                    AV_CPU_FLAG_SSE4     |
+                    AV_CPU_FLAG_SSE42    |
+                    AV_CPU_FLAG_AVX      |
+                    AV_CPU_FLAG_XOP      |
+                    AV_CPU_FLAG_FMA3     |
+                    AV_CPU_FLAG_FMA4     |
+                    AV_CPU_FLAG_AVX2     ))
+        && !(arg & AV_CPU_FLAG_MMX)) {
+        av_log(NULL, AV_LOG_WARNING, "MMX implied by specified flags\n");
+        arg |= AV_CPU_FLAG_MMX;
+    }
+
     flags   = arg;
     checked = arg != -1;
 }
@@ -91,8 +111,11 @@ int av_parse_cpu_flags(const char *s)
 #define CPUFLAG_SSE42    (AV_CPU_FLAG_SSE42    | CPUFLAG_SSE4)
 #define CPUFLAG_AVX      (AV_CPU_FLAG_AVX      | CPUFLAG_SSE42)
 #define CPUFLAG_XOP      (AV_CPU_FLAG_XOP      | CPUFLAG_AVX)
+#define CPUFLAG_FMA3     (AV_CPU_FLAG_FMA3     | CPUFLAG_AVX)
 #define CPUFLAG_FMA4     (AV_CPU_FLAG_FMA4     | CPUFLAG_AVX)
 #define CPUFLAG_AVX2     (AV_CPU_FLAG_AVX2     | CPUFLAG_AVX)
+#define CPUFLAG_BMI1     (AV_CPU_FLAG_BMI1)
+#define CPUFLAG_BMI2     (AV_CPU_FLAG_BMI2     | CPUFLAG_BMI1)
     static const AVOption cpuflags_opts[] = {
         { "flags"   , NULL, 0, AV_OPT_TYPE_FLAGS, { .i64 = 0 }, INT64_MIN, INT64_MAX, .unit = "flags" },
 #if   ARCH_PPC
@@ -111,8 +134,11 @@ int av_parse_cpu_flags(const char *s)
         { "sse4.2"  , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_SSE42        },    .unit = "flags" },
         { "avx"     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_AVX          },    .unit = "flags" },
         { "xop"     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_XOP          },    .unit = "flags" },
+        { "fma3"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_FMA3         },    .unit = "flags" },
         { "fma4"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_FMA4         },    .unit = "flags" },
         { "avx2"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_AVX2         },    .unit = "flags" },
+        { "bmi1"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_BMI1         },    .unit = "flags" },
+        { "bmi2"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_BMI2         },    .unit = "flags" },
         { "3dnow"   , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_3DNOW        },    .unit = "flags" },
         { "3dnowext", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CPUFLAG_3DNOWEXT     },    .unit = "flags" },
         { "cmov",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_CMOV     },    .unit = "flags" },
@@ -124,6 +150,7 @@ int av_parse_cpu_flags(const char *s)
         { "vfpv3",    NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_VFPV3    },    .unit = "flags" },
         { "neon",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_NEON     },    .unit = "flags" },
 #elif ARCH_AARCH64
+        { "armv8",    NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_ARMV8    },    .unit = "flags" },
         { "neon",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_NEON     },    .unit = "flags" },
         { "vfp",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_VFP      },    .unit = "flags" },
 #endif
@@ -166,8 +193,11 @@ int av_parse_cpu_caps(unsigned *flags, const char *s)
         { "sse4.2"  , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_SSE42    },    .unit = "flags" },
         { "avx"     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_AVX      },    .unit = "flags" },
         { "xop"     , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_XOP      },    .unit = "flags" },
+        { "fma3"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_FMA3     },    .unit = "flags" },
         { "fma4"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_FMA4     },    .unit = "flags" },
         { "avx2"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_AVX2     },    .unit = "flags" },
+        { "bmi1"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_BMI1     },    .unit = "flags" },
+        { "bmi2"    , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_BMI2     },    .unit = "flags" },
         { "3dnow"   , NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_3DNOW    },    .unit = "flags" },
         { "3dnowext", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_3DNOWEXT },    .unit = "flags" },
         { "cmov",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = AV_CPU_FLAG_CMOV     },    .unit = "flags" },
@@ -254,6 +284,7 @@ static const struct {
     const char *name;
 } cpu_flag_tab[] = {
 #if   ARCH_AARCH64
+    { AV_CPU_FLAG_ARMV8,     "armv8"      },
     { AV_CPU_FLAG_NEON,      "neon"       },
     { AV_CPU_FLAG_VFP,       "vfp"        },
 #elif ARCH_ARM
@@ -279,11 +310,14 @@ static const struct {
     { AV_CPU_FLAG_SSE42,     "sse4.2"     },
     { AV_CPU_FLAG_AVX,       "avx"        },
     { AV_CPU_FLAG_XOP,       "xop"        },
+    { AV_CPU_FLAG_FMA3,      "fma3"       },
     { AV_CPU_FLAG_FMA4,      "fma4"       },
     { AV_CPU_FLAG_3DNOW,     "3dnow"      },
     { AV_CPU_FLAG_3DNOWEXT,  "3dnowext"   },
     { AV_CPU_FLAG_CMOV,      "cmov"       },
     { AV_CPU_FLAG_AVX2,      "avx2"       },
+    { AV_CPU_FLAG_BMI1,      "bmi1"       },
+    { AV_CPU_FLAG_BMI2,      "bmi2"       },
 #endif
     { 0 }
 };

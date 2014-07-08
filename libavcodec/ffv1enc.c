@@ -405,7 +405,7 @@ static int encode_plane(FFV1Context *s, uint8_t *src, int w, int h,
     return 0;
 }
 
-static int encode_rgb_frame(FFV1Context *s, uint8_t *src[3], int w, int h, int stride[3])
+static int encode_rgb_frame(FFV1Context *s, uint8_t *src[3], int w, int h, const int stride[3])
 {
     int x, y, p, i;
     const int ring_size = s->avctx->context_model ? 3 : 2;
@@ -549,7 +549,7 @@ static int write_extradata(FFV1Context *f)
 
     f->avctx->extradata_size = 10000 + 4 +
                                     (11 * 11 * 5 * 5 * 5 + 11 * 11 * 11) * 32;
-    f->avctx->extradata = av_malloc(f->avctx->extradata_size);
+    f->avctx->extradata = av_malloc(f->avctx->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!f->avctx->extradata)
         return AVERROR(ENOMEM);
     ff_init_range_encoder(c, f->avctx->extradata, f->avctx->extradata_size);

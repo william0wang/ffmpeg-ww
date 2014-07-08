@@ -30,6 +30,9 @@
 
 #include "config.h"
 
+#if HAVE_WINDOWS_H
+#include <windows.h>
+#endif
 #if HAVE_OPENGL_GL3_H
 #include <OpenGL/gl3.h>
 #elif HAVE_ES2_GL_H
@@ -40,9 +43,6 @@
 #endif
 #if HAVE_GLXGETPROCADDRESS
 #include <GL/glx.h>
-#endif
-#if HAVE_WINDOWS_H
-#include <windows.h>
 #endif
 
 #if HAVE_SDL
@@ -56,6 +56,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavformat/avformat.h"
+#include "libavformat/internal.h"
 #include "libavdevice/avdevice.h"
 #include "opengl_enc_shaders.h"
 
@@ -65,7 +66,7 @@
 
 /* FF_GL_RED_COMPONENT is used for plannar pixel types.
  * Only red component is sampled in shaders.
- * On some platforms GL_RED is not availabe and GL_LUMINANCE have to be used,
+ * On some platforms GL_RED is not available and GL_LUMINANCE have to be used,
  * but since OpenGL 3.0 GL_LUMINANCE is deprecated.
  * GL_RED produces RGBA = value, 0, 0, 1.
  * GL_LUMINANCE produces RGBA = value, value, value, 1.
@@ -82,6 +83,7 @@
 #define FF_GL_UNSIGNED_BYTE_3_3_2 0x8032
 #define FF_GL_UNSIGNED_BYTE_2_3_3_REV 0x8362
 #define FF_GL_UNSIGNED_SHORT_1_5_5_5_REV 0x8366
+#define FF_GL_UNPACK_ROW_LENGTH          0x0CF2
 
 /* MinGW exposes only OpenGL 1.1 API */
 #define FF_GL_ARRAY_BUFFER                0x8892
@@ -176,6 +178,7 @@ typedef struct OpenGLContext {
 #endif
     FFOpenGLFunctions glprocs;
 
+    int inited;                        ///< Set to 1 when write_header was successfully called.
     uint8_t background[4];             ///< Background color
     int no_window;                     ///< 0 for create default window
     char *window_title;                ///< Title of the window
@@ -185,6 +188,7 @@ typedef struct OpenGLContext {
     GLint max_viewport_width;          ///< Maximum viewport size
     GLint max_viewport_height;         ///< Maximum viewport size
     int non_pow_2_textures;            ///< 1 when non power of 2 textures are supported
+    int unpack_subimage;               ///< 1 when GL_EXT_unpack_subimage is available
 
     /* Current OpenGL configuration */
     GLuint program;                    ///< Shader program
@@ -265,11 +269,13 @@ static const struct OpenGLFormatDesc {
     { AV_PIX_FMT_GBRP16,     &FF_OPENGL_FRAGMENT_SHADER_RGB_PLANAR,  FF_GL_RED_COMPONENT, GL_UNSIGNED_SHORT },
     { AV_PIX_FMT_GBRAP,      &FF_OPENGL_FRAGMENT_SHADER_RGBA_PLANAR, FF_GL_RED_COMPONENT, GL_UNSIGNED_BYTE },
     { AV_PIX_FMT_GBRAP16,    &FF_OPENGL_FRAGMENT_SHADER_RGBA_PLANAR, FF_GL_RED_COMPONENT, GL_UNSIGNED_SHORT },
+    { AV_PIX_FMT_GRAY8,      &FF_OPENGL_FRAGMENT_SHADER_GRAY,        FF_GL_RED_COMPONENT, GL_UNSIGNED_BYTE },
+    { AV_PIX_FMT_GRAY16,     &FF_OPENGL_FRAGMENT_SHADER_GRAY,        FF_GL_RED_COMPONENT, GL_UNSIGNED_SHORT },
     { AV_PIX_FMT_NONE,       NULL }
 };
 
 static av_cold int opengl_prepare_vertex(AVFormatContext *s);
-static int opengl_draw(AVFormatContext *h, AVPacket *pkt, int repaint);
+static int opengl_draw(AVFormatContext *h, void *intput, int repaint, int is_pkt);
 static av_cold int opengl_init_context(OpenGLContext *opengl);
 
 static av_cold void opengl_deinit_context(OpenGLContext *opengl)
@@ -304,8 +310,7 @@ static int opengl_resize(AVFormatContext *h, int width, int height)
     OpenGLContext *opengl = h->priv_data;
     opengl->window_width = width;
     opengl->window_height = height;
-    /* max_viewport_width == 0 means write_header was not called yet. */
-    if (opengl->max_viewport_width) {
+    if (opengl->inited) {
         if (opengl->no_window &&
             (ret = avdevice_dev_to_app_control_message(h, AV_DEV_TO_APP_PREPARE_WINDOW_BUFFER, NULL , 0)) < 0) {
             av_log(opengl, AV_LOG_ERROR, "Application failed to prepare window buffer.\n");
@@ -313,7 +318,7 @@ static int opengl_resize(AVFormatContext *h, int width, int height)
         }
         if ((ret = opengl_prepare_vertex(h)) < 0)
             goto end;
-        ret = opengl_draw(h, NULL, 1);
+        ret = opengl_draw(h, NULL, 1, 0);
     }
   end:
     return ret;
@@ -402,7 +407,8 @@ static int av_cold opengl_sdl_create_window(AVFormatContext *h)
         av_log(opengl, AV_LOG_ERROR, "Unable to initialize SDL: %s\n", SDL_GetError());
         return AVERROR_EXTERNAL;
     }
-    if ((ret = opengl_sdl_recreate_window(opengl, opengl->width, opengl->height)) < 0)
+    if ((ret = opengl_sdl_recreate_window(opengl, opengl->window_width,
+                                          opengl->window_height)) < 0)
         return ret;
     av_log(opengl, AV_LOG_INFO, "SDL driver: '%s'.\n", SDL_VideoDriverName(buffer, sizeof(buffer)));
     message.width = opengl->surface->w;
@@ -577,7 +583,7 @@ static void opengl_make_ortho(float matrix[16], float left, float right,
 static av_cold int opengl_read_limits(OpenGLContext *opengl)
 {
     static const struct{
-        const char *extention;
+        const char *extension;
         int major;
         int minor;
     } required_extensions[] = {
@@ -597,12 +603,12 @@ static av_cold int opengl_read_limits(OpenGLContext *opengl)
     av_log(opengl, AV_LOG_DEBUG, "OpenGL version: %s\n", version);
     sscanf(version, "%d.%d", &major, &minor);
 
-    for (i = 0; required_extensions[i].extention; i++) {
+    for (i = 0; required_extensions[i].extension; i++) {
         if (major < required_extensions[i].major &&
             (major == required_extensions[i].major && minor < required_extensions[i].minor) &&
-            !strstr(extensions, required_extensions[i].extention)) {
+            !strstr(extensions, required_extensions[i].extension)) {
             av_log(opengl, AV_LOG_ERROR, "Required extension %s is not supported.\n",
-                   required_extensions[i].extention);
+                   required_extensions[i].extension);
             av_log(opengl, AV_LOG_DEBUG, "Supported extensions are: %s\n", extensions);
             return AVERROR(ENOSYS);
         }
@@ -610,8 +616,14 @@ static av_cold int opengl_read_limits(OpenGLContext *opengl)
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &opengl->max_texture_size);
     glGetIntegerv(GL_MAX_VIEWPORT_DIMS, &opengl->max_viewport_width);
     opengl->non_pow_2_textures = major >= 2 || strstr(extensions, "GL_ARB_texture_non_power_of_two");
+#if defined(GL_ES_VERSION_2_0)
+    opengl->unpack_subimage = !!strstr(extensions, "GL_EXT_unpack_subimage");
+#else
+    opengl->unpack_subimage = 1;
+#endif
 
     av_log(opengl, AV_LOG_DEBUG, "Non Power of 2 textures support: %s\n", opengl->non_pow_2_textures ? "Yes" : "No");
+    av_log(opengl, AV_LOG_DEBUG, "Unpack Subimage extension support: %s\n", opengl->unpack_subimage ? "Yes" : "No");
     av_log(opengl, AV_LOG_DEBUG, "Max texture size: %dx%d\n", opengl->max_texture_size, opengl->max_texture_size);
     av_log(opengl, AV_LOG_DEBUG, "Max viewport size: %dx%d\n",
            opengl->max_viewport_width, opengl->max_viewport_height);
@@ -860,8 +872,8 @@ static av_cold int opengl_prepare_vertex(AVFormatContext *s)
     int tex_w, tex_h;
 
     if (opengl->window_width > opengl->max_viewport_width || opengl->window_height > opengl->max_viewport_height) {
-        opengl->window_width = FFMAX(opengl->window_width, opengl->max_viewport_width);
-        opengl->window_height = FFMAX(opengl->window_height, opengl->max_viewport_height);
+        opengl->window_width = FFMIN(opengl->window_width, opengl->max_viewport_width);
+        opengl->window_height = FFMIN(opengl->window_height, opengl->max_viewport_height);
         av_log(opengl, AV_LOG_WARNING, "Too big viewport requested, limited to %dx%d", opengl->window_width, opengl->window_height);
     }
     glViewport(0, 0, opengl->window_width, opengl->window_height);
@@ -940,7 +952,12 @@ static int opengl_create_window(AVFormatContext *h)
         return AVERROR(ENOSYS);
 #endif
     } else {
-        if ((ret = avdevice_dev_to_app_control_message(h, AV_DEV_TO_APP_CREATE_WINDOW_BUFFER, NULL , 0)) < 0) {
+        AVDeviceRect message;
+        message.x = message.y = 0;
+        message.width = opengl->window_width;
+        message.height = opengl->window_height;
+        if ((ret = avdevice_dev_to_app_control_message(h, AV_DEV_TO_APP_CREATE_WINDOW_BUFFER,
+                                                       &message , sizeof(message))) < 0) {
             av_log(opengl, AV_LOG_ERROR, "Application failed to create window buffer.\n");
             return ret;
         }
@@ -1056,6 +1073,10 @@ static av_cold int opengl_write_header(AVFormatContext *h)
     opengl->width = st->codec->width;
     opengl->height = st->codec->height;
     opengl->pix_fmt = st->codec->pix_fmt;
+    if (!opengl->window_width)
+        opengl->window_width = opengl->width;
+    if (!opengl->window_height)
+        opengl->window_height = opengl->height;
 
     if (!opengl->window_title && !opengl->no_window)
         opengl->window_title = av_strdup(h->filename);
@@ -1099,6 +1120,8 @@ static av_cold int opengl_write_header(AVFormatContext *h)
 
     ret = AVERROR_EXTERNAL;
     OPENGL_ERROR_CHECK(opengl);
+
+    opengl->inited = 1;
     return 0;
 
   fail:
@@ -1135,7 +1158,45 @@ static uint8_t* opengl_get_plane_pointer(OpenGLContext *opengl, AVPacket *pkt, i
     return data;
 }
 
-static int opengl_draw(AVFormatContext *h, AVPacket *pkt, int repaint)
+#define LOAD_TEXTURE_DATA(comp_index, sub)                                                  \
+{                                                                                           \
+    int width = sub ? FF_CEIL_RSHIFT(opengl->width, desc->log2_chroma_w) : opengl->width;   \
+    int height = sub ? FF_CEIL_RSHIFT(opengl->height, desc->log2_chroma_h): opengl->height; \
+    uint8_t *data;                                                                          \
+    int plane = desc->comp[comp_index].plane;                                               \
+                                                                                            \
+    glBindTexture(GL_TEXTURE_2D, opengl->texture_name[comp_index]);                         \
+    if (!is_pkt) {                                                                          \
+        GLint length = ((AVFrame *)input)->linesize[plane];                                 \
+        int bytes_per_pixel = opengl_type_size(opengl->type);                               \
+        if (!(desc->flags & AV_PIX_FMT_FLAG_PLANAR))                                        \
+            bytes_per_pixel *= desc->nb_components;                                         \
+        data = ((AVFrame *)input)->data[plane];                                             \
+        if (!(length % bytes_per_pixel) &&                                                  \
+            (opengl->unpack_subimage || ((length / bytes_per_pixel) == width))) {           \
+            length /= bytes_per_pixel;                                                      \
+            if (length != width)                                                            \
+                glPixelStorei(FF_GL_UNPACK_ROW_LENGTH, length);                             \
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,                          \
+                            opengl->format, opengl->type, data);                            \
+            if (length != width)                                                            \
+                glPixelStorei(FF_GL_UNPACK_ROW_LENGTH, 0);                                  \
+        } else {                                                                            \
+            int h;                                                                          \
+            for (h = 0; h < height; h++) {                                                  \
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, h, width, 1,                           \
+                                opengl->format, opengl->type, data);                        \
+                data += length;                                                             \
+            }                                                                               \
+        }                                                                                   \
+    } else {                                                                                \
+        data = opengl_get_plane_pointer(opengl, input, comp_index, desc);                   \
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,                              \
+                        opengl->format, opengl->type, data);                                \
+    }                                                                                       \
+}
+
+static int opengl_draw(AVFormatContext *h, void *input, int repaint, int is_pkt)
 {
     OpenGLContext *opengl = h->priv_data;
     enum AVPixelFormat pix_fmt = h->streams[0]->codec->pix_fmt;
@@ -1155,23 +1216,14 @@ static int opengl_draw(AVFormatContext *h, AVPacket *pkt, int repaint)
     glClear(GL_COLOR_BUFFER_BIT);
 
     if (!repaint) {
-        glBindTexture(GL_TEXTURE_2D, opengl->texture_name[0]);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, opengl->width, opengl->height, opengl->format, opengl->type,
-                        opengl_get_plane_pointer(opengl, pkt, 0, desc));
+        if (is_pkt)
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        LOAD_TEXTURE_DATA(0, 0)
         if (desc->flags & AV_PIX_FMT_FLAG_PLANAR) {
-            int width_chroma = FF_CEIL_RSHIFT(opengl->width, desc->log2_chroma_w);
-            int height_chroma = FF_CEIL_RSHIFT(opengl->height, desc->log2_chroma_h);
-            glBindTexture(GL_TEXTURE_2D, opengl->texture_name[1]);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_chroma, height_chroma, opengl->format, opengl->type,
-                            opengl_get_plane_pointer(opengl, pkt, 1, desc));
-            glBindTexture(GL_TEXTURE_2D, opengl->texture_name[2]);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_chroma, height_chroma, opengl->format, opengl->type,
-                            opengl_get_plane_pointer(opengl, pkt, 2, desc));
-            if (desc->flags & AV_PIX_FMT_FLAG_ALPHA) {
-                glBindTexture(GL_TEXTURE_2D, opengl->texture_name[3]);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, opengl->width, opengl->height, opengl->format, opengl->type,
-                                opengl_get_plane_pointer(opengl, pkt, 3, desc));
-            }
+            LOAD_TEXTURE_DATA(1, 1)
+            LOAD_TEXTURE_DATA(2, 1)
+            if (desc->flags & AV_PIX_FMT_FLAG_ALPHA)
+                LOAD_TEXTURE_DATA(3, 0)
         }
     }
     ret = AVERROR_EXTERNAL;
@@ -1209,7 +1261,15 @@ static int opengl_draw(AVFormatContext *h, AVPacket *pkt, int repaint)
 
 static int opengl_write_packet(AVFormatContext *h, AVPacket *pkt)
 {
-    return opengl_draw(h, pkt, 0);
+    return opengl_draw(h, pkt, 0, 1);
+}
+
+static int opengl_write_frame(AVFormatContext *h, int stream_index,
+                              AVFrame **frame, unsigned flags)
+{
+    if ((flags & AV_WRITE_UNCODED_FRAME_QUERY))
+        return 0;
+    return opengl_draw(h, *frame, 0, 0);
 }
 
 #define OFFSET(x) offsetof(OpenGLContext, x)
@@ -1218,6 +1278,7 @@ static const AVOption options[] = {
     { "background",   "set background color",   OFFSET(background),   AV_OPT_TYPE_COLOR,  {.str = "black"}, CHAR_MIN, CHAR_MAX, ENC },
     { "no_window",    "disable default window", OFFSET(no_window),    AV_OPT_TYPE_INT,    {.i64 = 0}, INT_MIN, INT_MAX, ENC },
     { "window_title", "set window title",       OFFSET(window_title), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, ENC },
+    { "window_size",  "set window size",        OFFSET(window_width), AV_OPT_TYPE_IMAGE_SIZE, {.str = NULL}, 0, 0, ENC },
     { NULL }
 };
 
@@ -1226,6 +1287,7 @@ static const AVClass opengl_class = {
     .item_name  = av_default_item_name,
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
+    .category   = AV_CLASS_CATEGORY_DEVICE_VIDEO_OUTPUT,
 };
 
 AVOutputFormat ff_opengl_muxer = {
@@ -1236,6 +1298,7 @@ AVOutputFormat ff_opengl_muxer = {
     .video_codec    = AV_CODEC_ID_RAWVIDEO,
     .write_header   = opengl_write_header,
     .write_packet   = opengl_write_packet,
+    .write_uncoded_frame = opengl_write_frame,
     .write_trailer  = opengl_write_trailer,
     .control_message = opengl_control_message,
     .flags          = AVFMT_NOFILE | AVFMT_VARIABLE_FPS | AVFMT_NOTIMESTAMPS,
