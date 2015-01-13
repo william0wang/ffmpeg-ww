@@ -29,6 +29,26 @@ the caller can decide which variant streams to actually receive.
 The total bitrate of the variant that the stream belongs to is
 available in a metadata key named "variant_bitrate".
 
+@section apng
+
+Animated Portable Network Graphics demuxer.
+
+This demuxer is used to demux APNG files.
+All headers, but the PNG signature, up to (but not including) the first
+fcTL chunk are transmitted as extradata.
+Frames are then split as being all the chunks between two fcTL ones, or
+between the last fcTL and IEND chunks.
+
+@table @option
+@item -ignore_loop @var{bool}
+Ignore the loop variable in the file if set.
+@item -max_fps @var{int}
+Maximum framerate in frames per second (0 for no limit).
+@item -default_fps @var{int}
+Default framerate in frames per second when none is specified in the file
+(0 meaning as fast as possible).
+@end table
+
 @section asf
 
 Advanced Systems Format demuxer.
@@ -173,6 +193,40 @@ See @url{http://quvi.sourceforge.net/} for more information.
 
 FFmpeg needs to be built with @code{--enable-libquvi} for this demuxer to be
 enabled.
+
+@section gif
+
+Animated GIF demuxer.
+
+It accepts the following options:
+
+@table @option
+@item min_delay
+Set the minimum valid delay between frames in hundredths of seconds.
+Range is 0 to 6000. Default value is 2.
+
+@item default_delay
+Set the default delay between frames in hundredths of seconds.
+Range is 0 to 6000. Default value is 10.
+
+@item ignore_loop
+GIF files can contain information to loop a certain number of times (or
+infinitely). If @option{ignore_loop} is set to 1, then the loop setting
+from the input will be ignored and looping will not occur. If set to 0,
+then looping will occur and will cycle the number of times according to
+the GIF. Default value is 1.
+@end table
+
+For example, with the overlay filter, place an infinitely looping GIF
+over another video:
+@example
+ffmpeg -i input.mp4 -ignore_loop 0 -i input.gif -filter_complex overlay=shortest=1 out.mkv
+@end example
+
+Note that in the above example the shortest option for overlay filter is
+used to end the output video at the length of the shortest input file,
+which in this case is @file{input.mp4} as the GIF in this example loops
+infinitely.
 
 @section image2
 

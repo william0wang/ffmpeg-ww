@@ -31,7 +31,6 @@
 #include "internal.h"
 #include "put_bits.h"
 #include "bytestream.h"
-#include "dsputil.h"
 #include "fdctdsp.h"
 
 #define DEFAULT_SLICE_MB_WIDTH 8
@@ -552,6 +551,12 @@ static av_cold int prores_encode_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR,
                 "frame width needs to be multiple of 2\n");
         return -1;
+    }
+
+    if (avctx->width > 65534 || avctx->height > 65535) {
+        av_log(avctx, AV_LOG_ERROR,
+                "The maximum dimensions are 65534x65535\n");
+        return AVERROR(EINVAL);
     }
 
     if ((avctx->height & 0xf) || (avctx->width & 0xf)) {

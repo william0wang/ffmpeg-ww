@@ -83,7 +83,7 @@ static int check_checksum(const uint8_t *header, int size)
  * @param[out] header where to copy the ident to
  * @return 0 if an ident was found, < 0 on I/O error
  */
-static int sync(AVFormatContext *s, uint8_t *header)
+static int lxf_sync(AVFormatContext *s, uint8_t *header)
 {
     uint8_t buf[LXF_IDENT_LENGTH];
     int ret;
@@ -92,7 +92,7 @@ static int sync(AVFormatContext *s, uint8_t *header)
         return ret < 0 ? ret : AVERROR_EOF;
 
     while (memcmp(buf, LXF_IDENT, LXF_IDENT_LENGTH)) {
-        if (url_feof(s->pb))
+        if (avio_feof(s->pb))
             return AVERROR_EOF;
 
         memmove(buf, &buf[1], LXF_IDENT_LENGTH-1);
@@ -120,7 +120,7 @@ static int get_packet_header(AVFormatContext *s)
     const uint8_t *p = header + LXF_IDENT_LENGTH;
 
     //find and read the ident
-    if ((ret = sync(s, header)) < 0)
+    if ((ret = lxf_sync(s, header)) < 0)
         return ret;
 
     ret = avio_read(pb, header + LXF_IDENT_LENGTH, 8);

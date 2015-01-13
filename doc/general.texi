@@ -108,6 +108,14 @@ Go to @url{http://www.wavpack.com/} and follow the instructions for
 installing the library. Then pass @code{--enable-libwavpack} to configure to
 enable it.
 
+@section OpenH264
+
+FFmpeg can make use of the OpenH264 library for H.264 encoding.
+
+Go to @url{http://www.openh264.org/} and follow the instructions for
+installing the library. Then pass @code{--enable-libopenh264} to configure to
+enable it.
+
 @section x264
 
 FFmpeg can make use of the x264 library for H.264 encoding.
@@ -130,7 +138,7 @@ Go to @url{http://x265.org/developers.html} and follow the instructions
 for installing the library. Then pass @code{--enable-libx265} to configure
 to enable it.
 
-@float note
+@float NOTE
 x265 is under the GNU Public License Version 2 or later
 (see @url{http://www.gnu.org/licenses/old-licenses/gpl-2.0.html} for
 details), you must upgrade FFmpeg's license to GPL in order to use it.
@@ -143,7 +151,7 @@ by Google as part of the WebRTC project. libilbc is a packaging friendly
 copy of the iLBC codec. FFmpeg can make use of the libilbc library for
 iLBC encoding and decoding.
 
-Go to @url{https://github.com/dekkers/libilbc} and follow the instructions for
+Go to @url{https://github.com/TimothyGu/libilbc} and follow the instructions for
 installing the library. Then pass @code{--enable-libilbc} to configure to
 enable it.
 
@@ -310,6 +318,7 @@ library:
     @tab Used by Linux Media Labs MPEG-4 PCI boards
 @item LOAS                      @tab   @tab X
     @tab contains LATM multiplexed AAC audio
+@item LRC                       @tab X @tab X
 @item LVF                       @tab   @tab X
 @item LXF                       @tab   @tab X
     @tab VR native stream format, used by Leitch/Harris' video servers.
@@ -453,6 +462,7 @@ library:
 @item Sony Wave64 (W64)         @tab X @tab X
 @item SoX native format         @tab X @tab X
 @item SUN AU format             @tab X @tab X
+@item SUP raw PGS subtitles     @tab   @tab X
 @item Text files                @tab   @tab X
 @item THP                       @tab   @tab X
     @tab Used on the Nintendo GameCube.
@@ -651,7 +661,7 @@ following image formats are supported:
 @item H.263 / H.263-1996     @tab  X  @tab  X
 @item H.263+ / H.263-1998 / H.263 version 2  @tab  X  @tab  X
 @item H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10  @tab  E  @tab  X
-    @tab encoding supported through external library libx264
+    @tab encoding supported through external library libx264 and OpenH264
 @item HEVC                   @tab  X  @tab  X
     @tab encoding supported through the external library libx265
 @item HNM version 4          @tab     @tab  X
@@ -1029,6 +1039,7 @@ performance on systems without hardware floating point support).
 @item PJS (Phoenix)    @tab   @tab X @tab   @tab X
 @item RealText         @tab   @tab X @tab   @tab X
 @item SAMI             @tab   @tab X @tab   @tab X
+@item Spruce format (STL) @tab   @tab X @tab   @tab X
 @item SSA/ASS          @tab X @tab X @tab X @tab X
 @item SubRip (SRT)     @tab X @tab X @tab X @tab X
 @item SubViewer v1     @tab   @tab X @tab   @tab X
@@ -1054,6 +1065,7 @@ performance on systems without hardware floating point support).
 @item HLS          @tab X
 @item HTTP         @tab X
 @item HTTPS        @tab X
+@item Icecast      @tab X
 @item MMSH         @tab X
 @item MMST         @tab X
 @item pipe         @tab X
@@ -1064,6 +1076,7 @@ performance on systems without hardware floating point support).
 @item RTMPTE       @tab X
 @item RTMPTS       @tab X
 @item RTP          @tab X
+@item SAMBA        @tab E
 @item SCTP         @tab X
 @item SFTP         @tab E
 @item TCP          @tab X

@@ -214,6 +214,8 @@ static av_cold int join_init(AVFilterContext *ctx)
         snprintf(name, sizeof(name), "input%d", i);
         pad.type           = AVMEDIA_TYPE_AUDIO;
         pad.name           = av_strdup(name);
+        if (!pad.name)
+            return AVERROR(ENOMEM);
         pad.filter_frame   = filter_frame;
 
         pad.needs_fifo = 1;
@@ -248,9 +250,12 @@ static int join_query_formats(AVFilterContext *ctx)
     ff_add_channel_layout(&layouts, s->channel_layout);
     ff_channel_layouts_ref(layouts, &ctx->outputs[0]->in_channel_layouts);
 
-    for (i = 0; i < ctx->nb_inputs; i++)
-        ff_channel_layouts_ref(ff_all_channel_layouts(),
-                               &ctx->inputs[i]->out_channel_layouts);
+    for (i = 0; i < ctx->nb_inputs; i++) {
+        layouts = ff_all_channel_layouts();
+        if (!layouts)
+            return AVERROR(ENOMEM);
+        ff_channel_layouts_ref(layouts, &ctx->inputs[i]->out_channel_layouts);
+    }
 
     ff_set_common_formats    (ctx, ff_planar_sample_fmts());
     ff_set_common_samplerates(ctx, ff_all_samplerates());
@@ -470,8 +475,8 @@ static int join_request_frame(AVFilterLink *outlink)
     frame->nb_samples     = nb_samples;
     frame->channel_layout = outlink->channel_layout;
     av_frame_set_channels(frame, outlink->channels);
-    frame->format         = outlink->format;
     frame->sample_rate    = outlink->sample_rate;
+    frame->format         = outlink->format;
     frame->pts            = s->input_frames[0]->pts;
     frame->linesize[0]    = linesize;
     if (frame->data != frame->extended_data) {

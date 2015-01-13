@@ -524,7 +524,10 @@ static int write_streaminfo(NUTContext *nut, AVIOContext *bc, int stream_id) {
     }
     if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
         uint8_t buf[256];
-        snprintf(buf, sizeof(buf), "%d/%d", st->codec->time_base.den, st->codec->time_base.num);
+        if (st->r_frame_rate.num>0 && st->r_frame_rate.den>0)
+            snprintf(buf, sizeof(buf), "%d/%d", st->r_frame_rate.num, st->r_frame_rate.den);
+        else
+            snprintf(buf, sizeof(buf), "%d/%d", st->codec->time_base.den, st->codec->time_base.num);
         count += add_info(dyn_bc, "r_frame_rate", buf);
     }
     dyn_size = avio_close_dyn_buf(dyn_bc, &dyn_buf);
@@ -1119,6 +1122,7 @@ static int nut_write_packet(AVFormatContext *s, AVPacket *pkt)
         }
     }
     av_assert0(frame_code != -1);
+
     fc           = &nut->frame_code[frame_code];
     flags        = fc->flags;
     needed_flags = get_needed_flags(nut, nus, fc, pkt);

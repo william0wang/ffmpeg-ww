@@ -19,13 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "dshow_capture.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/opt.h"
 #include "libavformat/internal.h"
 #include "libavformat/riff.h"
 #include "avdevice.h"
-#include "dshow_capture.h"
 #include "libavcodec/raw.h"
 
 struct dshow_ctx {
@@ -92,7 +92,7 @@ static enum AVPixelFormat dshow_pixfmt(DWORD biCompression, WORD biBitCount)
                 return AV_PIX_FMT_0RGB32;
         }
     }
-    return avpriv_find_pix_fmt(ff_raw_pix_fmt_tags, biCompression); // all others
+    return avpriv_find_pix_fmt(avpriv_get_raw_pix_fmt_tags(), biCompression); // all others
 }
 
 static int
@@ -146,9 +146,9 @@ dshow_read_close(AVFormatContext *s)
         IBaseFilter_Release(ctx->device_filter[AudioDevice]);
 
     if (ctx->device_name[0])
-        av_free(ctx->device_name[0]);
+        av_freep(&ctx->device_name[0]);
     if (ctx->device_name[1])
-        av_free(ctx->device_name[1]);
+        av_freep(&ctx->device_name[1]);
 
     if(ctx->mutex)
         CloseHandle(ctx->mutex);
@@ -294,8 +294,7 @@ dshow_cycle_devices(AVFormatContext *avctx, ICreateDevEnum *devenum,
         }
 
 fail1:
-        if (buf)
-            av_free(buf);
+        av_free(buf);
         if (bag)
             IPropertyBag_Release(bag);
         IMoniker_Release(m);
@@ -352,6 +351,7 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
             VIDEO_STREAM_CONFIG_CAPS *vcaps = caps;
             BITMAPINFOHEADER *bih;
             int64_t *fr;
+            const AVCodecTag *const tags[] = { avformat_get_riff_video_tags(), NULL };
 #if DSHOWDEBUG
             ff_print_VIDEO_STREAM_CONFIG_CAPS(vcaps);
 #endif
@@ -369,7 +369,7 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
             if (!pformat_set) {
                 enum AVPixelFormat pix_fmt = dshow_pixfmt(bih->biCompression, bih->biBitCount);
                 if (pix_fmt == AV_PIX_FMT_NONE) {
-                    enum AVCodecID codec_id = ff_codec_get_id(avformat_get_riff_video_tags(), bih->biCompression);
+                    enum AVCodecID codec_id = av_codec_get_id(tags, bih->biCompression);
                     AVCodec *codec = avcodec_find_decoder(codec_id);
                     if (codec_id == AV_CODEC_ID_NONE || !codec) {
                         av_log(avctx, AV_LOG_INFO, "  unknown compression type 0x%X", (int) bih->biCompression);
@@ -387,7 +387,7 @@ dshow_cycle_formats(AVFormatContext *avctx, enum dshowDeviceType devtype,
                 continue;
             }
             if (ctx->video_codec_id != AV_CODEC_ID_RAWVIDEO) {
-                if (ctx->video_codec_id != ff_codec_get_id(avformat_get_riff_video_tags(), bih->biCompression))
+                if (ctx->video_codec_id != av_codec_get_id(tags, bih->biCompression))
                     goto next;
             }
             if (ctx->pixel_format != AV_PIX_FMT_NONE &&
@@ -457,8 +457,7 @@ next:
     }
 end:
     IAMStreamConfig_Release(config);
-    if (caps)
-        av_free(caps);
+    av_free(caps);
     if (pformat_set)
         *pformat_set = format_set;
 }
@@ -780,7 +779,8 @@ dshow_add_device(AVFormatContext *avctx,
             codec->color_range = AVCOL_RANGE_MPEG; // just in case it needs this...
         }
         if (codec->pix_fmt == AV_PIX_FMT_NONE) {
-            codec->codec_id = ff_codec_get_id(avformat_get_riff_video_tags(), bih->biCompression);
+            const AVCodecTag *const tags[] = { avformat_get_riff_video_tags(), NULL };
+            codec->codec_id = av_codec_get_id(tags, bih->biCompression);
             if (codec->codec_id == AV_CODEC_ID_NONE) {
                 av_log(avctx, AV_LOG_ERROR, "Unknown compression type. "
                                  "Please report type 0x%X.\n", (int) bih->biCompression);

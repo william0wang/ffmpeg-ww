@@ -187,11 +187,11 @@ static av_cold int a64multi_close_encoder(AVCodecContext *avctx)
 {
     A64Context *c = avctx->priv_data;
     av_frame_free(&avctx->coded_frame);
-    av_free(c->mc_meta_charset);
-    av_free(c->mc_best_cb);
-    av_free(c->mc_charset);
-    av_free(c->mc_charmap);
-    av_free(c->mc_colram);
+    av_freep(&c->mc_meta_charset);
+    av_freep(&c->mc_best_cb);
+    av_freep(&c->mc_charset);
+    av_freep(&c->mc_charmap);
+    av_freep(&c->mc_colram);
     return 0;
 }
 
@@ -340,8 +340,14 @@ static int a64multi_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             buf = pkt->data;
 
             /* calc optimal new charset + charmaps */
-            avpriv_init_elbg(meta, 32, 1000 * c->mc_lifetime, best_cb, CHARSET_CHARS, 50, charmap, &c->randctx);
-            avpriv_do_elbg  (meta, 32, 1000 * c->mc_lifetime, best_cb, CHARSET_CHARS, 50, charmap, &c->randctx);
+            ret = avpriv_init_elbg(meta, 32, 1000 * c->mc_lifetime, best_cb,
+                               CHARSET_CHARS, 50, charmap, &c->randctx);
+            if (ret < 0)
+                return ret;
+            ret = avpriv_do_elbg(meta, 32, 1000 * c->mc_lifetime, best_cb,
+                             CHARSET_CHARS, 50, charmap, &c->randctx);
+            if (ret < 0)
+                return ret;
 
             /* create colorram map and a c64 readable charset */
             render_charset(avctx, charset, colram);
@@ -351,7 +357,6 @@ static int a64multi_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
             /* advance pointers */
             buf      += charset_size;
-            charset  += charset_size;
         }
 
         /* write x frames to buf */

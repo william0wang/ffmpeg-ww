@@ -42,6 +42,7 @@
 #include "libavutil/avutil.h"
 #include "libavutil/bswap.h"
 #include "libavutil/cpu.h"
+#include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
@@ -71,8 +72,6 @@ const char *swscale_license(void)
 #define LICENSE_PREFIX "libswscale license: "
     return LICENSE_PREFIX FFMPEG_LICENSE + sizeof(LICENSE_PREFIX) - 1;
 }
-
-#define RET 0xC3 // near return opcode for x86
 
 typedef struct FormatEntry {
     uint8_t is_supported_in         :1;
@@ -163,7 +162,9 @@ static const FormatEntry format_entries[AV_PIX_FMT_NB] = {
     [AV_PIX_FMT_RGB444BE]    = { 1, 1 },
     [AV_PIX_FMT_BGR444LE]    = { 1, 1 },
     [AV_PIX_FMT_BGR444BE]    = { 1, 1 },
-    [AV_PIX_FMT_Y400A]       = { 1, 0 },
+    [AV_PIX_FMT_YA8]         = { 1, 0 },
+    [AV_PIX_FMT_YA16BE]      = { 1, 0 },
+    [AV_PIX_FMT_YA16LE]      = { 1, 0 },
     [AV_PIX_FMT_BGR48BE]     = { 1, 1 },
     [AV_PIX_FMT_BGR48LE]     = { 1, 1 },
     [AV_PIX_FMT_BGRA64BE]    = { 1, 1, 1 },
@@ -240,17 +241,6 @@ int sws_isSupportedEndiannessConversion(enum AVPixelFormat pix_fmt)
            format_entries[pix_fmt].is_supported_endianness : 0;
 }
 
-#if FF_API_SWS_FORMAT_NAME
-const char *sws_format_name(enum AVPixelFormat format)
-{
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(format);
-    if (desc)
-        return desc->name;
-    else
-        return "Unknown format";
-}
-#endif
-
 static double getSplineCoeff(double a, double b, double c, double d,
                              double dist)
 {
@@ -266,7 +256,7 @@ static double getSplineCoeff(double a, double b, double c, double d,
 
 static av_cold int get_local_pos(SwsContext *s, int chr_subsample, int pos, int dir)
 {
-    if (pos < 0) {
+    if (pos == -1 || pos <= -513) {
         pos = (128 << chr_subsample) - 128;
     }
     pos += 128; // relative to ideal left edge
@@ -582,8 +572,7 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
         goto fail;
     if (filterSize >= MAX_FILTER_SIZE * 16 /
                       ((flags & SWS_ACCURATE_RND) ? APCK_SIZE : 16)) {
-        av_log(NULL, AV_LOG_ERROR, "sws: filterSize %d is too large, try less extreme scaling or set --sws-max-filter-size and recompile\n",
-               FF_CEIL_RSHIFT((filterSize+1) * ((flags & SWS_ACCURATE_RND) ? APCK_SIZE : 16), 4));
+        ret = RETCODE_USE_CASCADE;
         goto fail;
     }
     *outFilterSize = filterSize;
@@ -675,177 +664,11 @@ static av_cold int initFilter(int16_t **outFilter, int32_t **filterPos,
 
 fail:
     if(ret < 0)
-        av_log(NULL, AV_LOG_ERROR, "sws: initFilter failed\n");
+        av_log(NULL, ret == RETCODE_USE_CASCADE ? AV_LOG_DEBUG : AV_LOG_ERROR, "sws: initFilter failed\n");
     av_free(filter);
     av_free(filter2);
     return ret;
 }
-
-#if HAVE_MMXEXT_INLINE
-static av_cold int init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
-                                       int16_t *filter, int32_t *filterPos,
-                                       int numSplits)
-{
-    uint8_t *fragmentA;
-    x86_reg imm8OfPShufW1A;
-    x86_reg imm8OfPShufW2A;
-    x86_reg fragmentLengthA;
-    uint8_t *fragmentB;
-    x86_reg imm8OfPShufW1B;
-    x86_reg imm8OfPShufW2B;
-    x86_reg fragmentLengthB;
-    int fragmentPos;
-
-    int xpos, i;
-
-    // create an optimized horizontal scaling routine
-    /* This scaler is made of runtime-generated MMXEXT code using specially tuned
-     * pshufw instructions. For every four output pixels, if four input pixels
-     * are enough for the fast bilinear scaling, then a chunk of fragmentB is
-     * used. If five input pixels are needed, then a chunk of fragmentA is used.
-     */
-
-    // code fragment
-
-    __asm__ volatile (
-        "jmp                         9f                 \n\t"
-        // Begin
-        "0:                                             \n\t"
-        "movq    (%%"REG_d", %%"REG_a"), %%mm3          \n\t"
-        "movd    (%%"REG_c", %%"REG_S"), %%mm0          \n\t"
-        "movd   1(%%"REG_c", %%"REG_S"), %%mm1          \n\t"
-        "punpcklbw                %%mm7, %%mm1          \n\t"
-        "punpcklbw                %%mm7, %%mm0          \n\t"
-        "pshufw                   $0xFF, %%mm1, %%mm1   \n\t"
-        "1:                                             \n\t"
-        "pshufw                   $0xFF, %%mm0, %%mm0   \n\t"
-        "2:                                             \n\t"
-        "psubw                    %%mm1, %%mm0          \n\t"
-        "movl   8(%%"REG_b", %%"REG_a"), %%esi          \n\t"
-        "pmullw                   %%mm3, %%mm0          \n\t"
-        "psllw                       $7, %%mm1          \n\t"
-        "paddw                    %%mm1, %%mm0          \n\t"
-
-        "movq                     %%mm0, (%%"REG_D", %%"REG_a") \n\t"
-
-        "add                         $8, %%"REG_a"      \n\t"
-        // End
-        "9:                                             \n\t"
-        // "int $3                                         \n\t"
-        "lea       " LOCAL_MANGLE(0b) ", %0             \n\t"
-        "lea       " LOCAL_MANGLE(1b) ", %1             \n\t"
-        "lea       " LOCAL_MANGLE(2b) ", %2             \n\t"
-        "dec                         %1                 \n\t"
-        "dec                         %2                 \n\t"
-        "sub                         %0, %1             \n\t"
-        "sub                         %0, %2             \n\t"
-        "lea       " LOCAL_MANGLE(9b) ", %3             \n\t"
-        "sub                         %0, %3             \n\t"
-
-
-        : "=r" (fragmentA), "=r" (imm8OfPShufW1A), "=r" (imm8OfPShufW2A),
-          "=r" (fragmentLengthA)
-        );
-
-    __asm__ volatile (
-        "jmp                         9f                 \n\t"
-        // Begin
-        "0:                                             \n\t"
-        "movq    (%%"REG_d", %%"REG_a"), %%mm3          \n\t"
-        "movd    (%%"REG_c", %%"REG_S"), %%mm0          \n\t"
-        "punpcklbw                %%mm7, %%mm0          \n\t"
-        "pshufw                   $0xFF, %%mm0, %%mm1   \n\t"
-        "1:                                             \n\t"
-        "pshufw                   $0xFF, %%mm0, %%mm0   \n\t"
-        "2:                                             \n\t"
-        "psubw                    %%mm1, %%mm0          \n\t"
-        "movl   8(%%"REG_b", %%"REG_a"), %%esi          \n\t"
-        "pmullw                   %%mm3, %%mm0          \n\t"
-        "psllw                       $7, %%mm1          \n\t"
-        "paddw                    %%mm1, %%mm0          \n\t"
-
-        "movq                     %%mm0, (%%"REG_D", %%"REG_a") \n\t"
-
-        "add                         $8, %%"REG_a"      \n\t"
-        // End
-        "9:                                             \n\t"
-        // "int                       $3                   \n\t"
-        "lea       " LOCAL_MANGLE(0b) ", %0             \n\t"
-        "lea       " LOCAL_MANGLE(1b) ", %1             \n\t"
-        "lea       " LOCAL_MANGLE(2b) ", %2             \n\t"
-        "dec                         %1                 \n\t"
-        "dec                         %2                 \n\t"
-        "sub                         %0, %1             \n\t"
-        "sub                         %0, %2             \n\t"
-        "lea       " LOCAL_MANGLE(9b) ", %3             \n\t"
-        "sub                         %0, %3             \n\t"
-
-
-        : "=r" (fragmentB), "=r" (imm8OfPShufW1B), "=r" (imm8OfPShufW2B),
-          "=r" (fragmentLengthB)
-        );
-
-    xpos        = 0; // lumXInc/2 - 0x8000; // difference between pixel centers
-    fragmentPos = 0;
-
-    for (i = 0; i < dstW / numSplits; i++) {
-        int xx = xpos >> 16;
-
-        if ((i & 3) == 0) {
-            int a                  = 0;
-            int b                  = ((xpos + xInc) >> 16) - xx;
-            int c                  = ((xpos + xInc * 2) >> 16) - xx;
-            int d                  = ((xpos + xInc * 3) >> 16) - xx;
-            int inc                = (d + 1 < 4);
-            uint8_t *fragment      = inc ? fragmentB : fragmentA;
-            x86_reg imm8OfPShufW1  = inc ? imm8OfPShufW1B : imm8OfPShufW1A;
-            x86_reg imm8OfPShufW2  = inc ? imm8OfPShufW2B : imm8OfPShufW2A;
-            x86_reg fragmentLength = inc ? fragmentLengthB : fragmentLengthA;
-            int maxShift           = 3 - (d + inc);
-            int shift              = 0;
-
-            if (filterCode) {
-                filter[i]        = ((xpos              & 0xFFFF) ^ 0xFFFF) >> 9;
-                filter[i + 1]    = (((xpos + xInc)     & 0xFFFF) ^ 0xFFFF) >> 9;
-                filter[i + 2]    = (((xpos + xInc * 2) & 0xFFFF) ^ 0xFFFF) >> 9;
-                filter[i + 3]    = (((xpos + xInc * 3) & 0xFFFF) ^ 0xFFFF) >> 9;
-                filterPos[i / 2] = xx;
-
-                memcpy(filterCode + fragmentPos, fragment, fragmentLength);
-
-                filterCode[fragmentPos + imm8OfPShufW1] =  (a + inc)       |
-                                                          ((b + inc) << 2) |
-                                                          ((c + inc) << 4) |
-                                                          ((d + inc) << 6);
-                filterCode[fragmentPos + imm8OfPShufW2] =  a | (b << 2) |
-                                                               (c << 4) |
-                                                               (d << 6);
-
-                if (i + 4 - inc >= dstW)
-                    shift = maxShift;               // avoid overread
-                else if ((filterPos[i / 2] & 3) <= maxShift)
-                    shift = filterPos[i / 2] & 3;   // align
-
-                if (shift && i >= shift) {
-                    filterCode[fragmentPos + imm8OfPShufW1] += 0x55 * shift;
-                    filterCode[fragmentPos + imm8OfPShufW2] += 0x55 * shift;
-                    filterPos[i / 2]                        -= shift;
-                }
-            }
-
-            fragmentPos += fragmentLength;
-
-            if (filterCode)
-                filterCode[fragmentPos] = RET;
-        }
-        xpos += xInc;
-    }
-    if (filterCode)
-        filterPos[((i / 2) + 1) & (~1)] = xpos >> 16;  // needed to jump to the next part
-
-    return fragmentPos + 1;
-}
-#endif /* HAVE_MMXEXT_INLINE */
 
 static void fill_rgb2yuv_table(SwsContext *c, const int table[4], int dstRange)
 {
@@ -1006,7 +829,7 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
 
     //The srcBpc check is possibly wrong but we seem to lack a definitive reference to test this
     //and what we have in ticket 2939 looks better with this check
-    if (need_reinit && c->srcBpc == 8)
+    if (need_reinit && (c->srcBpc == 8 || !isYUV(c->srcFormat)))
         ff_sws_init_range_convert(c);
 
     if ((isYUV(c->dstFormat) || isGray(c->dstFormat)) && (isYUV(c->srcFormat) || isGray(c->srcFormat)))
@@ -1136,6 +959,7 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     enum AVPixelFormat dstFormat = c->dstFormat;
     const AVPixFmtDescriptor *desc_src;
     const AVPixFmtDescriptor *desc_dst;
+    int ret = 0;
 
     cpu_flags = av_get_cpu_flags();
     flags     = c->flags;
@@ -1393,6 +1217,31 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         }
     }
 
+    if (isBayer(srcFormat)) {
+        if (!unscaled ||
+            (dstFormat != AV_PIX_FMT_RGB24 && dstFormat != AV_PIX_FMT_YUV420P)) {
+            enum AVPixelFormat tmpFormat = AV_PIX_FMT_RGB24;
+
+            ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+                                srcW, srcH, tmpFormat, 64);
+            if (ret < 0)
+                return ret;
+
+            c->cascaded_context[0] = sws_getContext(srcW, srcH, srcFormat,
+                                                    srcW, srcH, tmpFormat,
+                                                    flags, srcFilter, NULL, c->param);
+            if (!c->cascaded_context[0])
+                return -1;
+
+            c->cascaded_context[1] = sws_getContext(srcW, srcH, tmpFormat,
+                                                    dstW, dstH, dstFormat,
+                                                    flags, NULL, dstFilter, c->param);
+            if (!c->cascaded_context[1])
+                return -1;
+            return 0;
+        }
+    }
+
 #define USE_MMAP (HAVE_MMAP && HAVE_MPROTECT && defined MAP_ANONYMOUS)
 
     /* precalculate horizontal scaler filter coefficients */
@@ -1400,9 +1249,9 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
 #if HAVE_MMXEXT_INLINE
 // can't downscale !!!
         if (c->canMMXEXTBeUsed && (flags & SWS_FAST_BILINEAR)) {
-            c->lumMmxextFilterCodeSize = init_hscaler_mmxext(dstW, c->lumXInc, NULL,
+            c->lumMmxextFilterCodeSize = ff_init_hscaler_mmxext(dstW, c->lumXInc, NULL,
                                                              NULL, NULL, 8);
-            c->chrMmxextFilterCodeSize = init_hscaler_mmxext(c->chrDstW, c->chrXInc,
+            c->chrMmxextFilterCodeSize = ff_init_hscaler_mmxext(c->chrDstW, c->chrXInc,
                                                              NULL, NULL, NULL, 4);
 
 #if USE_MMAP
@@ -1443,9 +1292,9 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
             FF_ALLOCZ_OR_GOTO(c, c->hLumFilterPos, (dstW       / 2 / 8 + 8) * sizeof(int32_t), fail);
             FF_ALLOCZ_OR_GOTO(c, c->hChrFilterPos, (c->chrDstW / 2 / 4 + 8) * sizeof(int32_t), fail);
 
-            init_hscaler_mmxext(      dstW, c->lumXInc, c->lumMmxextFilterCode,
+            ff_init_hscaler_mmxext(      dstW, c->lumXInc, c->lumMmxextFilterCode,
                                 c->hLumFilter, (uint32_t*)c->hLumFilterPos, 8);
-            init_hscaler_mmxext(c->chrDstW, c->chrXInc, c->chrMmxextFilterCode,
+            ff_init_hscaler_mmxext(c->chrDstW, c->chrXInc, c->chrMmxextFilterCode,
                                 c->hChrFilter, (uint32_t*)c->hChrFilterPos, 4);
 
 #if USE_MMAP
@@ -1461,23 +1310,23 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
             const int filterAlign = X86_MMX(cpu_flags)     ? 4 :
                                     PPC_ALTIVEC(cpu_flags) ? 8 : 1;
 
-            if (initFilter(&c->hLumFilter, &c->hLumFilterPos,
+            if ((ret = initFilter(&c->hLumFilter, &c->hLumFilterPos,
                            &c->hLumFilterSize, c->lumXInc,
                            srcW, dstW, filterAlign, 1 << 14,
                            (flags & SWS_BICUBLIN) ? (flags | SWS_BICUBIC) : flags,
                            cpu_flags, srcFilter->lumH, dstFilter->lumH,
                            c->param,
                            get_local_pos(c, 0, 0, 0),
-                           get_local_pos(c, 0, 0, 0)) < 0)
+                           get_local_pos(c, 0, 0, 0))) < 0)
                 goto fail;
-            if (initFilter(&c->hChrFilter, &c->hChrFilterPos,
+            if ((ret = initFilter(&c->hChrFilter, &c->hChrFilterPos,
                            &c->hChrFilterSize, c->chrXInc,
                            c->chrSrcW, c->chrDstW, filterAlign, 1 << 14,
                            (flags & SWS_BICUBLIN) ? (flags | SWS_BILINEAR) : flags,
                            cpu_flags, srcFilter->chrH, dstFilter->chrH,
                            c->param,
                            get_local_pos(c, c->chrSrcHSubSample, c->src_h_chr_pos, 0),
-                           get_local_pos(c, c->chrDstHSubSample, c->dst_h_chr_pos, 0)) < 0)
+                           get_local_pos(c, c->chrDstHSubSample, c->dst_h_chr_pos, 0))) < 0)
                 goto fail;
         }
     } // initialize horizontal stuff
@@ -1487,22 +1336,22 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
         const int filterAlign = X86_MMX(cpu_flags)     ? 2 :
                                 PPC_ALTIVEC(cpu_flags) ? 8 : 1;
 
-        if (initFilter(&c->vLumFilter, &c->vLumFilterPos, &c->vLumFilterSize,
+        if ((ret = initFilter(&c->vLumFilter, &c->vLumFilterPos, &c->vLumFilterSize,
                        c->lumYInc, srcH, dstH, filterAlign, (1 << 12),
                        (flags & SWS_BICUBLIN) ? (flags | SWS_BICUBIC) : flags,
                        cpu_flags, srcFilter->lumV, dstFilter->lumV,
                        c->param,
                        get_local_pos(c, 0, 0, 1),
-                       get_local_pos(c, 0, 0, 1)) < 0)
+                       get_local_pos(c, 0, 0, 1))) < 0)
             goto fail;
-        if (initFilter(&c->vChrFilter, &c->vChrFilterPos, &c->vChrFilterSize,
+        if ((ret = initFilter(&c->vChrFilter, &c->vChrFilterPos, &c->vChrFilterSize,
                        c->chrYInc, c->chrSrcH, c->chrDstH,
                        filterAlign, (1 << 12),
                        (flags & SWS_BICUBLIN) ? (flags | SWS_BILINEAR) : flags,
                        cpu_flags, srcFilter->chrV, dstFilter->chrV,
                        c->param,
                        get_local_pos(c, c->chrSrcVSubSample, c->src_v_chr_pos, 1),
-                       get_local_pos(c, c->chrDstVSubSample, c->dst_v_chr_pos, 1)) < 0)
+                       get_local_pos(c, c->chrDstVSubSample, c->dst_v_chr_pos, 1))) < 0)
 
             goto fail;
 
@@ -1656,10 +1505,35 @@ av_cold int sws_init_context(SwsContext *c, SwsFilter *srcFilter,
     c->swscale = ff_getSwsFunc(c);
     return 0;
 fail: // FIXME replace things by appropriate error codes
+    if (ret == RETCODE_USE_CASCADE)  {
+        int tmpW = sqrt(srcW * (int64_t)dstW);
+        int tmpH = sqrt(srcH * (int64_t)dstH);
+        enum AVPixelFormat tmpFormat = AV_PIX_FMT_YUV420P;
+
+        if (srcW*(int64_t)srcH <= 4LL*dstW*dstH)
+            return AVERROR(EINVAL);
+
+        ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+                             tmpW, tmpH, tmpFormat, 64);
+        if (ret < 0)
+            return ret;
+
+        c->cascaded_context[0] = sws_getContext(srcW, srcH, srcFormat,
+                                                tmpW, tmpH, tmpFormat,
+                                                flags, srcFilter, NULL, c->param);
+        if (!c->cascaded_context[0])
+            return -1;
+
+        c->cascaded_context[1] = sws_getContext(tmpW, tmpH, tmpFormat,
+                                                dstW, dstH, dstFormat,
+                                                flags, NULL, dstFilter, c->param);
+        if (!c->cascaded_context[1])
+            return -1;
+        return 0;
+    }
     return -1;
 }
 
-#if FF_API_SWS_GETCONTEXT
 SwsContext *sws_getContext(int srcW, int srcH, enum AVPixelFormat srcFormat,
                            int dstW, int dstH, enum AVPixelFormat dstFormat,
                            int flags, SwsFilter *srcFilter,
@@ -1690,7 +1564,6 @@ SwsContext *sws_getContext(int srcW, int srcH, enum AVPixelFormat srcFormat,
 
     return c;
 }
-#endif
 
 SwsFilter *sws_getDefaultFilter(float lumaGBlur, float chromaGBlur,
                                 float lumaSharpen, float chromaSharpen,
@@ -2069,6 +1942,11 @@ void sws_freeContext(SwsContext *c)
     av_freep(&c->yuvTable);
     av_freep(&c->formatConvBuffer);
 
+    sws_freeContext(c->cascaded_context[0]);
+    sws_freeContext(c->cascaded_context[1]);
+    memset(c->cascaded_context, 0, sizeof(c->cascaded_context));
+    av_freep(&c->cascaded_tmp[0]);
+
     av_free(c);
 }
 
@@ -2082,6 +1960,8 @@ struct SwsContext *sws_getCachedContext(struct SwsContext *context, int srcW,
 {
     static const double default_param[2] = { SWS_PARAM_DEFAULT,
                                              SWS_PARAM_DEFAULT };
+    int64_t src_h_chr_pos = -513, dst_h_chr_pos = -513,
+            src_v_chr_pos = -513, dst_v_chr_pos = -513;
 
     if (!param)
         param = default_param;
@@ -2096,6 +1976,11 @@ struct SwsContext *sws_getCachedContext(struct SwsContext *context, int srcW,
          context->flags     != flags     ||
          context->param[0]  != param[0]  ||
          context->param[1]  != param[1])) {
+
+        av_opt_get_int(context, "src_h_chr_pos", 0, &src_h_chr_pos);
+        av_opt_get_int(context, "src_v_chr_pos", 0, &src_v_chr_pos);
+        av_opt_get_int(context, "dst_h_chr_pos", 0, &dst_h_chr_pos);
+        av_opt_get_int(context, "dst_v_chr_pos", 0, &dst_v_chr_pos);
         sws_freeContext(context);
         context = NULL;
     }
@@ -2112,6 +1997,12 @@ struct SwsContext *sws_getCachedContext(struct SwsContext *context, int srcW,
         context->flags     = flags;
         context->param[0]  = param[0];
         context->param[1]  = param[1];
+
+        av_opt_set_int(context, "src_h_chr_pos", src_h_chr_pos, 0);
+        av_opt_set_int(context, "src_v_chr_pos", src_v_chr_pos, 0);
+        av_opt_set_int(context, "dst_h_chr_pos", dst_h_chr_pos, 0);
+        av_opt_set_int(context, "dst_v_chr_pos", dst_v_chr_pos, 0);
+
         if (sws_init_context(context, srcFilter, dstFilter) < 0) {
             sws_freeContext(context);
             return NULL;

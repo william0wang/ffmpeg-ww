@@ -45,9 +45,6 @@ void avfilter_register_all(void)
         return;
     initialized = 1;
 
-#if FF_API_ACONVERT_FILTER
-    REGISTER_FILTER(ACONVERT,       aconvert,       af);
-#endif
     REGISTER_FILTER(ADELAY,         adelay,         af);
     REGISTER_FILTER(AECHO,          aecho,          af);
     REGISTER_FILTER(AEVAL,          aeval,          af);
@@ -96,6 +93,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(REPLAYGAIN,     replaygain,     af);
     REGISTER_FILTER(RESAMPLE,       resample,       af);
     REGISTER_FILTER(SILENCEDETECT,  silencedetect,  af);
+    REGISTER_FILTER(SILENCEREMOVE,  silenceremove,  af);
     REGISTER_FILTER(TREBLE,         treble,         af);
     REGISTER_FILTER(VOLUME,         volume,         af);
     REGISTER_FILTER(VOLUMEDETECT,   volumedetect,   af);
@@ -115,8 +113,10 @@ void avfilter_register_all(void)
     REGISTER_FILTER(BLACKFRAME,     blackframe,     vf);
     REGISTER_FILTER(BLEND,          blend,          vf);
     REGISTER_FILTER(BOXBLUR,        boxblur,        vf);
+    REGISTER_FILTER(CODECVIEW,      codecview,      vf);
     REGISTER_FILTER(COLORBALANCE,   colorbalance,   vf);
     REGISTER_FILTER(COLORCHANNELMIXER, colorchannelmixer, vf);
+    REGISTER_FILTER(COLORLEVELS,    colorlevels,    vf);
     REGISTER_FILTER(COLORMATRIX,    colormatrix,    vf);
     REGISTER_FILTER(COPY,           copy,           vf);
     REGISTER_FILTER(CROP,           crop,           vf);
@@ -142,6 +142,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(FRAMEPACK,      framepack,      vf);
     REGISTER_FILTER(FRAMESTEP,      framestep,      vf);
     REGISTER_FILTER(FREI0R,         frei0r,         vf);
+    REGISTER_FILTER(FSPP,           fspp,           vf);
     REGISTER_FILTER(GEQ,            geq,            vf);
     REGISTER_FILTER(GRADFUN,        gradfun,        vf);
     REGISTER_FILTER(HALDCLUT,       haldclut,       vf);
@@ -156,6 +157,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(INTERLACE,      interlace,      vf);
     REGISTER_FILTER(INTERLEAVE,     interleave,     vf);
     REGISTER_FILTER(KERNDEINT,      kerndeint,      vf);
+    REGISTER_FILTER(LENSCORRECTION, lenscorrection, vf);
     REGISTER_FILTER(LUT3D,          lut3d,          vf);
     REGISTER_FILTER(LUT,            lut,            vf);
     REGISTER_FILTER(LUTRGB,         lutrgb,         vf);
@@ -177,6 +179,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(PHASE,          phase,          vf);
     REGISTER_FILTER(PIXDESCTEST,    pixdesctest,    vf);
     REGISTER_FILTER(PP,             pp,             vf);
+    REGISTER_FILTER(PP7,            pp7,            vf);
     REGISTER_FILTER(PSNR,           psnr,           vf);
     REGISTER_FILTER(PULLUP,         pullup,         vf);
     REGISTER_FILTER(REMOVELOGO,     removelogo,     vf);
@@ -201,6 +204,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER(SUBTITLES,      subtitles,      vf);
     REGISTER_FILTER(SUPER2XSAI,     super2xsai,     vf);
     REGISTER_FILTER(SWAPUV,         swapuv,         vf);
+    REGISTER_FILTER(TBLEND,         tblend,         vf);
     REGISTER_FILTER(TELECINE,       telecine,       vf);
     REGISTER_FILTER(THUMBNAIL,      thumbnail,      vf);
     REGISTER_FILTER(TILE,           tile,           vf);
@@ -208,11 +212,13 @@ void avfilter_register_all(void)
     REGISTER_FILTER(TRANSPOSE,      transpose,      vf);
     REGISTER_FILTER(TRIM,           trim,           vf);
     REGISTER_FILTER(UNSHARP,        unsharp,        vf);
+    REGISTER_FILTER(USPP,           uspp,           vf);
     REGISTER_FILTER(VFLIP,          vflip,          vf);
     REGISTER_FILTER(VIDSTABDETECT,  vidstabdetect,  vf);
     REGISTER_FILTER(VIDSTABTRANSFORM, vidstabtransform, vf);
     REGISTER_FILTER(VIGNETTE,       vignette,       vf);
     REGISTER_FILTER(W3FDIF,         w3fdif,         vf);
+    REGISTER_FILTER(XBR,            xbr,            vf);
     REGISTER_FILTER(YADIF,          yadif,          vf);
     REGISTER_FILTER(ZMQ,            zmq,            vf);
     REGISTER_FILTER(ZOOMPAN,        zoompan,        vf);

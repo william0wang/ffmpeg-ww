@@ -132,7 +132,7 @@ static const uint8_t aic_c_ext_scan[192] = {
     177, 184, 176, 169, 162, 161, 168, 160,
 };
 
-static const uint8_t *aic_scan[NUM_BANDS] = {
+static const uint8_t * const aic_scan[NUM_BANDS] = {
     aic_y_scan, aic_c_scan, aic_y_ext_scan, aic_c_ext_scan
 };
 
@@ -448,7 +448,7 @@ static av_cold int aic_decode_init(AVCodecContext *avctx)
         }
     }
 
-    ctx->slice_data = av_malloc(ctx->slice_width * AIC_BAND_COEFFS
+    ctx->slice_data = av_malloc_array(ctx->slice_width, AIC_BAND_COEFFS
                                 * sizeof(*ctx->slice_data));
     if (!ctx->slice_data) {
         av_log(avctx, AV_LOG_ERROR, "Error allocating slice buffer\n");

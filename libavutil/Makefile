@@ -15,6 +15,8 @@ HEADERS = adler32.h                                                     \
           bprint.h                                                      \
           bswap.h                                                       \
           buffer.h                                                      \
+          cast5.h                                                       \
+          camellia.h                                                    \
           channel_layout.h                                              \
           common.h                                                      \
           cpu.h                                                         \
@@ -30,7 +32,6 @@ HEADERS = adler32.h                                                     \
           hmac.h                                                        \
           imgutils.h                                                    \
           intfloat.h                                                    \
-          intfloat_readwrite.h                                          \
           intreadwrite.h                                                \
           lfg.h                                                         \
           log.h                                                         \
@@ -38,12 +39,14 @@ HEADERS = adler32.h                                                     \
           mathematics.h                                                 \
           md5.h                                                         \
           mem.h                                                         \
+          motion_vector.h                                               \
           murmur3.h                                                     \
           dict.h                                                        \
           old_pix_fmts.h                                                \
           opt.h                                                         \
           parseutils.h                                                  \
           pixdesc.h                                                     \
+          pixelutils.h                                                  \
           pixfmt.h                                                      \
           random_seed.h                                                 \
           replaygain.h                                                  \
@@ -81,6 +84,8 @@ OBJS = adler32.o                                                        \
        blowfish.o                                                       \
        bprint.o                                                         \
        buffer.o                                                         \
+       cast5.o                                                          \
+       camellia.o                                                       \
        channel_layout.o                                                 \
        cpu.o                                                            \
        crc.o                                                            \
@@ -98,11 +103,9 @@ OBJS = adler32.o                                                        \
        hash.o                                                           \
        hmac.o                                                           \
        imgutils.o                                                       \
-       intfloat_readwrite.o                                             \
        intmath.o                                                        \
        lfg.o                                                            \
-       lls1.o                                                           \
-       lls2.o                                                           \
+       lls.o                                                            \
        log.o                                                            \
        log2_tab.o                                                       \
        mathematics.o                                                    \
@@ -113,6 +116,7 @@ OBJS = adler32.o                                                        \
        opt.o                                                            \
        parseutils.o                                                     \
        pixdesc.o                                                        \
+       pixelutils.o                                                     \
        random_seed.o                                                    \
        rational.o                                                       \
        rc4.o                                                            \
@@ -151,9 +155,12 @@ TESTPROGS = adler32                                                     \
             base64                                                      \
             blowfish                                                    \
             bprint                                                      \
+            cast5                                                       \
+            camellia                                                    \
             cpu                                                         \
             crc                                                         \
             des                                                         \
+            dict                                                        \
             error                                                       \
             eval                                                        \
             file                                                        \
@@ -161,8 +168,7 @@ TESTPROGS = adler32                                                     \
             float_dsp                                                   \
             hmac                                                        \
             lfg                                                         \
-            lls1                                                        \
-            lls2                                                        \
+            lls                                                         \
             log                                                         \
             md5                                                         \
             murmur3                                                     \
@@ -170,11 +176,13 @@ TESTPROGS = adler32                                                     \
             pca                                                         \
             parseutils                                                  \
             pixdesc                                                     \
+            pixelutils                                                  \
             random_seed                                                 \
             rational                                                    \
             ripemd                                                      \
             sha                                                         \
             sha512                                                      \
+            softfloat                                                   \
             tree                                                        \
             utf8                                                        \
             xtea                                                        \

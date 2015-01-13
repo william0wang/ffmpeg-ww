@@ -52,7 +52,7 @@
  * @param error Error code to be converted
  * @return Corresponding error text (not thread-safe)
  */
-static char *const get_error_text(const int error)
+static const char *get_error_text(const int error)
 {
     static char error_buffer[255];
     av_strerror(error, error_buffer, sizeof(error_buffer));
@@ -199,7 +199,7 @@ static int open_output_file(const char *filename,
     return 0;
 
 cleanup:
-    avio_close((*output_format_context)->pb);
+    avio_closep(&(*output_format_context)->pb);
     avformat_free_context(*output_format_context);
     *output_format_context = NULL;
     return error < 0 ? error : AVERROR_EXIT;
@@ -306,7 +306,7 @@ static int decode_audio_frame(AVFrame *frame,
 
     /** Read one audio frame from the input file into a temporary packet. */
     if ((error = av_read_frame(input_format_context, &input_packet)) < 0) {
-        /** If we are the the end of the file, flush the decoder below. */
+        /** If we are at the end of the file, flush the decoder below. */
         if (error == AVERROR_EOF)
             *finished = 1;
         else {
@@ -743,7 +743,7 @@ cleanup:
     if (output_codec_context)
         avcodec_close(output_codec_context);
     if (output_format_context) {
-        avio_close(output_format_context->pb);
+        avio_closep(&output_format_context->pb);
         avformat_free_context(output_format_context);
     }
     if (input_codec_context)

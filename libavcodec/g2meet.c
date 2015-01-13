@@ -90,6 +90,7 @@ typedef struct G2MContext {
 
     int        compression;
     int        width, height, bpp;
+    int        orig_width, orig_height;
     int        tile_width, tile_height;
     int        tiles_x, tiles_y, tile_x, tile_y;
 
@@ -682,12 +683,12 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
 
     magic = bytestream2_get_be32(&bc);
     if ((magic & ~0xF) != MKBETAG('G', '2', 'M', '0') ||
-        (magic & 0xF) < 2 || (magic & 0xF) > 4) {
+        (magic & 0xF) < 2 || (magic & 0xF) > 5) {
         av_log(avctx, AV_LOG_ERROR, "Wrong magic %08X\n", magic);
         return AVERROR_INVALIDDATA;
     }
 
-    if ((magic & 0xF) != 4) {
+    if ((magic & 0xF) < 4) {
         av_log(avctx, AV_LOG_ERROR, "G2M2 and G2M3 are not yet supported\n");
         return AVERROR(ENOSYS);
     }
@@ -712,8 +713,8 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->width  = bytestream2_get_be32(&bc);
             c->height = bytestream2_get_be32(&bc);
-            if (c->width  < 16 || c->width  > avctx->width ||
-                c->height < 16 || c->height > avctx->height) {
+            if (c->width  < 16 || c->width  > c->orig_width ||
+                c->height < 16 || c->height > c->orig_height) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid frame dimensions %dx%d\n",
                        c->width, c->height);
@@ -735,8 +736,10 @@ static int g2m_decode_frame(AVCodecContext *avctx, void *data,
             }
             c->tile_width  = bytestream2_get_be32(&bc);
             c->tile_height = bytestream2_get_be32(&bc);
-            if (!c->tile_width || !c->tile_height ||
-                ((c->tile_width | c->tile_height) & 0xF)) {
+            if (c->tile_width <= 0 || c->tile_height <= 0 ||
+                ((c->tile_width | c->tile_height) & 0xF) ||
+                c->tile_width * 4LL * c->tile_height >= INT_MAX
+            ) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Invalid tile dimensions %dx%d\n",
                        c->tile_width, c->tile_height);
@@ -881,6 +884,10 @@ static av_cold int g2m_decode_init(AVCodecContext *avctx)
     }
 
     avctx->pix_fmt = AV_PIX_FMT_RGB24;
+
+    // store original sizes and check against those if resize happens
+    c->orig_width  = avctx->width;
+    c->orig_height = avctx->height;
 
     return 0;
 }

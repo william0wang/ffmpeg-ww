@@ -35,9 +35,11 @@
 
 #define FF_SANE_NB_CHANNELS 63U
 
+#define FF_SIGNBIT(x) ((x) >> CHAR_BIT * sizeof(x) - 1)
+
 #if HAVE_AVX
 #   define STRIDE_ALIGN 32
-#elif HAVE_NEON || ARCH_PPC || HAVE_MMX
+#elif HAVE_SIMD_ALIGN_16
 #   define STRIDE_ALIGN 16
 #else
 #   define STRIDE_ALIGN 8

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2003 The ffmpeg Project
+ * Copyright (c) 2001-2003 The FFmpeg Project
  *
  * first version by Francois Revol (revol@free.fr)
  * fringe ADPCM codecs (e.g., DK3, DK4, Westwood)
@@ -246,6 +246,10 @@ static inline short adpcm_ms_expand_nibble(ADPCMChannelStatus *c, int nibble)
     c->sample1 = av_clip_int16(predictor);
     c->idelta = (ff_adpcm_AdaptationTable[(int)nibble] * c->idelta) >> 8;
     if (c->idelta < 16) c->idelta = 16;
+    if (c->idelta > INT_MAX/768) {
+        av_log(NULL, AV_LOG_WARNING, "idelta overflow\n");
+        c->idelta = INT_MAX/768;
+    }
 
     return c->sample1;
 }
@@ -1530,7 +1534,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
 
 static const enum AVSampleFormat sample_fmts_s16[]  = { AV_SAMPLE_FMT_S16,
                                                         AV_SAMPLE_FMT_NONE };
-static const enum AVSampleFormat sample_fmts_s16p[] = { AV_SAMPLE_FMT_S16,
+static const enum AVSampleFormat sample_fmts_s16p[] = { AV_SAMPLE_FMT_S16P,
                                                         AV_SAMPLE_FMT_NONE };
 static const enum AVSampleFormat sample_fmts_both[] = { AV_SAMPLE_FMT_S16,
                                                         AV_SAMPLE_FMT_S16P,

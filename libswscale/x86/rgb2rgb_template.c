@@ -1634,6 +1634,16 @@ static inline void RENAME(rgb24toyv12)(const uint8_t *src, uint8_t *ydst, uint8_
 #define BGR2V_IDX "16*4+16*34"
     int y;
     const x86_reg chromWidth= width>>1;
+
+    if (height > 2) {
+        ff_rgb24toyv12_c(src, ydst, udst, vdst, width, 2, lumStride, chromStride, srcStride, rgb2yuv);
+        src  += 2*srcStride;
+        ydst += 2*lumStride;
+        udst += chromStride;
+        vdst += chromStride;
+        height -= 2;
+    }
+
     for (y=0; y<height-2; y+=2) {
         int i;
         for (i=0; i<2; i++) {
@@ -1877,6 +1887,7 @@ static void RENAME(interleaveBytes)(const uint8_t *src1, const uint8_t *src2, ui
     for (h=0; h < height; h++) {
         int w;
 
+        if (width >= 16)
 #if COMPILE_TEMPLATE_SSE2
         __asm__(
             "xor              %%"REG_a", %%"REG_a"  \n\t"
@@ -2186,6 +2197,44 @@ static void RENAME(extract_even)(const uint8_t *src, uint8_t *dst, x86_reg count
     }
 }
 
+static void RENAME(extract_odd)(const uint8_t *src, uint8_t *dst, x86_reg count)
+{
+    src ++;
+    dst +=   count;
+    src += 2*count;
+    count= - count;
+
+    if(count < -16) {
+        count += 16;
+        __asm__ volatile(
+            "pcmpeqw       %%mm7, %%mm7        \n\t"
+            "psrlw            $8, %%mm7        \n\t"
+            "1:                                \n\t"
+            "movq -32(%1, %0, 2), %%mm0        \n\t"
+            "movq -24(%1, %0, 2), %%mm1        \n\t"
+            "movq -16(%1, %0, 2), %%mm2        \n\t"
+            "movq  -8(%1, %0, 2), %%mm3        \n\t"
+            "pand          %%mm7, %%mm0        \n\t"
+            "pand          %%mm7, %%mm1        \n\t"
+            "pand          %%mm7, %%mm2        \n\t"
+            "pand          %%mm7, %%mm3        \n\t"
+            "packuswb      %%mm1, %%mm0        \n\t"
+            "packuswb      %%mm3, %%mm2        \n\t"
+            MOVNTQ"        %%mm0,-16(%2, %0)   \n\t"
+            MOVNTQ"        %%mm2,- 8(%2, %0)   \n\t"
+            "add             $16, %0           \n\t"
+            " js 1b                            \n\t"
+            : "+r"(count)
+            : "r"(src), "r"(dst)
+        );
+        count -= 16;
+    }
+    while(count<0) {
+        dst[count]= src[2*count];
+        count++;
+    }
+}
+
 #if !COMPILE_TEMPLATE_AMD3DNOW
 static void RENAME(extract_even2)(const uint8_t *src, uint8_t *dst0, uint8_t *dst1, x86_reg count)
 {
@@ -2449,7 +2498,7 @@ static void RENAME(uyvytoyuv420)(uint8_t *ydst, uint8_t *udst, uint8_t *vdst, co
     const int chromWidth = FF_CEIL_RSHIFT(width, 1);
 
     for (y=0; y<height; y++) {
-        RENAME(extract_even)(src+1, ydst, width);
+        RENAME(extract_odd)(src, ydst, width);
         if(y&1) {
             RENAME(extract_even2avg)(src-srcStride, src, udst, vdst, chromWidth);
             udst+= chromStride;
@@ -2475,7 +2524,7 @@ static void RENAME(uyvytoyuv422)(uint8_t *ydst, uint8_t *udst, uint8_t *vdst, co
     const int chromWidth = FF_CEIL_RSHIFT(width, 1);
 
     for (y=0; y<height; y++) {
-        RENAME(extract_even)(src+1, ydst, width);
+        RENAME(extract_odd)(src, ydst, width);
         RENAME(extract_even2)(src, udst, vdst, chromWidth);
 
         src += srcStride;

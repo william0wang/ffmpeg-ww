@@ -14,6 +14,7 @@ LDLIBS := $(shell pkg-config --libs $(FFMPEG_LIBS)) $(LDLIBS)
 EXAMPLES=       avio_reading                       \
                 decoding_encoding                  \
                 demuxing_decoding                  \
+                extract_mvs                        \
                 filtering_video                    \
                 filtering_audio                    \
                 metadata                           \
@@ -28,6 +29,7 @@ OBJS=$(addsuffix .o,$(EXAMPLES))
 
 # the following examples make explicit use of the math library
 avcodec:           LDLIBS += -lm
+decoding_encoding: LDLIBS += -lm
 muxing:            LDLIBS += -lm
 resampling_audio:  LDLIBS += -lm
 

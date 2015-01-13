@@ -48,15 +48,12 @@ static int yuv4_generate_header(AVFormatContext *s, char* buf)
     if (aspectn == 0 && aspectd == 1)
         aspectd = 0;  // 0:0 means unknown
 
-    inter = 'p'; /* progressive is the default */
-    if (st->codec->coded_frame && st->codec->coded_frame->interlaced_frame)
-        inter = st->codec->coded_frame->top_field_first ? 't' : 'b';
-    if (st->codec->field_order == AV_FIELD_PROGRESSIVE) {
-        inter = 'p';
-    } else if (st->codec->field_order == AV_FIELD_TB || st->codec->field_order == AV_FIELD_TT) {
-        inter = 't';
-    } else if (st->codec->field_order == AV_FIELD_BT || st->codec->field_order == AV_FIELD_BB) {
-        inter = 'b';
+    switch (st->codec->field_order) {
+    case AV_FIELD_TB:
+    case AV_FIELD_TT: inter = 't'; break;
+    case AV_FIELD_BT:
+    case AV_FIELD_BB: inter = 'b'; break;
+    default:          inter = 'p'; break;
     }
 
     switch (st->codec->pix_fmt) {
@@ -271,7 +268,7 @@ static int yuv4_write_header(AVFormatContext *s)
     case AV_PIX_FMT_YUV420P16:
     case AV_PIX_FMT_YUV422P16:
     case AV_PIX_FMT_YUV444P16:
-        if (s->streams[0]->codec->strict_std_compliance >= FF_COMPLIANCE_NORMAL) {
+        if (s->strict_std_compliance >= FF_COMPLIANCE_NORMAL) {
             av_log(s, AV_LOG_ERROR, "'%s' is not a official yuv4mpegpipe pixel format. "
                    "Use '-strict -1' to encode to this pixel format.\n",
                    av_get_pix_fmt_name(s->streams[0]->codec->pix_fmt));

@@ -27,7 +27,6 @@
  */
 
 #include "avcodec.h"
-#include "dsputil.h"
 #include "get_bits.h"
 #include "bytestream.h"
 #include "internal.h"
@@ -39,7 +38,7 @@
 #include "dirac_dwt.h"
 #include "dirac.h"
 #include "diracdsp.h"
-#include "videodsp.h" // for ff_emulated_edge_mc_8
+#include "videodsp.h"
 
 /**
  * The spec limits the number of wavelet decompositions to 4 for both
@@ -73,8 +72,6 @@
  * is held for delayed output.
  */
 #define DELAYED_PIC_REF 4
-
-#define ff_emulated_edge_mc ff_emulated_edge_mc_8 /* Fix: change the calls to this function regarding bit depth */
 
 #define CALC_PADDING(size, depth)                       \
     (((size + (1 << depth) - 1) >> depth) << depth)
@@ -138,8 +135,8 @@ typedef struct Plane {
 
 typedef struct DiracContext {
     AVCodecContext *avctx;
-    DSPContext dsp;
     MpegvideoEncDSPContext mpvencdsp;
+    VideoDSPContext vdsp;
     DiracDSPContext diracdsp;
     GetBitContext gb;
     dirac_source_params source;
@@ -237,7 +234,8 @@ enum dirac_subband {
     subband_ll = 0,
     subband_hl = 1,
     subband_lh = 2,
-    subband_hh = 3
+    subband_hh = 3,
+    subband_nb,
 };
 
 static const uint8_t default_qmat[][4][4] = {
@@ -425,9 +423,9 @@ static av_cold int dirac_decode_init(AVCodecContext *avctx)
     s->avctx = avctx;
     s->frame_number = -1;
 
-    ff_dsputil_init(&s->dsp, avctx);
     ff_diracdsp_init(&s->diracdsp);
     ff_mpegvideoencdsp_init(&s->mpvencdsp, avctx);
+    ff_videodsp_init(&s->vdsp, 8);
 
     for (i = 0; i < MAX_FRAMES; i++) {
         s->all_frames[i].avframe = av_frame_alloc();
@@ -614,10 +612,10 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
 
     top = 0;
     for (cb_y = 0; cb_y < cb_height; cb_y++) {
-        bottom = (b->height * (cb_y+1)) / cb_height;
+        bottom = (b->height * (cb_y+1LL)) / cb_height;
         left = 0;
         for (cb_x = 0; cb_x < cb_width; cb_x++) {
-            right = (b->width * (cb_x+1)) / cb_width;
+            right = (b->width * (cb_x+1LL)) / cb_width;
             codeblock(s, b, &gb, &c, left, right, top, bottom, blockcnt_one, is_arith);
             left = right;
         }
@@ -774,7 +772,7 @@ static int decode_lowdelay_slice(AVCodecContext *avctx, void *arg)
  * Dirac Specification ->
  * 13.5.1 low_delay_transform_data()
  */
-static void decode_lowdelay(DiracContext *s)
+static int decode_lowdelay(DiracContext *s)
 {
     AVCodecContext *avctx = s->avctx;
     int slice_x, slice_y, bytes, bufsize;
@@ -783,6 +781,8 @@ static void decode_lowdelay(DiracContext *s)
     int slice_num = 0;
 
     slices = av_mallocz_array(s->lowdelay.num_x, s->lowdelay.num_y * sizeof(struct lowdelay_slice));
+    if (!slices)
+        return AVERROR(ENOMEM);
 
     align_get_bits(&s->gb);
     /*[DIRAC_STD] 13.5.2 Slices. slice(sx,sy) */
@@ -810,6 +810,7 @@ static void decode_lowdelay(DiracContext *s)
     intra_dc_prediction(&s->plane[1].band[0][0]);  /* [DIRAC_STD] 13.3 intra_dc_prediction() */
     intra_dc_prediction(&s->plane[2].band[0][0]);  /* [DIRAC_STD] 13.3 intra_dc_prediction() */
     av_free(slices);
+    return 0;
 }
 
 static void init_planes(DiracContext *s)
@@ -1006,8 +1007,8 @@ static int dirac_unpack_idwt_params(DiracContext *s)
         /* Codeblock parameters (core syntax only) */
         if (get_bits1(gb)) {
             for (i = 0; i <= s->wavelet_depth; i++) {
-                CHECKEDREAD(s->codeblock[i].width , tmp < 1, "codeblock width invalid\n")
-                CHECKEDREAD(s->codeblock[i].height, tmp < 1, "codeblock height invalid\n")
+                CHECKEDREAD(s->codeblock[i].width , tmp < 1 || tmp > (s->avctx->width >>s->wavelet_depth-i), "codeblock width invalid\n")
+                CHECKEDREAD(s->codeblock[i].height, tmp < 1 || tmp > (s->avctx->height>>s->wavelet_depth-i), "codeblock height invalid\n")
             }
 
             CHECKEDREAD(s->codeblock_mode, tmp > 1, "unknown codeblock mode\n")
@@ -1454,10 +1455,10 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
         y + p->yblen > p->height+EDGE_WIDTH/2 ||
         x < 0 || y < 0) {
         for (i = 0; i < nplanes; i++) {
-            ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i],
-                                p->stride, p->stride,
-                                p->xblen, p->yblen, x, y,
-                                p->width+EDGE_WIDTH/2, p->height+EDGE_WIDTH/2);
+            s->vdsp.emulated_edge_mc(s->edge_emu_buffer[i], src[i],
+                                     p->stride, p->stride,
+                                     p->xblen, p->yblen, x, y,
+                                     p->width+EDGE_WIDTH/2, p->height+EDGE_WIDTH/2);
             src[i] = s->edge_emu_buffer[i];
         }
     }
@@ -1592,6 +1593,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
 {
     DWTContext d;
     int y, i, comp, dsty;
+    int ret;
 
     if (s->low_delay) {
         /* [DIRAC_STD] 13.5.1 low_delay_transform_data() */
@@ -1599,8 +1601,10 @@ static int dirac_decode_frame_internal(DiracContext *s)
             Plane *p = &s->plane[comp];
             memset(p->idwt_buf, 0, p->idwt_stride * p->idwt_height * sizeof(IDWTELEM));
         }
-        if (!s->zero_res)
-            decode_lowdelay(s);
+        if (!s->zero_res) {
+            if ((ret = decode_lowdelay(s)) < 0)
+                return ret;
+        }
     }
 
     for (comp = 0; comp < 3; comp++) {
@@ -1962,7 +1966,6 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
             int min_num = s->delay_frames[0]->avframe->display_picture_number;
             /* Too many delayed frames, so we display the frame with the lowest pts */
             av_log(avctx, AV_LOG_ERROR, "Delay frame overflow\n");
-            delayed_frame = s->delay_frames[0];
 
             for (i = 1; s->delay_frames[i]; i++)
                 if (s->delay_frames[i]->avframe->display_picture_number < min_num)

@@ -166,7 +166,7 @@ static int read_shape_from_file(int *cols, int *rows, int **values, const char *
                *rows, *cols);
         return AVERROR_INVALIDDATA;
     }
-    if (!(*values = av_mallocz(sizeof(int) * *rows * *cols)))
+    if (!(*values = av_mallocz_array(sizeof(int) * *rows, *cols)))
         return AVERROR(ENOMEM);
 
     /* fill *values */
@@ -348,7 +348,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 
     if (s->uninit)
         s->uninit(ctx);
-    av_free(s->priv);
+    av_freep(&s->priv);
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)

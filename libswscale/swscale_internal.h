@@ -27,6 +27,8 @@
 #include <altivec.h>
 #endif
 
+#include "version.h"
+
 #include "libavutil/avassert.h"
 #include "libavutil/avutil.h"
 #include "libavutil/common.h"
@@ -37,7 +39,7 @@
 
 #define STR(s) AV_TOSTRING(s) // AV_STRINGIFY is too long
 
-#define YUVRGB_TABLE_HEADROOM 128
+#define YUVRGB_TABLE_HEADROOM 256
 
 #define MAX_FILTER_SIZE SWS_MAX_FILTER_SIZE
 
@@ -58,6 +60,8 @@
 #   define APCK_COEF  8
 #   define APCK_SIZE 16
 #endif
+
+#define RETCODE_USE_CASCADE -12345
 
 struct SwsContext;
 
@@ -299,6 +303,14 @@ typedef struct SwsContext {
     int sliceDir;                 ///< Direction that slices are fed to the scaler (1 = top-to-bottom, -1 = bottom-to-top).
     double param[2];              ///< Input parameters for scaling algorithms that need them.
 
+    /* The cascaded_* fields allow spliting a scaler task into multiple
+     * sequential steps, this is for example used to limit the maximum
+     * downscaling factor that needs to be supported in one scaler.
+     */
+    struct SwsContext *cascaded_context[2];
+    int cascaded_tmpStride[4];
+    uint8_t *cascaded_tmp[4];
+
     uint32_t pal_yuv[256];
     uint32_t pal_rgb[256];
 
@@ -429,7 +441,7 @@ typedef struct SwsContext {
 #define UV_OFF_BYTE           "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*3+56"
 #define DITHER16              "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*3+64"
 #define DITHER32              "11*8+4*4*"AV_STRINGIFY(MAX_FILTER_SIZE)"*3+80"
-#define DITHER32_INT          (11*8+4*4*MAX_FILTER_SIZE*3+80) // value equal to above, used for checking that the struct hasnt been changed by mistake
+#define DITHER32_INT          (11*8+4*4*MAX_FILTER_SIZE*3+80) // value equal to above, used for checking that the struct hasn't been changed by mistake
 
     DECLARE_ALIGNED(8, uint64_t, redDither);
     DECLARE_ALIGNED(8, uint64_t, greenDither);
@@ -609,14 +621,6 @@ av_cold void ff_sws_init_range_convert(SwsContext *c);
 SwsFunc ff_yuv2rgb_init_x86(SwsContext *c);
 SwsFunc ff_yuv2rgb_init_ppc(SwsContext *c);
 
-#if FF_API_SWS_FORMAT_NAME
-/**
- * @deprecated Use av_get_pix_fmt_name() instead.
- */
-attribute_deprecated
-const char *sws_format_name(enum AVPixelFormat format);
-#endif
-
 static av_always_inline int is16BPS(enum AVPixelFormat pix_fmt)
 {
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(pix_fmt);
@@ -668,9 +672,11 @@ static av_always_inline int isRGB(enum AVPixelFormat pix_fmt)
 #else
 #define isGray(x)                      \
     ((x) == AV_PIX_FMT_GRAY8       ||  \
-     (x) == AV_PIX_FMT_Y400A       ||  \
+     (x) == AV_PIX_FMT_YA8         ||  \
      (x) == AV_PIX_FMT_GRAY16BE    ||  \
-     (x) == AV_PIX_FMT_GRAY16LE)
+     (x) == AV_PIX_FMT_GRAY16LE    ||  \
+     (x) == AV_PIX_FMT_YA16BE      ||  \
+     (x) == AV_PIX_FMT_YA16LE)
 #endif
 
 #define isRGBinInt(x) \
@@ -773,7 +779,9 @@ static av_always_inline int isALPHA(enum AVPixelFormat pix_fmt)
         || (x)==AV_PIX_FMT_YUYV422     \
         || (x)==AV_PIX_FMT_YVYU422     \
         || (x)==AV_PIX_FMT_UYVY422     \
-        || (x)==AV_PIX_FMT_Y400A       \
+        || (x)==AV_PIX_FMT_YA8       \
+        || (x)==AV_PIX_FMT_YA16LE      \
+        || (x)==AV_PIX_FMT_YA16BE      \
         ||  isRGBinInt(x)           \
         ||  isBGRinInt(x)           \
     )
@@ -856,6 +864,21 @@ void ff_sws_init_output_funcs(SwsContext *c,
                               yuv2anyX_fn *yuv2anyX);
 void ff_sws_init_swscale_ppc(SwsContext *c);
 void ff_sws_init_swscale_x86(SwsContext *c);
+
+void ff_hyscale_fast_c(SwsContext *c, int16_t *dst, int dstWidth,
+                       const uint8_t *src, int srcW, int xInc);
+void ff_hcscale_fast_c(SwsContext *c, int16_t *dst1, int16_t *dst2,
+                       int dstWidth, const uint8_t *src1,
+                       const uint8_t *src2, int srcW, int xInc);
+int ff_init_hscaler_mmxext(int dstW, int xInc, uint8_t *filterCode,
+                           int16_t *filter, int32_t *filterPos,
+                           int numSplits);
+void ff_hyscale_fast_mmxext(SwsContext *c, int16_t *dst,
+                            int dstWidth, const uint8_t *src,
+                            int srcW, int xInc);
+void ff_hcscale_fast_mmxext(SwsContext *c, int16_t *dst1, int16_t *dst2,
+                            int dstWidth, const uint8_t *src1,
+                            const uint8_t *src2, int srcW, int xInc);
 
 static inline void fillPlane16(uint8_t *plane, int stride, int width, int height, int y,
                                int alpha, int bits, const int big_endian)

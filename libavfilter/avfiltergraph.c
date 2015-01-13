@@ -559,9 +559,25 @@ static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
                 if ((ret = avfilter_insert_filter(link, convert, 0, 0)) < 0)
                     return ret;
 
-                filter_query_formats(convert);
+                if ((ret = filter_query_formats(convert)) < 0)
+                    return ret;
+
                 inlink  = convert->inputs[0];
                 outlink = convert->outputs[0];
+                av_assert0( inlink-> in_formats->refcount > 0);
+                av_assert0( inlink->out_formats->refcount > 0);
+                av_assert0(outlink-> in_formats->refcount > 0);
+                av_assert0(outlink->out_formats->refcount > 0);
+                if (outlink->type == AVMEDIA_TYPE_AUDIO) {
+                    av_assert0( inlink-> in_samplerates->refcount > 0);
+                    av_assert0( inlink->out_samplerates->refcount > 0);
+                    av_assert0(outlink-> in_samplerates->refcount > 0);
+                    av_assert0(outlink->out_samplerates->refcount > 0);
+                    av_assert0( inlink-> in_channel_layouts->refcount > 0);
+                    av_assert0( inlink->out_channel_layouts->refcount > 0);
+                    av_assert0(outlink-> in_channel_layouts->refcount > 0);
+                    av_assert0(outlink->out_channel_layouts->refcount > 0);
+                }
                 if (!ff_merge_formats( inlink->in_formats,  inlink->out_formats,  inlink->type) ||
                     !ff_merge_formats(outlink->in_formats, outlink->out_formats, outlink->type))
                     ret = AVERROR(ENOSYS);

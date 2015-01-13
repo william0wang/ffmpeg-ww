@@ -95,30 +95,22 @@ static void read_string(AVFormatContext *avctx, AVIOContext *pb, const char *tag
 
 static void read_uint8(AVFormatContext *avctx, AVIOContext *pb, const char *tag, const char *fmt)
 {
-    char value[4];
-    snprintf(value, sizeof(value), "%i", avio_r8(pb));
-    av_dict_set(&avctx->metadata, tag, value, 0);
+    av_dict_set_int(&avctx->metadata, tag, avio_r8(pb), 0);
 }
 
 static void read_uint16(AVFormatContext *avctx, AVIOContext *pb, const char *tag, const char *fmt)
 {
-    char value[8];
-    snprintf(value, sizeof(value), "%i", avio_rl16(pb));
-    av_dict_set(&avctx->metadata, tag, value, 0);
+    av_dict_set_int(&avctx->metadata, tag, avio_rl16(pb), 0);
 }
 
 static void read_uint32(AVFormatContext *avctx, AVIOContext *pb, const char *tag, const char *fmt)
 {
-    char value[16];
-    snprintf(value, sizeof(value), fmt, avio_rl32(pb));
-    av_dict_set(&avctx->metadata, tag, value, 0);
+    av_dict_set_int(&avctx->metadata, tag, avio_rl32(pb), 0);
 }
 
 static void read_uint64(AVFormatContext *avctx, AVIOContext *pb, const char *tag, const char *fmt)
 {
-    char value[32];
-    snprintf(value, sizeof(value), fmt, avio_rl64(pb));
-    av_dict_set(&avctx->metadata, tag, value, 0);
+    av_dict_set_int(&avctx->metadata, tag, avio_rl64(pb), 0);
 }
 
 static int scan_file(AVFormatContext *avctx, AVStream *vst, AVStream *ast, int file)
@@ -126,7 +118,7 @@ static int scan_file(AVFormatContext *avctx, AVStream *vst, AVStream *ast, int f
     MlvContext *mlv = avctx->priv_data;
     AVIOContext *pb = mlv->pb[file];
     int ret;
-    while (!url_feof(pb)) {
+    while (!avio_feof(pb)) {
         int type;
         unsigned int size;
         type = avio_rl32(pb);
@@ -150,7 +142,7 @@ static int scan_file(AVFormatContext *avctx, AVStream *vst, AVStream *ast, int f
             vst->codec->codec_tag = MKTAG('B', 'I', 'T', 16);
             size -= 164;
         } else if (ast && type == MKTAG('W', 'A', 'V', 'I') && size >= 16) {
-            ret = ff_get_wav_header(pb, ast->codec, 16);
+            ret = ff_get_wav_header(pb, ast->codec, 16, 0);
             if (ret < 0)
                 return ret;
             size -= 16;
@@ -212,8 +204,8 @@ static int scan_file(AVFormatContext *avctx, AVStream *vst, AVStream *ast, int f
             time.tm_yday   = avio_rl16(pb);
             time.tm_isdst  = avio_rl16(pb);
             avio_skip(pb, 2);
-            strftime(str, sizeof(str), "%Y-%m-%d %H:%M:%S", &time);
-            av_dict_set(&avctx->metadata, "time", str, 0);
+            if (strftime(str, sizeof(str), "%Y-%m-%d %H:%M:%S", &time))
+                av_dict_set(&avctx->metadata, "time", str, 0);
             size -= 20;
         } else if (type == MKTAG('E','X','P','O') && size >= 16) {
             av_dict_set(&avctx->metadata, "isoMode", avio_rl32(pb) ? "auto" : "manual", 0);
@@ -350,16 +342,14 @@ static int read_header(AVFormatContext *avctx)
                 break;
             if (check_file_header(mlv->pb[i], guid) < 0) {
                 av_log(avctx, AV_LOG_WARNING, "ignoring %s; bad format or guid mismatch\n", filename);
-                avio_close(mlv->pb[i]);
-                mlv->pb[i] = NULL;
+                avio_closep(&mlv->pb[i]);
                 continue;
             }
             av_log(avctx, AV_LOG_INFO, "scanning %s\n", filename);
             ret = scan_file(avctx, vst, ast, i);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_WARNING, "ignoring %s; %s\n", filename, av_err2str(ret));
-                avio_close(mlv->pb[i]);
-                mlv->pb[i] = NULL;
+                avio_closep(&mlv->pb[i]);
                 continue;
             }
         }
@@ -455,7 +445,7 @@ static int read_close(AVFormatContext *s)
     int i;
     for (i = 0; i < 100; i++)
         if (mlv->pb[i])
-            avio_close(mlv->pb[i]);
+            avio_closep(&mlv->pb[i]);
     return 0;
 }
 
