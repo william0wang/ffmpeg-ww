@@ -52,14 +52,15 @@
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/XShm.h>
 
-#include "avdevice.h"
-
+#include "libavutil/internal.h"
 #include "libavutil/log.h"
 #include "libavutil/opt.h"
 #include "libavutil/parseutils.h"
 #include "libavutil/time.h"
 
 #include "libavformat/internal.h"
+
+#include "avdevice.h"
 
 /** X11 device demuxer context */
 typedef struct X11GrabContext {
@@ -76,7 +77,7 @@ typedef struct X11GrabContext {
     Display *dpy;            /**< X11 display from which x11grab grabs frames */
     XImage *image;           /**< X11 image holding the grab */
     int use_shm;             /**< !0 when using XShm extension */
-    XShmSegmentInfo shminfo; /**< When using XShm, keeps track of XShm infos */
+    XShmSegmentInfo shminfo; /**< When using XShm, keeps track of XShm info */
     int draw_mouse;          /**< Set by a private option. */
     int follow_mouse;        /**< Set by a private option. */
     int show_region;         /**< set by a private option. */
@@ -314,8 +315,8 @@ static int x11grab_read_header(AVFormatContext *s1)
                       &ret, &ret, &ret);
         x_off -= x11grab->width / 2;
         y_off -= x11grab->height / 2;
-        x_off  = FFMIN(FFMAX(x_off, 0), screen_w - x11grab->width);
-        y_off  = FFMIN(FFMAX(y_off, 0), screen_h - x11grab->height);
+        x_off = av_clip(x_off, 0, screen_w - x11grab->width);
+        y_off = av_clip(y_off, 0, screen_h - x11grab->height);
         av_log(s1, AV_LOG_INFO,
                "followmouse is enabled, resetting grabbing region to x: %d y: %d\n",
                x_off, y_off);
@@ -354,11 +355,11 @@ static int x11grab_read_header(AVFormatContext *s1)
     x11grab->image      = image;
     x11grab->use_shm    = use_shm;
 
-    ret = pixfmt_from_image(s1, image, &st->codec->pix_fmt);
+    ret = pixfmt_from_image(s1, image, &st->codecpar->format);
     if (ret < 0)
         goto out;
 
-    if (st->codec->pix_fmt == AV_PIX_FMT_PAL8) {
+    if (st->codecpar->format == AV_PIX_FMT_PAL8) {
         color_map = DefaultColormap(dpy, screen);
         for (i = 0; i < 256; ++i)
             color[i].pixel = i;
@@ -371,12 +372,13 @@ static int x11grab_read_header(AVFormatContext *s1)
     }
 
 
-    st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    st->codec->codec_id   = AV_CODEC_ID_RAWVIDEO;
-    st->codec->width      = x11grab->width;
-    st->codec->height     = x11grab->height;
-    st->codec->time_base  = x11grab->time_base;
-    st->codec->bit_rate   = x11grab->frame_size * 1 / av_q2d(x11grab->time_base) * 8;
+    st->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+    st->codecpar->codec_id   = AV_CODEC_ID_RAWVIDEO;
+    st->codecpar->width      = x11grab->width;
+    st->codecpar->height     = x11grab->height;
+    st->codecpar->bit_rate   = x11grab->frame_size * 1 / av_q2d(x11grab->time_base) * 8;
+
+    st->avg_frame_rate       = av_inv_q(x11grab->time_base);
 
 out:
     av_free(dpyname);
@@ -525,22 +527,22 @@ static int x11grab_read_packet(AVFormatContext *s1, AVPacket *pkt)
     int64_t curtime, delay;
     struct timespec ts;
 
-    /* Calculate the time of the next frame */
-    s->time_frame += INT64_C(1000000);
-
     /* wait based on the frame rate */
     for (;;) {
         curtime = av_gettime();
         delay   = s->time_frame * av_q2d(s->time_base) - curtime;
         if (delay <= 0) {
-            if (delay < INT64_C(-1000000) * av_q2d(s->time_base))
-                s->time_frame += INT64_C(1000000);
             break;
         }
         ts.tv_sec  = delay / 1000000;
         ts.tv_nsec = (delay % 1000000) * 1000;
         nanosleep(&ts, NULL);
     }
+
+    /* Calculate the time of the next frame */
+    do {
+      s->time_frame += INT64_C(1000000);
+    } while ((s->time_frame * av_q2d(s->time_base) - curtime) <= 0);
 
     av_init_packet(pkt);
     pkt->data = image->data;
@@ -586,8 +588,8 @@ static int x11grab_read_packet(AVFormatContext *s1, AVPacket *pkt)
                 y_off -= (y_off + follow_mouse) - pointer_y;
         }
         // adjust grabbing region position if it goes out of screen.
-        s->x_off = x_off = FFMIN(FFMAX(x_off, 0), screen_w - s->width);
-        s->y_off = y_off = FFMIN(FFMAX(y_off, 0), screen_h - s->height);
+        s->x_off = x_off = av_clip(x_off, 0, screen_w - s->width);
+        s->y_off = y_off = av_clip(y_off, 0, screen_h - s->height);
 
         if (s->show_region && s->region_win)
             XMoveWindow(dpy, s->region_win,
@@ -657,6 +659,8 @@ static int x11grab_read_close(AVFormatContext *s1)
 #define OFFSET(x) offsetof(X11GrabContext, x)
 #define DEC AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
+    { "grab_x", "Initial x coordinate.", OFFSET(x_off), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, DEC },
+    { "grab_y", "Initial y coordinate.", OFFSET(y_off), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, DEC },
     { "draw_mouse", "draw the mouse pointer", OFFSET(draw_mouse), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, DEC },
 
     { "follow_mouse", "move the grabbing region when the mouse pointer reaches within specified amount of pixels to the edge of region",
@@ -664,7 +668,7 @@ static const AVOption options[] = {
     { "centered",     "keep the mouse pointer at the center of grabbing region when following",
       0, AV_OPT_TYPE_CONST, {.i64 = -1}, INT_MIN, INT_MAX, DEC, "follow_mouse" },
 
-    { "framerate",  "set video frame rate",      OFFSET(framerate),   AV_OPT_TYPE_VIDEO_RATE, {.str = "ntsc"}, 0, 0, DEC },
+    { "framerate",  "set video frame rate",      OFFSET(framerate),   AV_OPT_TYPE_VIDEO_RATE, {.str = "ntsc"}, 0, INT_MAX, DEC },
     { "show_region", "show the grabbing region", OFFSET(show_region), AV_OPT_TYPE_INT,        {.i64 = 0}, 0, 1, DEC },
     { "video_size",  "set video frame size",     OFFSET(width),       AV_OPT_TYPE_IMAGE_SIZE, {.str = "vga"}, 0, 0, DEC },
     { "use_shm",     "use MIT-SHM extension",    OFFSET(use_shm),     AV_OPT_TYPE_INT,        {.i64 = 1}, 0, 1, DEC },

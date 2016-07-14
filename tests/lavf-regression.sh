@@ -90,6 +90,14 @@ if [ -n "$do_mxf_d10" ]; then
 do_lavf mxf_d10 "-ar 48000 -ac 2" "-r 25 -vf scale=720:576,pad=720:608:0:32 -vcodec mpeg2video -g 0 -flags +ildct+low_delay -dc 10 -non_linear_quant 1 -intra_vlc 1 -qscale 1 -ps 1 -qmin 1 -rc_max_vbv_use 1 -rc_min_vbv_use 1 -pix_fmt yuv422p -minrate 30000k -maxrate 30000k -b 30000k -bufsize 1200000 -top 1 -rc_init_occupancy 1200000 -qmax 12 -f mxf_d10"
 fi
 
+if [ -n "$do_mxf_opatom" ]; then
+do_lavf mxf_opatom "" "-s 1920x1080 -vcodec dnxhd -pix_fmt yuv422p -vb 36M -f mxf_opatom -map 0"
+fi
+
+if [ -n "$do_mxf_opatom_audio" ]; then
+do_lavf mxf_opatom_audio "-ar 48000 -ac 1" "-f mxf_opatom -mxf_audio_edit_rate 25 -map 1"
+fi
+
 if [ -n "$do_ts" ] ; then
 do_lavf ts "" "-ab 64k -mpegts_transport_stream_id 42 -ar 44100 -threads 1"
 fi
@@ -114,6 +122,7 @@ if [ -n "$do_mov" ] ; then
 mov_common_opt="-acodec pcm_alaw -vcodec mpeg4 -threads 1"
 do_lavf mov "" "-movflags +rtphint $mov_common_opt"
 do_lavf_timecode mov "-movflags +faststart $mov_common_opt"
+do_lavf_timecode mp4 "-vcodec mpeg4 -an -threads 1"
 fi
 
 if [ -n "$do_ismv" ] ; then
@@ -154,6 +163,16 @@ if [ -n "$do_ogg_vp3" ] ; then
 # -idct simple causes different results on different systems
 DEC_OPTS="$DEC_OPTS -idct auto"
 do_lavf_fate ogg "vp3/coeff_level64.mkv"
+fi
+
+if [ -n "$do_mov_qtrle_mace6" ] ; then
+DEC_OPTS="$DEC_OPTS -idct auto"
+do_lavf_fate mov "qtrle/Animation-16Greys.mov"
+fi
+
+if [ -n "$do_avi_cram" ] ; then
+DEC_OPTS="$DEC_OPTS -idct auto"
+do_lavf_fate avi "cram/toon.avi"
 fi
 
 if [ -n "$do_wtv" ] ; then

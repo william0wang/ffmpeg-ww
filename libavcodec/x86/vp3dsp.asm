@@ -36,11 +36,11 @@ vp3_idct_data: times 8 dw 64277
 pb_7:  times 8 db 0x07
 pb_1F: times 8 db 0x1f
 pb_81: times 8 db 0x81
-pb_FE: times 8 db 0xFE
 
 cextern pb_1
 cextern pb_3
 cextern pb_80
+cextern pb_FE
 
 cextern pw_8
 
@@ -167,7 +167,7 @@ INIT_MMX mmx
 cglobal put_vp_no_rnd_pixels8_l2, 5, 6, 0, dst, src1, src2, stride, h, stride3
     mova   m6, [pb_FE]
     lea    stride3q,[strideq+strideq*2]
-.loop
+.loop:
     mova   m0, [src1q]
     mova   m1, [src2q]
     mova   m2, [src1q+strideq]

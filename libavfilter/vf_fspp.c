@@ -40,7 +40,6 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "internal.h"
-#include "libavcodec/avcodec.h" //for reference to FF_QSCALE_TYPE
 #include "vf_fspp.h"
 
 #define OFFSET(x) offsetof(FSPPContext, x)
@@ -49,7 +48,7 @@ static const AVOption fspp_options[] = {
     { "quality",       "set quality",                          OFFSET(log2_count),    AV_OPT_TYPE_INT, {.i64 = 4},   4, MAX_LEVEL, FLAGS },
     { "qp",            "force a constant quantizer parameter", OFFSET(qp),            AV_OPT_TYPE_INT, {.i64 = 0},   0, 64,        FLAGS },
     { "strength",      "set filter strength",                  OFFSET(strength),      AV_OPT_TYPE_INT, {.i64 = 0}, -15, 32,        FLAGS },
-    { "use_bframe_qp", "use B-frames' QP",                     OFFSET(use_bframe_qp), AV_OPT_TYPE_INT, {.i64 = 0},   0, 1,         FLAGS },
+    { "use_bframe_qp", "use B-frames' QP",                     OFFSET(use_bframe_qp), AV_OPT_TYPE_BOOL,{.i64 = 0},   0, 1,         FLAGS },
     { NULL }
 };
 
@@ -79,17 +78,6 @@ static const short custom_threshold[64] = {
      38,  53,  50,  45,  38,  30,  21,  11,
      20,  27,  26,  23,  20,  15,  11,   5
 };
-
-static inline int norm_qscale(int qscale, int type)
-{
-    switch (type) {
-    case FF_QSCALE_TYPE_MPEG1: return qscale;
-    case FF_QSCALE_TYPE_MPEG2: return qscale >> 1;
-    case FF_QSCALE_TYPE_H264:  return qscale >> 2;
-    case FF_QSCALE_TYPE_VP56:  return (63 - qscale + 2) >> 2;
-    }
-    return qscale;
-}
 
 //This func reads from 1 slice, 1 and clears 0 & 1
 static void store_slice_c(uint8_t *dst, int16_t *src,
@@ -218,7 +206,7 @@ static void filter(FSPPContext *p, uint8_t *dst, uint8_t *src,
                     if (t < 0) t = 0;                   //t always < width-2
 
                     t = qp_store[qy + (t >> qpsh)];
-                    t = norm_qscale(t, p->qscale_type);
+                    t = ff_norm_qscale(t, p->qscale_type);
 
                     if (t != p->prev_q) p->prev_q = t, p->mul_thrmat((int16_t *)(&p->threshold_mtx_noq[0]), (int16_t *)(&p->threshold_mtx[0]), t);
                     p->column_fidct((int16_t *)(&p->threshold_mtx[0]), block + x * 8, block3 + x * 8, 8); //yes, this is a HOTSPOT
@@ -233,7 +221,8 @@ static void filter(FSPPContext *p, uint8_t *dst, uint8_t *src,
             p->row_fdct(block + 8 * 8, p->src + y * stride + 8 + x0 + 2 - (y & 1), stride, (es - 4) >> 2);
 
         p->column_fidct((int16_t *)(&p->threshold_mtx[0]), block, block3, es&(~1));
-        p->row_idct(block3 + 0 * 8, p->temp + (y & 15) * stride + x0 + 2 - (y & 1), stride, es >> 2);
+        if (es > 3)
+            p->row_idct(block3 + 0 * 8, p->temp + (y & 15) * stride + x0 + 2 - (y & 1), stride, es >> 2);
 
         if (!(y1 & 7) && y1) {
             if (y1 & 8)
@@ -503,7 +492,7 @@ static void row_fdct_c(int16_t *data, const uint8_t *pixels, ptrdiff_t line_size
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum PixelFormat pix_fmts[] = {
+    static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,
         AV_PIX_FMT_YUV420P,  AV_PIX_FMT_YUV411P,
         AV_PIX_FMT_YUV410P,  AV_PIX_FMT_YUV440P,
@@ -512,8 +501,11 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_GBRP, AV_PIX_FMT_GRAY8,
         AV_PIX_FMT_NONE
     };
-    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
-    return 0;
+
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
 static int config_input(AVFilterLink *inlink)
@@ -534,7 +526,7 @@ static int config_input(AVFilterLink *inlink)
         return AVERROR(ENOMEM);
 
     if (!fspp->use_bframe_qp && !fspp->qp) {
-        fspp->non_b_qp_alloc_size = FF_CEIL_RSHIFT(inlink->w, 4) * FF_CEIL_RSHIFT(inlink->h, 4);
+        fspp->non_b_qp_alloc_size = AV_CEIL_RSHIFT(inlink->w, 4) * AV_CEIL_RSHIFT(inlink->h, 4);
         fspp->non_b_qp_table = av_calloc(fspp->non_b_qp_alloc_size, sizeof(*fspp->non_b_qp_table));
         if (!fspp->non_b_qp_table)
             return AVERROR(ENOMEM);
@@ -598,11 +590,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             /* if the qp stride is not set, it means the QP are only defined on
              * a line basis */
            if (!qp_stride) {
-                w = FF_CEIL_RSHIFT(inlink->w, 4);
+                w = AV_CEIL_RSHIFT(inlink->w, 4);
                 h = 1;
             } else {
                 w = qp_stride;
-                h = FF_CEIL_RSHIFT(inlink->h, 4);
+                h = AV_CEIL_RSHIFT(inlink->h, 4);
             }
             if (w * h > fspp->non_b_qp_alloc_size) {
                 int ret = av_reallocp_array(&fspp->non_b_qp_table, w, h);
@@ -623,8 +615,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             qp_table = fspp->non_b_qp_table;
 
         if (qp_table || fspp->qp) {
-            const int cw = FF_CEIL_RSHIFT(inlink->w, fspp->hsub);
-            const int ch = FF_CEIL_RSHIFT(inlink->h, fspp->vsub);
+            const int cw = AV_CEIL_RSHIFT(inlink->w, fspp->hsub);
+            const int ch = AV_CEIL_RSHIFT(inlink->h, fspp->vsub);
 
             /* get a new frame if in-place is not possible or if the dimensions
              * are not multiple of 8 */
@@ -638,6 +630,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                     return AVERROR(ENOMEM);
                 }
                 av_frame_copy_props(out, in);
+                out->width = in->width;
+                out->height = in->height;
             }
 
             filter(fspp, out->data[0], in->data[0], out->linesize[0], in->linesize[0],

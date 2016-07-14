@@ -410,11 +410,16 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
     int hi_ver, lo_ver, ret;
 
     /* parse header */
+    if (len < 1)
+        return AVERROR_INVALIDDATA;
     c->flags = buf[0];
     buf++; len--;
     if (c->flags & ZMBV_KEYFRAME) {
         void *decode_intra = NULL;
         c->decode_intra= NULL;
+
+        if (len < 6)
+            return AVERROR_INVALIDDATA;
         hi_ver = buf[0];
         lo_ver = buf[1];
         c->comp = buf[2];
@@ -508,7 +513,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPac
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
-    if (c->comp == 0) { //Uncompressed data
+    if (c->comp == 0) { // uncompressed data
         if (c->decomp_size < len) {
             av_log(avctx, AV_LOG_ERROR, "Buffer too small\n");
             return AVERROR_INVALIDDATA;
@@ -629,5 +634,5 @@ AVCodec ff_zmbv_decoder = {
     .init           = decode_init,
     .close          = decode_end,
     .decode         = decode_frame,
-    .capabilities   = CODEC_CAP_DR1,
+    .capabilities   = AV_CODEC_CAP_DR1,
 };

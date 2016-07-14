@@ -32,7 +32,6 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "internal.h"
-#include "libavcodec/avcodec.h"
 #include "avfilter.h"
 
 #define MAX_LEVEL 8 /* quality levels */
@@ -62,7 +61,7 @@ typedef struct {
 static const AVOption uspp_options[] = {
     { "quality",       "set quality",                          OFFSET(log2_count),    AV_OPT_TYPE_INT, {.i64 = 3}, 0, MAX_LEVEL, FLAGS },
     { "qp",            "force a constant quantizer parameter", OFFSET(qp),            AV_OPT_TYPE_INT, {.i64 = 0}, 0, 63,        FLAGS },
-    { "use_bframe_qp", "use B-frames' QP",                     OFFSET(use_bframe_qp), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1,         FLAGS },
+    { "use_bframe_qp", "use B-frames' QP",                     OFFSET(use_bframe_qp), AV_OPT_TYPE_BOOL,{.i64 = 0}, 0, 1,         FLAGS },
     { NULL }
 };
 
@@ -181,29 +180,18 @@ static void store_slice_c(uint8_t *dst, const uint16_t *src,
     }
 }
 
-static inline int norm_qscale(int qscale, int type)
-{
-    switch (type) {
-    case FF_QSCALE_TYPE_MPEG1: return qscale;
-    case FF_QSCALE_TYPE_MPEG2: return qscale >> 1;
-    case FF_QSCALE_TYPE_H264:  return qscale >> 2;
-    case FF_QSCALE_TYPE_VP56:  return (63 - qscale + 2) >> 2;
-    default: av_assert0(0);
-    }
-    return qscale;
-}
-
 static void filter(USPPContext *p, uint8_t *dst[3], uint8_t *src[3],
                    int dst_stride[3], int src_stride[3], int width,
                    int height, uint8_t *qp_store, int qp_stride)
 {
     int x, y, i, j;
     const int count = 1<<p->log2_count;
+    int ret;
 
     for (i = 0; i < 3; i++) {
         int is_chroma = !!i;
-        int w = width  >> (is_chroma ? p->hsub : 0);
-        int h = height >> (is_chroma ? p->vsub : 0);
+        int w = AV_CEIL_RSHIFT(width,  is_chroma ? p->hsub : 0);
+        int h = AV_CEIL_RSHIFT(height, is_chroma ? p->vsub : 0);
         int stride = p->temp_stride[i];
         int block = BLOCK >> (is_chroma ? p->hsub : 0);
 
@@ -237,7 +225,7 @@ static void filter(USPPContext *p, uint8_t *dst[3], uint8_t *src[3],
             for (x = 0; x < (width>>4); x++)
                 qpsum += qp_store[x + y * qp_stride];
         }
-        p->frame->quality = norm_qscale((qpsum + qpcount/2) / qpcount, p->qscale_type) * FF_QP2LAMBDA;
+        p->frame->quality = ff_norm_qscale((qpsum + qpcount/2) / qpcount, p->qscale_type) * FF_QP2LAMBDA;
     }
 //    init per MB qscale stuff FIXME
     p->frame->height = height;
@@ -262,7 +250,12 @@ static void filter(USPPContext *p, uint8_t *dst[3], uint8_t *src[3],
         p->frame->data[2] = p->src[2] + x1c  + y1c  * p->frame->linesize[2];
         p->frame->format  = p->avctx_enc[i]->pix_fmt;
 
-        avcodec_encode_video2(p->avctx_enc[i], &pkt, p->frame, &got_pkt_ptr);
+        ret = avcodec_encode_video2(p->avctx_enc[i], &pkt, p->frame, &got_pkt_ptr);
+        if (ret < 0) {
+            av_log(p->avctx_enc[i], AV_LOG_ERROR, "Encoding failed\n");
+            continue;
+        }
+
         p->frame_dec = p->avctx_enc[i]->coded_frame;
 
         offset = (BLOCK-x1) + (BLOCK-y1) * p->frame_dec->linesize[0];
@@ -276,8 +269,8 @@ static void filter(USPPContext *p, uint8_t *dst[3], uint8_t *src[3],
 
         offset = (BLOCKc-x1c) + (BLOCKc-y1c) * p->frame_dec->linesize[1];
 
-        for (y = 0; y < height>>p->vsub; y++) {
-            for (x = 0; x < width>>p->hsub; x++) {
+        for (y = 0; y < AV_CEIL_RSHIFT(height, p->vsub); y++) {
+            for (x = 0; x < AV_CEIL_RSHIFT(width, p->hsub); x++) {
                 p->temp[1][x + y * p->temp_stride[1]] += p->frame_dec->data[1][x + y * p->frame_dec->linesize[1] + offset];
                 p->temp[2][x + y * p->temp_stride[2]] += p->frame_dec->data[2][x + y * p->frame_dec->linesize[2] + offset];
             }
@@ -289,15 +282,15 @@ static void filter(USPPContext *p, uint8_t *dst[3], uint8_t *src[3],
         if (!dst[j])
             continue;
         store_slice_c(dst[j], p->temp[j], dst_stride[j], p->temp_stride[j],
-                      width  >> (is_chroma ? p->hsub : 0),
-                      height >> (is_chroma ? p->vsub : 0),
+                      AV_CEIL_RSHIFT(width,  is_chroma ? p->hsub : 0),
+                      AV_CEIL_RSHIFT(height, is_chroma ? p->vsub : 0),
                       8-p->log2_count);
     }
 }
 
 static int query_formats(AVFilterContext *ctx)
 {
-    static const enum PixelFormat pix_fmts[] = {
+    static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_YUV444P,
         AV_PIX_FMT_YUV420P,
         AV_PIX_FMT_YUV410P,
@@ -306,8 +299,11 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_GRAY8,
         AV_PIX_FMT_NONE
     };
-    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
-    return 0;
+
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
 static int config_input(AVFilterLink *inlink)
@@ -331,8 +327,13 @@ static int config_input(AVFilterLink *inlink)
 
     for (i = 0; i < 3; i++) {
         int is_chroma = !!i;
-        int w = ((width  + 4 * BLOCK-1) & (~(2 * BLOCK-1))) >> (is_chroma ? uspp->hsub : 0);
-        int h = ((height + 4 * BLOCK-1) & (~(2 * BLOCK-1))) >> (is_chroma ? uspp->vsub : 0);
+        int w = (width  + 4 * BLOCK-1) & (~(2 * BLOCK-1));
+        int h = (height + 4 * BLOCK-1) & (~(2 * BLOCK-1));
+
+        if (is_chroma) {
+            w = AV_CEIL_RSHIFT(w, uspp->hsub);
+            h = AV_CEIL_RSHIFT(h, uspp->vsub);
+        }
 
         uspp->temp_stride[i] = w;
         if (!(uspp->temp[i] = av_malloc_array(uspp->temp_stride[i], h * sizeof(int16_t))))
@@ -353,10 +354,10 @@ static int config_input(AVFilterLink *inlink)
         avctx_enc->width = width + BLOCK;
         avctx_enc->height = height + BLOCK;
         avctx_enc->time_base = (AVRational){1,25};  // meaningless
-        avctx_enc->gop_size = 300;
+        avctx_enc->gop_size = INT_MAX;
         avctx_enc->max_b_frames = 0;
         avctx_enc->pix_fmt = inlink->format;
-        avctx_enc->flags = CODEC_FLAG_QSCALE | CODEC_FLAG_LOW_DELAY;
+        avctx_enc->flags = AV_CODEC_FLAG_QSCALE | CODEC_FLAG_LOW_DELAY;
         avctx_enc->strict_std_compliance = FF_COMPLIANCE_EXPERIMENTAL;
         avctx_enc->global_quality = 123;
         av_dict_set(&opts, "no_bitstream", "1", 0);
@@ -399,11 +400,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             /* if the qp stride is not set, it means the QP are only defined on
              * a line basis */
             if (!qp_stride) {
-                w = FF_CEIL_RSHIFT(inlink->w, 4);
+                w = AV_CEIL_RSHIFT(inlink->w, 4);
                 h = 1;
             } else {
                 w = qp_stride;
-                h = FF_CEIL_RSHIFT(inlink->h, 4);
+                h = AV_CEIL_RSHIFT(inlink->h, 4);
             }
 
             if (w * h > uspp->non_b_qp_alloc_size) {

@@ -148,8 +148,8 @@ static void mlp_filter_channel_x86(int32_t *state, const int32_t *coeff,
         FIRMUL   (ff_mlp_firorder_6, 0x14   )
         FIRMUL   (ff_mlp_firorder_5, 0x10   )
         FIRMUL   (ff_mlp_firorder_4, 0x0c   )
-        FIRMULREG(ff_mlp_firorder_3, 0x08,10)
-        FIRMULREG(ff_mlp_firorder_2, 0x04, 9)
+        FIRMUL   (ff_mlp_firorder_3, 0x08   )
+        FIRMUL   (ff_mlp_firorder_2, 0x04   )
         FIRMULREG(ff_mlp_firorder_1, 0x00, 8)
         LABEL_MANGLE(ff_mlp_firorder_0)":\n\t"
         "jmp  *%6                     \n\t"
@@ -178,8 +178,6 @@ static void mlp_filter_channel_x86(int32_t *state, const int32_t *coeff,
         : /* 4*/"r"((x86_reg)mask), /* 5*/"r"(firjump),
           /* 6*/"r"(iirjump)      , /* 7*/"c"(filter_shift)
         , /* 8*/"r"((int64_t)coeff[0])
-        , /* 9*/"r"((int64_t)coeff[1])
-        , /*10*/"r"((int64_t)coeff[2])
         : "rax", "rdx", "rsi"
 #else /* ARCH_X86_32 */
           /* 3*/"+m"(blocksize)
@@ -201,6 +199,6 @@ av_cold void ff_mlpdsp_init_x86(MLPDSPContext *c)
 #endif
     if (ARCH_X86_64 && EXTERNAL_SSE4(cpu_flags))
         c->mlp_rematrix_channel = ff_mlp_rematrix_channel_sse4;
-    if (ARCH_X86_64 && EXTERNAL_AVX2(cpu_flags) && cpu_flags & AV_CPU_FLAG_BMI2)
+    if (ARCH_X86_64 && EXTERNAL_AVX2_FAST(cpu_flags) && cpu_flags & AV_CPU_FLAG_BMI2)
         c->mlp_rematrix_channel = ff_mlp_rematrix_channel_avx2_bmi2;
 }

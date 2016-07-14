@@ -91,9 +91,9 @@ static inline int get_bs(cavs_vector *mvP, cavs_vector *mvQ, int b)
 }
 
 #define SET_PARAMS                                                \
-    alpha = alpha_tab[av_clip(qp_avg + h->alpha_offset, 0, 63)];  \
-    beta  =  beta_tab[av_clip(qp_avg + h->beta_offset,  0, 63)];  \
-    tc    =    tc_tab[av_clip(qp_avg + h->alpha_offset, 0, 63)];
+    alpha = alpha_tab[av_clip_uintp2(qp_avg + h->alpha_offset, 6)];  \
+    beta  =  beta_tab[av_clip_uintp2(qp_avg + h->beta_offset,  6)];  \
+    tc    =    tc_tab[av_clip_uintp2(qp_avg + h->alpha_offset, 6)];
 
 /**
  * in-loop deblocking filter for a single macroblock
@@ -105,7 +105,6 @@ static inline int get_bs(cavs_vector *mvP, cavs_vector *mvQ, int b)
  * | 6 | 7 |
  * 1   3   |
  * ---------
- *
  */
 void ff_cavs_filter(AVSContext *h, enum cavs_mb mb_type)
 {
